@@ -47,7 +47,14 @@ change freely.
       rejection first.
 - [x] Eraser (`X`), stroke-erase rather than pixel-erase.
 - [ ] Pen colour and weight from the toolbar. `PenColor` and
-      `BoardItem.Weight` exist and are honoured; nothing sets them yet.
+      `BoardItem.Weight` exist and are honoured; nothing sets them yet. Weight
+      wants `[` and `]` on a board as well as a picker, since it is the thing
+      you change most while drawing.
+- [ ] Eraser modes: whole-stroke (what it does now) and a split mode that
+      takes a bite out of a stroke and leaves the two halves as separate
+      strokes. Brush strokes only - it must not touch notes or windows.
+      `Strokes.Points` makes the split easy; the work is the mode switch and
+      not fragmenting into hundreds of two-point strokes.
 - [ ] Resizing a stroke. `Scene.Resizable` excludes strokes today because the
       grip would have to scale every point.
 - [ ] Shape primitives beyond rectangle and arrow: ellipse, diamond,
@@ -68,11 +75,34 @@ change freely.
 - [ ] Kinetic flick: a fast drag released should carry on and slow down.
       `Glide` is the mechanism; only the wheel uses it so far.
 
+### Dialogs
+
+- [x] `Layers` owns dismissal and the window sees Escape in the tunnel phase,
+      so a dialog can no longer strand itself by losing focus. **Any new
+      overlay must be registered in `BuildLayers` or it inherits the old
+      bug.**
+- [ ] The same treatment for the secondary-click menu, which Avalonia owns and
+      which is not in the stack.
+
 ### Review mode
 
 - [ ] The gathered change view (`C`) has never been driven by hand - the logic
       is tested, the wiring is not. Needs a look on a repo with real merge
       commits.
+
+### What counts as a file
+
+- [ ] Invert the scanner's rule. It has an allowlist of extensions, so an
+      `.org` file, a `.el`, a `.nix` or anything else a bit unusual is simply
+      absent from the map - and absent without saying so, which is worse than
+      being wrong. The rule should be: show every text file, skip binaries by
+      extension and by sniffing for NUL bytes, and skip the noisy directories
+      (`.git`, `node_modules`, `bin`, `obj`) by default with a toggle to show
+      them. `.atlas` should stay hidden even then: watching your own notes
+      appear as cards is a hall of mirrors.
+- [ ] A count of what was skipped, somewhere visible. The current silence is
+      the actual bug; a map that says "1,200 files, 43 skipped" can be argued
+      with.
 
 ### Samples and fixtures
 

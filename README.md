@@ -68,8 +68,13 @@ and click *open*.
 drag an empty patch to sweep up several at once, and resize from the bottom
 right corner. `N` adds a note, `T` a rectangle, `Y` an arrow, `ctrl+V` pastes
 an image, and `G` toggles snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
-Hold space to pan without leaving edit mode. `Esc` goes back to the map, and
-the camera returns exactly where you left it.
+Hold space to pan without leaving edit mode. The `<` button top left goes
+back to the map, and the camera returns exactly where you left it.
+
+**`Esc` cancels, it does not leave.** It closes whatever is innermost - a
+dialog, then a panel, then an armed tool, then the selection - and never the
+board itself, because cancelling is what you want from it far more often than
+leaving is.
 
 **Draw on it.** `B` is a freehand brush and stays on until you press it
 again, because you draw several strokes in a row and reaching for the key
@@ -115,6 +120,9 @@ your team gets everything you wrote.
 | `ctrl+Z` / `ctrl+Y` | undo / redo on a board |
 | space (board) | hold to pan while editing |
 | `Y` | draw an arrow on a board |
+| `Esc` | cancel the innermost thing: dialog, panel, tool, selection |
+| `<` or alt+left | back to the map from a board |
+| Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |
 | `X` | eraser on a board; rubs out whole strokes |
 | `G` (board) | snap to grid on or off |

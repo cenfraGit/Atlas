@@ -47,6 +47,12 @@ public sealed class BoardItem
 
     /// <summary>pen width, in board units.</summary>
     [JsonPropertyName("weight")] public float Weight { get; set; }
+
+    /// <summary>type size for a text label, in board units. 0 means the
+    /// default. A label is the one thing on a board whose size is the point
+    /// of it - a heading over a group of windows is a heading because it is
+    /// large - so it is set per item rather than fixed.</summary>
+    [JsonPropertyName("size")] public float Size { get; set; }
 }
 
 /// <summary>a hand-arranged canvas that references files rather than owning

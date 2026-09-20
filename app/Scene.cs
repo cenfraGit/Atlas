@@ -942,7 +942,8 @@ public sealed class Scene : IDisposable
         if (it.Kind == "arrow") return 0;
         // a stroke's box is its ink's bounds, kept in step by Strokes.Reframe
         if (Strokes.Is(it)) return it.H;
-        if (it.Kind == "shape") return Math.Max(40, it.H > 0 ? it.H : 240);
+        if (it.Kind == "text") return LabelHeight(it);
+        if (IsShape(it.Kind)) return Math.Max(40, it.H > 0 ? it.H : 240);
         if (it.Kind == "image") return Math.Max(20, it.H > 0 ? it.H : it.W * 0.6f);
         if (it.Kind == "note")
             return Math.Max(it.H > 0 ? it.H : 0,
@@ -953,6 +954,75 @@ public sealed class Scene : IDisposable
         var f = Data.Files[i];
         var (from, to) = RangeOf(it, f);
         return WinHeadH + (to - from + 1) * Data.LineH * (it.W / f.W);
+    }
+
+    /// <summary>the outlined shapes. They share everything but the path they
+    /// trace: same box, same fill, same picking, same resize grip, so adding
+    /// one is a case in a switch rather than a new kind of thing.</summary>
+    public static bool IsShape(string kind) => kind is "shape" or "ellipse" or "diamond";
+
+    /// <summary>"shape" is the rectangle, and stays that name because boards
+    /// on disk already say it.</summary>
+    static void DrawShape(SKCanvas canvas, string kind, SKRect box, SKPaint fill, SKPaint edge)
+    {
+        switch (kind)
+        {
+            case "ellipse":
+                canvas.DrawOval(box, fill);
+                canvas.DrawOval(box, edge);
+                break;
+
+            case "diamond":
+                using (var path = Diamond(box))
+                {
+                    canvas.DrawPath(path, fill);
+                    canvas.DrawPath(path, edge);
+                }
+                break;
+
+            default:
+                canvas.DrawRect(box, fill);
+                canvas.DrawRect(box, edge);
+                break;
+        }
+    }
+
+    static SKPath Diamond(SKRect b)
+    {
+        var path = new SKPath();
+        path.MoveTo(b.MidX, b.Top);
+        path.LineTo(b.Right, b.MidY);
+        path.LineTo(b.MidX, b.Bottom);
+        path.LineTo(b.Left, b.MidY);
+        path.Close();
+        return path;
+    }
+
+    public const float LabelSize = 34f;
+
+    static float SizeOf(BoardItem it) => it.Size > 0 ? it.Size : LabelSize;
+
+    /// <summary>a standalone label: words on the board with no box round them.
+    /// A note is a note *about* something and looks like a sticker; a label
+    /// is a heading, and a heading with a panel behind it is a note.</summary>
+    void DrawLabel(SKCanvas canvas, BoardItem it)
+    {
+        float size = SizeOf(it);
+        var lines = Wrap(it.Text ?? "", it.W, size, out var paint);
+        using (paint)
+        {
+            paint.Color = ParseColor(it.Color, LabelCol);
+            for (int i = 0; i < lines.Count; i++)
+                canvas.DrawText(lines[i], it.X, it.Y + (i + 1) * size * 1.25f - size * 0.28f, paint);
+        }
+    }
+
+    float LabelHeight(BoardItem it)
+    {
+        float size = SizeOf(it);
+        var lines = Wrap(it.Text ?? "", it.W, size, out var paint);
+        paint.Dispose();
+        return Math.Max(1, lines.Count) * size * 1.25f;
     }
 
     List<string> WrapNote(BoardItem it)
@@ -1097,14 +1167,18 @@ public sealed class Scene : IDisposable
         foreach (var it in board.Items)
         {
             if (it.Kind == "arrow" || Strokes.Is(it)) continue;   // drawn after, on top
-            if (it.Kind == "shape")
+            if (IsShape(it.Kind))
             {
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
-                float sh = ItemHeight(it);
+                var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + ItemHeight(it));
                 shapeFill.Color = col.WithAlpha(16);
                 shapeEdge.Color = col.WithAlpha(150);
-                canvas.DrawRect(it.X, it.Y, it.W, sh, shapeFill);
-                canvas.DrawRect(it.X, it.Y, it.W, sh, shapeEdge);
+                DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
+                continue;
+            }
+            if (it.Kind == "text")
+            {
+                DrawLabel(canvas, it);
                 continue;
             }
             if (it.Kind == "image")
@@ -1431,7 +1505,8 @@ public sealed class Scene : IDisposable
         return null;
     }
 
-    public static bool Resizable(BoardItem it) => it.Kind is "note" or "shape" or "image";
+    public static bool Resizable(BoardItem it) =>
+        it.Kind is "note" or "image" or "text" || IsShape(it.Kind);
 
     /// <summary>the resize grip of a picked item, if the point is on one.</summary>
     public BoardItem? GripAt(float wx, float wy)

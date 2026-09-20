@@ -95,8 +95,9 @@ and click *open*.
 
 **Work on a board.** Press `E` for edit mode. Drag windows and notes around,
 drag an empty patch to sweep up several at once, and resize from the bottom
-right corner. `N` adds a note, `T` a rectangle, `Y` an arrow, `ctrl+V` pastes
-an image, and `G` toggles snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
+right corner. `N` adds a note, `1` `2` `3` a rectangle, an ellipse or a
+diamond, `4` a label, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
+snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
 Hold space to pan without leaving edit mode. The `<` button top left goes
 back to the map, and the camera returns exactly where you left it.
 
@@ -166,7 +167,8 @@ your team gets everything you wrote.
 | `[` `]` (board) | pen thickness |
 | `G` (board) | snap to grid on or off |
 | Delete (board) | remove what is picked |
-| `T` | rectangle on a board |
+| `1` `2` `3` | rectangle, ellipse, diamond on a board |
+| `4` | label on a board |
 | `ctrl+V` (board) | paste an image from the clipboard |
 | `C` | gather the changed code onto one view (while reviewing) |
 | `]` `[` | next / previous commit while reviewing |

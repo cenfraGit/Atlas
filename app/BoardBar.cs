@@ -30,9 +30,11 @@ public sealed class BoardBar : Border
         _row = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (label, kind) in new[]
                  {
-                     ("board note  N", "note"), ("rectangle  T", "shape"),
-                     ("arrow  Y", "arrow"), ("brush  B", "brush"),
-                     ("eraser  X", "eraser"), ("file  A", "file"),
+                     ("note  N", "note"), ("rect  1", "shape"),
+                     ("ellipse  2", "ellipse"), ("diamond  3", "diamond"),
+                     ("label  4", "text"), ("arrow  Y", "arrow"),
+                     ("brush  B", "brush"), ("eraser  X", "eraser"),
+                     ("file  A", "file"),
                  })
         {
             var b = Make(label);

@@ -332,7 +332,8 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is not null)
         {
             var (bx, by) = WorldAt(e.GetPosition(this));
-            if (_scene.ItemAt(bx, by) is { Kind: "note" } note) EditNote(note);
+            // a label and a note are both words you double click to change
+            if (_scene.ItemAt(bx, by) is { Kind: "note" or "text" } words) EditNote(words);
             return;
         }
         if (_scene.Tier < 3 || !Editing) return;
@@ -593,7 +594,7 @@ public sealed class SceneView : Control
             ContextActions.Item($"── {header} ──", () => { }, enabled: false),
         };
 
-        if (picked.Count == 1 && picked[0].Kind == "note")
+        if (picked.Count == 1 && picked[0].Kind is "note" or "text")
             items.Add(ContextActions.Item("Edit text...", () => EditNote(picked[0])));
         if (picked.Count == 1 && picked[0].Kind == "file")
             items.Add(ContextActions.Item("Change line range...", () => EditRange(picked[0])));
@@ -612,7 +613,10 @@ public sealed class SceneView : Control
         }
 
         items.Add(ContextActions.Item("Add board note...", AddNote));
-        items.Add(ContextActions.Item("Add rectangle", AddShape));
+        items.Add(ContextActions.Item("Add rectangle  1", () => AddShape("shape")));
+        items.Add(ContextActions.Item("Add ellipse  2", () => AddShape("ellipse")));
+        items.Add(ContextActions.Item("Add diamond  3", () => AddShape("diamond")));
+        items.Add(ContextActions.Item("Add label...  4", AddLabel));
         items.Add(ContextActions.Item("Add image...", AddImageFromDisk));
         items.Add(ContextActions.Item("Paste image (ctrl+V)", PasteImage));
         if (_clipboard.Count > 0)
@@ -1096,7 +1100,10 @@ public sealed class SceneView : Control
         switch (kind)
         {
             case "note": AddNote(); break;
-            case "shape": AddShape(); break;
+            case "shape": AddShape("shape"); break;
+            case "ellipse": AddShape("ellipse"); break;
+            case "diamond": AddShape("diamond"); break;
+            case "text": AddLabel(); break;
             case "arrow": AddArrow(); break;
             case "brush": ArmBrush(); break;
             case "eraser": ArmEraser(); break;
@@ -1652,19 +1659,61 @@ public sealed class SceneView : Control
     }
 
     /// <summary>a plain rectangle to group or point at things on a board.</summary>
-    void AddShape()
+    void AddShape() => AddShape("shape");
+
+    /// <summary>drop a shape in the middle of the view. All four are the same
+    /// box with a different outline, so one method makes all of them.</summary>
+    void AddShape(string kind)
     {
-        if (_scene.ActiveBoard is not { } board) return;
+        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly) return;
         Remember();
+
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "shape", W = 520,
-            X = _scene.CamX - 260, Y = _scene.CamY - 120, Text = "",
+            Id = BookmarkStore.NewId(), Kind = kind, W = 520, Text = "",
+            X = _scene.CamX - 260, Y = _scene.CamY - 120,
+            Color = PenColor,
         };
         board.Items.Add(item);
+        _scene.Picked.Clear();
+        _scene.Picked.Add(item.Id);
         _boardStore?.Save(board);
-        Saved($"rectangle on  {board.Name}");
+        Saved($"{Named(kind)} on  {board.Name}");
     }
+
+    /// <summary>a label is the one shape that is nothing without its words, so
+    /// it asks for them rather than arriving empty and inviting a double
+    /// click nobody knows to make.</summary>
+    void AddLabel()
+    {
+        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly || _prompt is null) return;
+
+        _prompt.Ask("label text", "", text =>
+        {
+            Remember();
+            var item = new BoardItem
+            {
+                Id = BookmarkStore.NewId(), Kind = "text", Text = text,
+                W = 760, X = _scene.CamX - 380, Y = _scene.CamY - 40,
+                Size = Scene.LabelSize, Color = PenColor,
+            };
+            board.Items.Add(item);
+            _scene.Picked.Clear();
+            _scene.Picked.Add(item.Id);
+            _boardStore?.Save(board);
+            Saved($"label on  {board.Name}");
+            Focus();
+        });
+    }
+
+    static string Named(string kind) => kind switch
+    {
+        "shape" => "rectangle",
+        "ellipse" => "ellipse",
+        "diamond" => "diamond",
+        "text" => "label",
+        _ => kind,
+    };
 
     public static readonly (string Name, string Hex)[] Colours =
     [
@@ -2466,7 +2515,10 @@ public sealed class SceneView : Control
                 case Key.Back or Key.Delete: DeletePicked(); return;
                 case Key.Left when _alt: LeaveBoard(); return;
                 case Key.N: AddNote(); return;
-                case Key.T: AddShape(); return;
+                case Key.T or Key.D1: AddShape("shape"); return;
+                case Key.D2: AddShape("ellipse"); return;
+                case Key.D3: AddShape("diamond"); return;
+                case Key.D4: AddLabel(); return;
                 case Key.G:
                     SnapToGrid = !SnapToGrid;
                     RefreshBoardBar();

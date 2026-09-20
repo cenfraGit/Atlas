@@ -25,6 +25,56 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 
 Pushing is the user's. Do not push.
 
+## TODO
+
+Everything outstanding, so nothing is lost when several things are in flight
+at once. Tick an item off in the same commit that lands it, and delete ticked
+items once a few have built up. Add to this list whenever a message raises
+something that is not being done immediately.
+
+### Boards as a diagramming surface
+
+The big one. Boards are currently "a place to arrange code"; they should also
+be "a place to design before there is code" - flowcharts, layouts, how a thing
+will work. Boards start empty, grouped in the sidebar (design boards vs
+documentation boards). No stored boards predate this, so the data model can
+change freely.
+
+- [ ] Freehand vector strokes. A stroke is a point array, which is the first
+      board item that does not fit `X/Y/W/H` - add `points` to `BoardItem`
+      rather than splitting the type, so `History` keeps working unchanged.
+- [ ] Stroke hit-testing: point-to-polyline distance, like `ArrowAt` but over
+      N segments, with a cached bounding box so rubberband selection is cheap.
+- [ ] Eraser. Stroke-erase (remove whole strokes you touch), not pixel-erase -
+      strokes stay vectors and undo composes for free.
+- [ ] Shape primitives beyond rectangle and arrow: ellipse, diamond,
+      standalone text.
+- [ ] Connectors that attach to elements and follow them when dragged. Bigger
+      than free arrows; second pass.
+- [ ] Replay strokes from an `SKPicture` once boards hold hundreds of them.
+      Boards redraw every item every frame, which is fine at tens and not at
+      thousands; the map already solved this.
+
+### Canvas and interaction
+
+- [ ] Smooth scrolling. Wheel and pan movement should ease rather than step.
+- [ ] Cursors outside edit mode: open hand by default, closed "grabbing" hand
+      while dragging. These should be the defaults in pan and scroll modes.
+
+### Review mode
+
+- [ ] The gathered change view (`C`) has never been driven by hand - the logic
+      is tested, the wiring is not. Needs a look on a repo with real merge
+      commits.
+
+### Samples and fixtures
+
+- [ ] A third sample board that is deliberately messy - many items,
+      overlapping, a long file window - for exercising edit mode.
+- [ ] Sample annotations currently span a fixed eight lines from a
+      declaration's opening line (`Samples.cs`), which is why they stop
+      mid-class. Make them span the declaration Roslyn actually found.
+
 ## What this is
 
 A zoomable canvas for reading a codebase. Every file is a card laid out by

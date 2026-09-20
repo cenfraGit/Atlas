@@ -2,4 +2,7 @@
   <Folder Name="/app/">
     <Project Path="app/Atlas.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Atlas.Tests/Atlas.Tests.csproj" />
+  </Folder>
 </Solution>

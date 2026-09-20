@@ -809,6 +809,8 @@ public sealed class SceneView : Control
 
     public void SetEditing(bool on)
     {
+        // the gathered change view belongs to a commit, not to the repo
+        if (on && _scene.BoardReadOnly) { Toast("this view is read only"); return; }
         if (Editing == on) return;
         Editing = on;
         _dragItem = null;
@@ -912,7 +914,14 @@ public sealed class SceneView : Control
         if (_hints is null) return;
         var items = new List<(string, string, Action)>();
 
-        if (_scene.ActiveBoard is not null)
+        if (_scene.BoardReadOnly)
+        {
+            items.Add(("previous commit", "[", () => { StepCommit(-1); RebuildChangeBoard(); }));
+            items.Add(("next commit", "]", () => { StepCommit(1); RebuildChangeBoard(); }));
+            items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
+            items.Add(("back to the map", "C", LeaveBoard));
+        }
+        else if (_scene.ActiveBoard is not null)
         {
             items.Add(("undo", "ctrl+Z", Undo));
             items.Add(("redo", "ctrl+Y", Redo));
@@ -927,6 +936,7 @@ public sealed class SceneView : Control
         {
             items.Add(("previous commit", "[", () => StepCommit(-1)));
             items.Add(("next commit", "]", () => StepCommit(1)));
+            items.Add(("changed code", "C", ToggleChangeBoard));
             items.Add(("leave review", "esc", LeaveReview));
         }
         else
@@ -1023,6 +1033,9 @@ public sealed class SceneView : Control
         int placed = set.Files.Count(f => _scene.IndexOfPath(f.Path) >= 0);
         _commitsPanel?.Sync(_commitAt, set, placed, _scene.OnSnapshot);
         RefreshHints();
+
+        // on the gathered view the camera belongs to the board, not the map
+        if (_scene.BoardReadOnly) return;
 
         var w = (float)Bounds.Width;
         var h = (float)Bounds.Height;
@@ -1153,10 +1166,80 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    /// <summary>gather whatever is being reviewed onto one board. The map says
+    /// where a change landed; this says what it was.</summary>
+    void ToggleChangeBoard()
+    {
+        if (_scene.BoardReadOnly) { LeaveBoard(); return; }
+        if (_scene.Review is not { } set) { Toast("nothing under review"); return; }
+        if (_scene.ActiveBoard is not null) return;
+
+        var label = _commitAt < 0 ? _target?.Label ?? "changes" : _prCommits[_commitAt].Subject;
+        var board = ChangeBoard.Build(set, _scene, label);
+        if (board.Items.Count == 0)
+        {
+            Toast("none of these changes are on the map");
+            return;
+        }
+
+        _flight = null;
+        _boards?.Close();
+        _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
+        _scene.ActiveBoard = board;
+        _scene.BoardReadOnly = true;
+        _scene.Grid = 0;
+        _scene.Picked.Clear();
+        _history.Clear();
+        // deliberately not _lastBoard: `A` must not try to add to a board that
+        // is thrown away the moment you leave
+        RefreshBoardBar();
+        RefreshHints();
+        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+        _caption = $"{label}  [changed code]";
+        Focus();
+        InvalidateVisual();
+    }
+
+    /// <summary>after stepping to another commit, gather that one instead.</summary>
+    void RebuildChangeBoard()
+    {
+        if (!_scene.BoardReadOnly || _scene.Review is not { } set) return;
+
+        var label = _commitAt < 0 ? _target?.Label ?? "changes" : _prCommits[_commitAt].Subject;
+        var board = ChangeBoard.Build(set, _scene, label);
+        if (board.Items.Count == 0)
+        {
+            Toast("none of this commit's changes are on the map");
+            return;
+        }
+
+        _scene.ActiveBoard = board;
+        _scene.Picked.Clear();
+        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+        _caption = $"{label}  [changed code]";
+        InvalidateVisual();
+    }
+
     void LeaveBoard()
     {
         DismissPrompt();
         if (_scene.ActiveBoard is null) return;
+
+        // a generated board is not saved and owns no images
+        if (_scene.BoardReadOnly)
+        {
+            _scene.BoardReadOnly = false;
+            _scene.ActiveBoard = null;
+            _scene.Picked.Clear();
+            RefreshBoardBar();
+            RefreshHints();
+            if (_mapCam is { } back) { _scene.CamX = back.X; _scene.CamY = back.Y; _scene.CamS = back.S; }
+            _mapCam = null;
+            _caption = "";
+            InvalidateVisual();
+            return;
+        }
+
         SaveBoardIfDirty();
         PruneImages();
         _scene.ActiveBoard = null;
@@ -1990,6 +2073,19 @@ public sealed class SceneView : Control
             }
         }
 
+        if (_scene.BoardReadOnly)
+        {
+            // a generated board reads and navigates; it does not author
+            switch (key)
+            {
+                case Key.Escape or Key.Back or Key.C: LeaveBoard(); return;
+                case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
+                case Key.OemCloseBrackets: StepCommit(1); RebuildChangeBoard(); return;
+                case Key.OemOpenBrackets: StepCommit(-1); RebuildChangeBoard(); return;
+                default: return;
+            }
+        }
+
         if (_scene.ActiveBoard is not null)
         {
             switch (key)
@@ -2022,6 +2118,7 @@ public sealed class SceneView : Control
                 break;
             }
             case Key.G: OpenReviewPanel(branches: true); break;
+            case Key.C: ToggleChangeBoard(); break;
             case Key.D: _scene.ShowDistricts = !_scene.ShowDistricts; break;
             case Key.M: SaveBookmark(); break;
             case Key.O: _boards?.Show(); break;

@@ -94,6 +94,10 @@ public sealed class Scene : IDisposable
     /// <summary>grid spacing while editing, 0 for no grid.</summary>
     public float Grid;
 
+    /// <summary>the active board is generated and cannot be edited: it belongs
+    /// to a commit, not to the repo. Set for the gathered change view.</summary>
+    public bool BoardReadOnly;
+
     /// <summary>files picked on the map. editing there is selection only: the
     /// map is never rearranged, so the only thing a pick can do is go on a
     /// board.</summary>

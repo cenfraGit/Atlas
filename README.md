@@ -113,6 +113,7 @@ your team gets everything you wrote.
 | Delete (board) | remove what is picked |
 | `T` | rectangle on a board |
 | `ctrl+V` (board) | paste an image from the clipboard |
+| `C` | gather the changed code onto one view (while reviewing) |
 | `]` `[` | next / previous commit while reviewing |
 | click a line | pick it (at reading zoom; on a board, while editing) |
 | shift-click | extend the picked range |
@@ -276,6 +277,15 @@ to show.
 
 Annotations are read-only while a commit snapshot is showing. They belong to
 the working tree, not to somebody else's branch.
+
+**`C` gathers the changed code onto one view.** The map answers where a change
+landed, which is the question worth asking first; it does not answer what the
+change said, and on a large repo the changed files are nowhere near each
+other. `C` lays out just the parts that were touched - one window per hunk,
+context either side, nearby hunks merged, biggest churn first - and `]` and
+`[` walk the commits without leaving. It is generated and read only: it is not
+in the boards panel, nothing is written to `.atlas/`, and `C` again puts the
+map back exactly where you left it.
 
 Review mode gets **one colour channel: change**. A veil mutes the base map so
 district hues stop competing with green and red, and a changed file is drawn

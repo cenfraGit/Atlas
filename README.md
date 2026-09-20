@@ -122,11 +122,16 @@ erasing, it is undo. Splitting only ever touches ink.
 
 `[` and `]` size whatever is in your hand, the pen or the eraser.
 
-**Join things up.** An arrow dropped on a box ties to it, either end, and a
-tied end follows the box when you drag or resize it. A ring instead of a dot
-marks a tied end. Drag the end somewhere else to re-tie it, or onto empty
-canvas to let it loose. Two picked items can be joined straight from the
-menu.
+**Join things up.** Every element has four places a connector can meet it -
+top, right, bottom and left - and they light up while you are drawing one. An
+arrow dropped on one ties there, either end, and follows the box when you
+drag or resize it. Four points and no others is the whole reason it reads:
+an end free to sit anywhere along an edge slides about as either box moves,
+and a diagram of sliding lines is not a diagram.
+
+A ring instead of a dot marks a tied end. Drag it to another side to move it,
+or onto empty canvas to let it loose. Two picked items can be joined straight
+from the menu.
 
 **Annotate code.** Notes about code are written on boards, where the
 surrounding code gives them their meaning. On a board, secondary click a line

@@ -4,19 +4,25 @@ namespace Atlas.Tests;
 
 /// <summary>arrows tied to the things they point at.
 ///
-/// The whole trick is that a tied end has no stored position: it is worked
-/// out from the item's box every frame, so nothing has to update a connector
-/// when a box moves, because there is nothing to update. These check that -
-/// and that an end left loose still behaves like the free arrows that were
-/// there before.</summary>
+/// Two things to hold. A tied end has no stored position: it is worked out
+/// from the item's box every frame, so nothing has to update a connector when
+/// a box moves, because there is nothing to update. And an end lands on one
+/// of four anchors - top, right, bottom, left - never anywhere else. An
+/// endpoint free to sit anywhere on an edge slides about as either box moves,
+/// which is what made the first attempt unreadable.</summary>
 public class ConnectorTests
 {
     static BoardItem Box(string id, float x, float y, float w = 100, float h = 60) =>
         new() { Id = id, Kind = "shape", X = x, Y = y, W = w, H = h };
 
     static BoardItem Arrow(string? from = null, string? to = null,
-        float x = 0, float y = 0, float x2 = 500, float y2 = 0) =>
-        new() { Id = "a1", Kind = "arrow", X = x, Y = y, X2 = x2, Y2 = y2, From = from, To = to };
+        float x = 0, float y = 0, float x2 = 500, float y2 = 0,
+        int fromSide = -1, int toSide = -1) =>
+        new()
+        {
+            Id = "a1", Kind = "arrow", X = x, Y = y, X2 = x2, Y2 = y2,
+            From = from, To = to, FromSide = fromSide, ToSide = toSide,
+        };
 
     sealed class Fixture : IDisposable
     {
@@ -149,6 +155,122 @@ public class ConnectorTests
 
         Assert.Equal(100, a.X, 1);
         Assert.Equal(new SKPoint(900, 30), b);
+    }
+
+    // --- four anchors, and only four --------------------------------------
+
+    [Fact]
+    public void TheAnchorsAreTheMiddlesOfTheFourSides()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 100, 200, w: 100, h: 60);   // 100,200 to 200,260
+        f.Board.Items.Add(box);
+
+        Assert.Equal(new SKPoint(150, 200), f.Scene.AnchorOf(box, Scene.Top));
+        Assert.Equal(new SKPoint(200, 230), f.Scene.AnchorOf(box, Scene.Right));
+        Assert.Equal(new SKPoint(150, 260), f.Scene.AnchorOf(box, Scene.Bottom));
+        Assert.Equal(new SKPoint(100, 230), f.Scene.AnchorOf(box, Scene.Left));
+    }
+
+    [Fact]
+    public void ATiedEndIsAlwaysOnAnAnchorWhereverTheOtherEndIs()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        f.Board.Items.Add(box);
+        var arrow = Arrow(from: "b1");
+        f.Board.Items.Add(arrow);
+
+        var anchors = new[]
+        {
+            f.Scene.AnchorOf(box, Scene.Top), f.Scene.AnchorOf(box, Scene.Right),
+            f.Scene.AnchorOf(box, Scene.Bottom), f.Scene.AnchorOf(box, Scene.Left),
+        };
+
+        // sweep the far end all the way round; the tied end may only ever be
+        // one of four points, never somewhere along an edge
+        for (int deg = 0; deg < 360; deg += 7)
+        {
+            double rad = deg * Math.PI / 180;
+            arrow.X2 = 50 + (float)(600 * Math.Cos(rad));
+            arrow.Y2 = 30 + (float)(600 * Math.Sin(rad));
+
+            var a = f.Scene.ArrowEnds(arrow).A;
+            Assert.Contains(anchors, p => Math.Abs(p.X - a.X) < 0.01f && Math.Abs(p.Y - a.Y) < 0.01f);
+        }
+    }
+
+    [Theory]
+    [InlineData(Scene.Top)]
+    [InlineData(Scene.Right)]
+    [InlineData(Scene.Bottom)]
+    [InlineData(Scene.Left)]
+    public void AChosenSideStaysChosen(int side)
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        f.Board.Items.Add(box);
+        // the far end is off to the right, which is not the side asked for
+        var arrow = Arrow(from: "b1", x2: 900, y2: 30, fromSide: side);
+        f.Board.Items.Add(arrow);
+
+        Assert.Equal(f.Scene.AnchorOf(box, side), f.Scene.ArrowEnds(arrow).A);
+    }
+
+    [Theory]
+    [InlineData(50, -40, Scene.Top)]
+    [InlineData(140, 30, Scene.Right)]
+    [InlineData(50, 100, Scene.Bottom)]
+    [InlineData(-40, 30, Scene.Left)]
+    public void AnEndAttachesToTheAnchorItWasDroppedNearest(float x, float y, int side)
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        f.Board.Items.Add(box);
+
+        Assert.Equal(side, f.Scene.NearestSide(box, x, y));
+    }
+
+    [Fact]
+    public void AnUnchosenSideFacesWhateverItPointsAt()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        f.Board.Items.Add(box);
+        var arrow = Arrow(from: "b1");
+        f.Board.Items.Add(arrow);
+
+        arrow.X2 = 50; arrow.Y2 = -900;
+        Assert.Equal(f.Scene.AnchorOf(box, Scene.Top), f.Scene.ArrowEnds(arrow).A);
+
+        arrow.X2 = 50; arrow.Y2 = 900;
+        Assert.Equal(f.Scene.AnchorOf(box, Scene.Bottom), f.Scene.ArrowEnds(arrow).A);
+    }
+
+    [Fact]
+    public void AnAnchorFollowsAResizeRatherThanStayingWhereItWas()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        f.Board.Items.Add(box);
+        var arrow = Arrow(from: "b1", fromSide: Scene.Bottom);
+        f.Board.Items.Add(arrow);
+
+        box.H = 400;
+
+        Assert.Equal(new SKPoint(50, 400), f.Scene.ArrowEnds(arrow).A);
+    }
+
+    [Fact]
+    public void AnEllipseHasTheSameFourAnchors()
+    {
+        using var f = new Fixture();
+        var oval = new BoardItem { Id = "e1", Kind = "ellipse", X = 0, Y = 0, W = 100, H = 60 };
+        f.Board.Items.Add(oval);
+
+        // every element gets the same four, whatever shape it is drawn as
+        Assert.Equal(new SKPoint(50, 0), f.Scene.AnchorOf(oval, Scene.Top));
+        Assert.Equal(new SKPoint(100, 30), f.Scene.AnchorOf(oval, Scene.Right));
     }
 
     // --- things going missing --------------------------------------------

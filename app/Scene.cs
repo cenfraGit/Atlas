@@ -1260,6 +1260,7 @@ public sealed class Scene : IDisposable
         }
 
         DrawStrokes(canvas, board);
+        DrawAnchors(canvas, board);
         DrawArrows(canvas, board);
         DrawPickedItems(canvas, board);
         DrawRubberband(canvas);
@@ -1287,11 +1288,78 @@ public sealed class Scene : IDisposable
         var a = new SKPoint(it.X, it.Y);
         var b = new SKPoint(it.X2, it.Y2);
 
-        // each end aims at where the other one is, before either is moved to
-        // an edge, so the pair cannot chase each other round a box
-        if (from is not null) a = EdgeToward(from, to is null ? b : Centre(to));
-        if (to is not null) b = EdgeToward(to, from is null ? a : Centre(from));
+        // the far end is judged from the other item's centre, so which side
+        // gets used does not depend on where the line currently happens to be
+        if (from is not null)
+            a = AnchorOf(from, Side(from, it.FromSide, to is null ? b : Centre(to)));
+        if (to is not null)
+            b = AnchorOf(to, Side(to, it.ToSide, from is null ? a : Centre(from)));
         return (a, b);
+    }
+
+    /// <summary>the four places a connector may meet an element: top, right,
+    /// bottom, left. Anywhere on an edge, or worse a diagonal, means a line
+    /// whose endpoint slides about as either box moves - which is what made
+    /// the first attempt unreadable. Four points do not slide.</summary>
+    public const int Top = 0, Right = 1, Bottom = 2, Left = 3;
+
+    public SKPoint AnchorOf(BoardItem it, int side)
+    {
+        float h = ItemHeight(it);
+        float cx = it.X + it.W / 2, cy = it.Y + h / 2;
+        return side switch
+        {
+            Top => new SKPoint(cx, it.Y),
+            Right => new SKPoint(it.X + it.W, cy),
+            Bottom => new SKPoint(cx, it.Y + h),
+            _ => new SKPoint(it.X, cy),
+        };
+    }
+
+    /// <summary>a side that was chosen stays chosen. One that was never set -
+    /// an older tie, or one made from the menu - faces whatever it points at.</summary>
+    int Side(BoardItem it, int stored, SKPoint toward) =>
+        stored is >= Top and <= Left ? stored : FacingSide(it, toward);
+
+    int FacingSide(BoardItem it, SKPoint toward)
+    {
+        var c = Centre(it);
+        float dx = toward.X - c.X, dy = toward.Y - c.Y;
+        return Math.Abs(dx) > Math.Abs(dy)
+            ? dx >= 0 ? Right : Left
+            : dy >= 0 ? Bottom : Top;
+    }
+
+    /// <summary>which anchor a point is nearest, for attaching to one.</summary>
+    public int NearestSide(BoardItem it, float wx, float wy)
+    {
+        int best = Top;
+        float nearest = float.MaxValue;
+        for (int side = Top; side <= Left; side++)
+        {
+            var p = AnchorOf(it, side);
+            float d = (wx - p.X) * (wx - p.X) + (wy - p.Y) * (wy - p.Y);
+            if (d < nearest) { nearest = d; best = side; }
+        }
+        return best;
+    }
+
+    /// <summary>true while the anchors should be visible: an arrow is being
+    /// drawn or an end dragged, and you need to see where it can land.</summary>
+    public bool ShowAnchors;
+
+    void DrawAnchors(SKCanvas canvas, Board board)
+    {
+        if (!ShowAnchors) return;
+        float r = 4f / CamS;
+
+        using var dot = new SKPaint { Color = new SKColor(0x5f, 0xd3, 0xf3, 210), IsAntialias = true };
+        foreach (var it in board.Items)
+        {
+            if (it.Kind == "arrow" || Strokes.Is(it)) continue;
+            for (int side = Top; side <= Left; side++)
+                canvas.DrawCircle(AnchorOf(it, side), r, dot);
+        }
     }
 
     BoardItem? Bound(string? id)
@@ -1302,21 +1370,6 @@ public sealed class Scene : IDisposable
     }
 
     SKPoint Centre(BoardItem it) => new(it.X + it.W / 2, it.Y + ItemHeight(it) / 2);
-
-    /// <summary>where a ray from an item's centre toward a point leaves its
-    /// box.</summary>
-    SKPoint EdgeToward(BoardItem it, SKPoint target)
-    {
-        float h = ItemHeight(it);
-        float cx = it.X + it.W / 2, cy = it.Y + h / 2;
-        float dx = target.X - cx, dy = target.Y - cy;
-        if (Math.Abs(dx) < 0.01f && Math.Abs(dy) < 0.01f) return new SKPoint(cx, cy);
-
-        float sx = dx == 0 ? float.MaxValue : it.W / 2 / Math.Abs(dx);
-        float sy = dy == 0 ? float.MaxValue : h / 2 / Math.Abs(dy);
-        float s = Math.Min(sx, sy);
-        return new SKPoint(cx + dx * s, cy + dy * s);
-    }
 
     void DrawArrows(SKCanvas canvas, Board board)
     {

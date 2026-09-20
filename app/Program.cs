@@ -508,6 +508,7 @@ public sealed class SceneView : Control
     void DisarmTools()
     {
         _armBrush = _armEraser = _armArrow = false;
+        _scene.ShowAnchors = false;
         _scene.StrokeDraft = null;
         _scene.ArrowDraft = null;
         RefreshBoardBar();
@@ -1267,10 +1268,11 @@ public sealed class SceneView : Control
         if (!Editing) SetEditing(true);
         _armBrush = _armEraser = false;
         _armArrow = true;
+        _scene.ShowAnchors = true;
         _scene.Picked.Clear();
         RefreshBoardBar();
         ApplyCursor();
-        Toast("drag to draw the arrow - over a box, it ties to it");
+        Toast("drag to draw - onto a side of a box, it ties there");
     }
 
     /// <summary>tie two picked items together. The same connector a drag from
@@ -2179,6 +2181,7 @@ public sealed class SceneView : Control
                 Remember();
                 _arrowEnd = end.Arrow;
                 _arrowEndWhich = end.End;
+                _scene.ShowAnchors = true;
                 _drag = true;
                 _last = e.GetPosition(this);
                 return;
@@ -2250,6 +2253,7 @@ public sealed class SceneView : Control
         ApplyCursor();
 
         _erasing = false;
+        _scene.ShowAnchors = false;
 
         if (_scene.StrokeDraft is { } drawn)
         {
@@ -2287,6 +2291,10 @@ public sealed class SceneView : Control
                     Id = BookmarkStore.NewId(), Kind = "arrow",
                     X = made.A.X, Y = made.A.Y, X2 = made.B.X, Y2 = made.B.Y,
                     From = from?.Id, To = to?.Id,
+                    // the side nearest where it was let go, so which anchor
+                    // you get is the one you aimed at
+                    FromSide = from is null ? -1 : _scene.NearestSide(from, made.A.X, made.A.Y),
+                    ToSide = to is null ? -1 : _scene.NearestSide(to, made.B.X, made.B.Y),
                 });
                 _boardStore?.Save(b);
                 Saved(from is null && to is null ? "arrow"
@@ -2420,12 +2428,16 @@ public sealed class SceneView : Control
             if (_arrowEndWhich == 1)
             {
                 _arrowEnd.X = ex; _arrowEnd.Y = ey;
-                _arrowEnd.From = over?.Id == _arrowEnd.To ? null : over?.Id;
+                if (over?.Id == _arrowEnd.To) over = null;
+                _arrowEnd.From = over?.Id;
+                _arrowEnd.FromSide = over is null ? -1 : _scene.NearestSide(over, ex, ey);
             }
             else
             {
                 _arrowEnd.X2 = ex; _arrowEnd.Y2 = ey;
-                _arrowEnd.To = over?.Id == _arrowEnd.From ? null : over?.Id;
+                if (over?.Id == _arrowEnd.From) over = null;
+                _arrowEnd.To = over?.Id;
+                _arrowEnd.ToSide = over is null ? -1 : _scene.NearestSide(over, ex, ey);
             }
             _boardDirty = true;
             _last = p;

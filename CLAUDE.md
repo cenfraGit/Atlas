@@ -64,6 +64,16 @@ change freely.
       heading rather than a note.
 - [x] Connectors. `BoardItem.From`/`To` tie an arrow's ends to items; a tied
       end has no stored position, so dragging a box needs no update anywhere.
+      Ends land on one of **four anchors** - top, right, bottom, left - and
+      nowhere else. An endpoint free to sit anywhere on an edge slides about
+      as either box moves, which is what made the first attempt unreadable.
+- [ ] **Shapes have a minimum and a default height.** `Scene.ItemHeight`
+      clamps a shape to at least 40 and substitutes 240 when `H` is 0, so a
+      deliberately short rectangle cannot be made. A shape's height is the
+      user's business; the clamp only ever gets in the way.
+- [ ] Resize from any corner, not only the bottom right. `GripAt` offers one
+      grip; it wants four, and dragging a top or left one has to move the
+      item's origin as well as its size.
 - [ ] Fill and border for the outlined shapes: border colour, fill colour, and
       a transparent fill. **A transparent shape must keep its hitbox** - it
       stays clickable and draggable through the middle, which is not what

@@ -45,6 +45,12 @@ public sealed class BoardItem
     [JsonPropertyName("from")] public string? From { get; set; }
     [JsonPropertyName("to")] public string? To { get; set; }
 
+    /// <summary>which of the item's four sides the end is tied to: 0 top,
+    /// 1 right, 2 bottom, 3 left. Anything else means one was never chosen,
+    /// and the end takes whichever side faces what it points at.</summary>
+    [JsonPropertyName("fromSide")] public int FromSide { get; set; } = -1;
+    [JsonPropertyName("toSide")] public int ToSide { get; set; } = -1;
+
     /// <summary>a freehand stroke, as x,y,x,y... in board coordinates. Flat
     /// rather than a list of points because it is the one thing on a board
     /// there can be thousands of, and a pair of floats per point costs three

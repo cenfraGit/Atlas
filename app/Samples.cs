@@ -8,22 +8,31 @@ public static class Samples
 {
     /// <summary>what to say about a file, and which declaration to say it at.
     /// a suffix rather than a full path, so the files can move.</summary>
+    /// <summary>Methods rather than classes, deliberately. A note is tinted
+    /// across the lines it covers, so pointing one at a nine hundred line
+    /// class either tints all of it or tints an arbitrary window onto it -
+    /// and neither reads as a note about anything. A method is a thing a
+    /// sentence can be about.</summary>
     static readonly (string Suffix, string? Symbol, string Text)[] Notes =
     [
-        ("Scene.cs", "Scene",
-            "The renderer. It holds the camera, decides the level of detail from the zoom, " +
-            "and replays one recorded picture per file instead of redrawing the geometry."),
-        ("Scanner.cs", "Scanner",
-            "Reads the repo once and lays every file out by directory. Nothing here knows " +
-            "about drawing: it produces positions and line classifications, and that is all."),
-        ("Annotations.cs", "Anchors",
-            "A note is anchored to a symbol plus the lines around it, never to a line number. " +
-            "This is what survives the file being edited underneath it."),
-        ("Boards.cs", "BoardStore",
-            "Boards are one JSON file each so two people editing different boards never conflict."),
-        ("Images.cs", "ImageStore",
-            "Images are re-encoded on the way in. A pasted screenshot is megabytes of raw " +
-            "clipboard data, and it would sit in git forever at that size."),
+        ("Scene.cs", "TierFor",
+            "What you see changes with the zoom rather than just getting bigger. Four tiers: " +
+            "districts, then cards, then a coloured bar per line, then real text."),
+        ("Scanner.cs", "Classify",
+            "Every line is sorted into a kind once, at scan time, so drawing the bars tier is " +
+            "a lookup rather than a parse. Layout lives here too, not in the view."),
+        ("Annotations.cs", "Resolve",
+            "Symbol first, then the context fingerprint, then the stored line. That ladder is " +
+            "what keeps a note attached while the code moves underneath it."),
+        ("FileKeys.cs", "Of",
+            "A hash of the first forty meaningful lines with the whitespace taken out, so a " +
+            "reference finds its file again after a rename, and reindenting changes nothing."),
+        ("Images.cs", "Prune",
+            "Images nothing points at are deleted - but only once the undo history that could " +
+            "bring one back has been dropped."),
+        ("Strokes.cs", "Erase",
+            "Rubbing a hole in a stroke leaves the surviving pieces as strokes in their own " +
+            "right, so everything that works on a stroke goes on working on them."),
     ];
 
     static readonly (string Id, string Name, (string Suffix, string? Symbol, string Note)[] Parts)[] Boards =
@@ -75,15 +84,56 @@ public static class Samples
         string[] lines;
         try { lines = File.ReadAllLines(full); } catch { return 0; }
 
-        int line = LineOf(full, symbol) ?? 0;
-        // span the declaration's opening lines so the tint reads as a note
-        // about the thing, not about one line of it
-        int end = Math.Min(lines.Length - 1, line + 8);
+        var (line, end) = SpanOf(full, symbol, lines.Length);
         var a = Anchors.Create(f.P, full, lines, line, end, text);
         a.Id = "sample-" + Guid.NewGuid().ToString("n")[..6];
         notes.Annotations.Add(a);
         Console.WriteLine($"  annotated {f.P}:{line + 1}  -> {a.Symbol ?? "(no symbol)"}");
         return 1;
+    }
+
+    /// <summary>the lines the named declaration actually occupies.
+    ///
+    /// These used to be a flat eight lines down from wherever the declaration
+    /// started, which is why a sample note stopped in the middle of a class
+    /// and delimited nothing in particular. Roslyn already knows where the
+    /// thing ends, so the tint reads as a note about the declaration rather
+    /// than about an arbitrary window onto it.
+    ///
+    /// A declaration too long to tint whole gets its first line only. Tinting
+    /// the first sixty lines of a nine hundred line class would be arbitrary
+    /// in exactly the way this is meant to stop being: the note is about the
+    /// class, and the line that names it is where the class is.</summary>
+    static (int From, int To) SpanOf(string fullPath, string? symbol, int lineCount)
+    {
+        const int TooLongToTint = 60;
+        int last = Math.Max(0, lineCount - 1);
+
+        var sym = Find(fullPath, symbol);
+        if (sym is not { } s) return (0, 0);
+
+        int from = Math.Clamp(s.StartLine, 0, last);
+        int to = Math.Clamp(s.EndLine, from, last);
+        return to - from > TooLongToTint ? (from, from) : (from, to);
+    }
+
+    /// <summary>match on the name a human would write. Roslyn's names carry
+    /// an arity - Demo.Startup.Configure(0) - which nothing here wants to
+    /// spell out, so the arity comes off before comparing.</summary>
+    static SymbolSpan? Find(string fullPath, string? symbol)
+    {
+        var syms = Symbols.ForFile(fullPath);
+        if (syms.Count == 0) return null;
+        if (symbol is null) return syms[0];
+
+        foreach (var s in syms)
+        {
+            var name = s.Name;
+            int paren = name.IndexOf('(');
+            if (paren >= 0) name = name[..paren];
+            if (name == symbol || name.EndsWith("." + symbol, StringComparison.Ordinal)) return s;
+        }
+        return syms[0];
     }
 
     /// <summary>first line of the named declaration, else the first type in the file.</summary>

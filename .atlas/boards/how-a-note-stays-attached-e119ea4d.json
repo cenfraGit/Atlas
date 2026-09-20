@@ -3,7 +3,7 @@
   "name": "How a note stays attached",
   "items": [
     {
-      "id": "7b19b228",
+      "id": "cb1e95a0",
       "kind": "file",
       "file": "app/Annotations.cs",
       "line": 106,
@@ -13,10 +13,11 @@
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "18b91123",
+      "id": "1d26e0b0",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -26,10 +27,11 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "c6859252",
+      "id": "809d09e5",
       "kind": "file",
       "file": "app/Symbols.cs",
       "line": 19,
@@ -39,10 +41,11 @@
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "1e629eef",
+      "id": "4154b349",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -52,10 +55,11 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "66d6a173",
+      "id": "85954f6f",
       "kind": "file",
       "file": "app/FileKeys.cs",
       "line": 8,
@@ -65,10 +69,11 @@
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "13659b19",
+      "id": "5ac91aec",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -78,7 +83,8 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     }
   ],
   "group": "",

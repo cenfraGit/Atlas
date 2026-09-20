@@ -102,9 +102,9 @@ change freely.
 
 - [ ] A third sample board that is deliberately messy - many items,
       overlapping, a long file window - for exercising edit mode.
-- [ ] Sample annotations currently span a fixed eight lines from a
-      declaration's opening line (`Samples.cs`), which is why they stop
-      mid-class. Make them span the declaration Roslyn actually found.
+- [x] Sample annotations span the declaration Roslyn found, and point at
+      methods rather than classes - a note is tinted across what it covers,
+      and a nine hundred line class is not a thing a sentence is about.
 
 ## What this is
 

@@ -3,7 +3,7 @@
   "name": "How a frame is drawn",
   "items": [
     {
-      "id": "fcb1fbee",
+      "id": "e12fd168",
       "kind": "file",
       "file": "app/Scanner.cs",
       "line": 7,
@@ -13,10 +13,11 @@
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "0d0128fb",
+      "id": "10771129",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -26,23 +27,25 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "a856c845",
+      "id": "2dbb6835",
       "kind": "file",
       "file": "app/Scene.cs",
-      "line": 44,
-      "endLine": 78,
+      "line": 66,
+      "endLine": 100,
       "x": 0,
       "y": 345.25,
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "a4c5c4b0",
+      "id": "6a218861",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -52,10 +55,11 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "5f056466",
+      "id": "1376e437",
       "kind": "file",
       "file": "app/Highlighter.cs",
       "line": 14,
@@ -65,10 +69,11 @@
       "w": 620,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     },
     {
-      "id": "e935db7d",
+      "id": "203224c4",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -78,7 +83,8 @@
       "w": 380,
       "h": 0,
       "x2": 0,
-      "y2": 0
+      "y2": 0,
+      "weight": 0
     }
   ],
   "group": "",

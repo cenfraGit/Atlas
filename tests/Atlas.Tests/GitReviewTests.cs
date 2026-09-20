@@ -231,7 +231,7 @@ public class GitReviewTests : IClassFixture<GitFixture>
     public void ASnapshotIsTheTreeAsItWasAtThatCommit()
     {
         using var git = Open();
-        var tree = git.Snapshot(_git.FeatureTipSha, Scanner.Wanted)!;
+        var tree = git.Snapshot(_git.FeatureTipSha, p => Scanner.Wanted(p))!;
 
         Assert.Equal(["app/Panel.cs", "app/Program.cs"], tree.Keys.Order());
         Assert.Contains("class Panel", string.Join("\n", tree["app/Panel.cs"]));
@@ -250,7 +250,7 @@ public class GitReviewTests : IClassFixture<GitFixture>
     {
         using var git = Open();
         var pr = git.MergedPrs()[0];
-        var tree = git.Snapshot(pr.HeadSha, Scanner.Wanted)!;
+        var tree = git.Snapshot(pr.HeadSha, p => Scanner.Wanted(p))!;
         var scan = Scanner.BuildFrom(_git.Path, tree);
         using var scene = new Scene(scan);
 

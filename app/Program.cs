@@ -146,6 +146,9 @@ public sealed class App : Application
             Scanner.Save(fresh, cache);
             Console.WriteLine($"scanned {fresh.Files.Count} files, {fresh.Districts.Count} districts " +
                               $"in {sw.ElapsedMilliseconds}ms -> {cache}");
+            if (fresh.Skipped > 0)
+                Console.WriteLine($"{fresh.Skipped} skipped as binary or too large. " +
+                                  "'.' shows build output and dotfiles too.");
             return fresh;
         }
         // the cache records the folder it scanned, which is the one thing in it
@@ -408,6 +411,42 @@ public sealed class SceneView : Control
 
     /// <summary>one menu at a time: clicking repeatedly used to stack them.</summary>
     /// <summary>a prompt must never outlive the thing it was asking about.</summary>
+    ScanOptions _scanOptions = ScanOptions.Default;
+
+    /// <summary>show or hide build output, dependencies and dotfiles. A rescan
+    /// of this repo, so the map is laid out afresh around what is now on it -
+    /// node_modules is not a few extra cards, it is most of the map.</summary>
+    void ToggleHidden()
+    {
+        if (_scene.OnSnapshot) { Toast("leave the commit first"); return; }
+
+        _scanOptions = _scanOptions with { ShowHidden = !_scanOptions.ShowHidden };
+        Toast(_scanOptions.ShowHidden ? "rescanning, everything..." : "rescanning...");
+        InvalidateVisual();
+
+        var root = _scene.Data.Root;
+        var opts = _scanOptions;
+        Task.Run(() =>
+        {
+            var fresh = Scanner.Build(root, opts);
+            Dispatcher.UIThread.Post(() =>
+            {
+                _scene.ShowScan(fresh);
+                FitAll();
+                Toast(Describe(fresh));
+                InvalidateVisual();
+            });
+        });
+    }
+
+    static string Describe(Scan scan)
+    {
+        var what = scan.ShowingHidden ? "everything" : "source";
+        return scan.Skipped == 0
+            ? $"{scan.Files.Count} files, {what}"
+            : $"{scan.Files.Count} files, {what}; {scan.Skipped} skipped as binary or too large";
+    }
+
     public readonly Layers Layers = new();
 
     /// <summary>build the Escape order once every overlay is attached.
@@ -1160,7 +1199,8 @@ public sealed class SceneView : Control
         _caption = $"{target.Label}   -   reading the tree at this commit...";
         InvalidateVisual();
 
-        var snapshot = _git.Snapshot(target.HeadSha, Scanner.Wanted);
+        // the same rule the working tree is filtered by, toggle included
+        var snapshot = _git.Snapshot(target.HeadSha, path => Scanner.Wanted(path, _scanOptions));
         if (snapshot is not null && snapshot.Count > 0)
         {
             var data = Scanner.BuildFrom(_scene.Data.Root, snapshot);
@@ -2370,6 +2410,7 @@ public sealed class SceneView : Control
             case Key.G: OpenReviewPanel(branches: true); break;
             case Key.C: ToggleChangeBoard(); break;
             case Key.D: _scene.ShowDistricts = !_scene.ShowDistricts; break;
+            case Key.OemPeriod: ToggleHidden(); break;
             case Key.M: SaveBookmark(); break;
             case Key.O: _boards?.Show(); break;
             case Key.A: AddViewToBoard(); break;

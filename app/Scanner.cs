@@ -13,32 +13,104 @@ public static class Scanner
     const float CardW = 240, LineH = 3, HeaderH = 22, Pad = 16;
     const float GroupPad = 64, ShelfW = 26000;
 
-    static readonly HashSet<string> Skip = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>never shown, at any setting. .git is machinery, and .atlas is
+    /// your own notes about this repo - reading them as cards about your notes
+    /// is a hall of mirrors.</summary>
+    static readonly HashSet<string> Never = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".git", "node_modules", "bin", "obj", "dist", "build", ".vs", ".vscode",
-        ".idea", "packages", "target", "venv", "__pycache__", ".next", "out",
-        "artifacts", "TestResults", "coverage",
+        ".git", ".atlas",
     };
 
-    static readonly HashSet<string> Ext = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>build output and vendored dependencies: real files, but not
+    /// this repo's code. Hidden by default, shown with the toggle.</summary>
+    static readonly HashSet<string> Noise = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".cs", ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".kt",
-        ".c", ".h", ".cpp", ".hpp", ".rb", ".php", ".swift", ".scala", ".sql",
-        ".xaml", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".md", ".sh",
+        "node_modules", "bin", "obj", "dist", "build", "packages", "target",
+        "venv", ".venv", "__pycache__", ".next", "out", "artifacts",
+        "TestResults", "coverage", "vendor", "Pods", "DerivedData",
+        ".vs", ".vscode", ".idea", ".gradle", ".cargo", ".terraform",
     };
 
-    /// <summary>files worth reading that have no extension, or whose name is
-    /// all extension. A repo's configuration is part of how it works, and a
-    /// commit that adds .gitignore had nothing on the map to light up.</summary>
-    static readonly HashSet<string> Names = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>secrets, which it would be rude to paint on a wall, and the
+    /// litter operating systems leave lying about. Hidden by default rather
+    /// than never, because sometimes you really are editing one.</summary>
+    static readonly HashSet<string> HiddenFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".gitignore", ".gitattributes", ".editorconfig", ".dockerignore",
-        ".npmrc", ".nvmrc", ".prettierrc", ".eslintrc",
-        "Dockerfile", "Makefile", "CMakeLists.txt", "Directory.Build.props",
+        ".env", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", ".netrc", ".htpasswd",
+        ".DS_Store", "Thumbs.db", "desktop.ini",
     };
 
-    static bool WantedName(string name) =>
-        Names.Contains(name) || Ext.Contains(Path.GetExtension(name));
+    static readonly HashSet<string> SecretExt = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pem", ".key", ".p12", ".pfx", ".jks", ".keystore",
+    };
+
+    /// <summary>not text, and no amount of sniffing will make it so. The sniff
+    /// catches everything this list misses; the list is here to save opening
+    /// a 40MB video to find that out.</summary>
+    static readonly HashSet<string> Binary = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".dll", ".so", ".dylib", ".a", ".lib", ".o", ".obj", ".pdb",
+        ".class", ".jar", ".war", ".pyc", ".pyo", ".wasm", ".node",
+        ".zip", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar", ".tar", ".nupkg",
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".psd",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".mp3", ".mp4", ".wav", ".ogg", ".flac", ".avi", ".mov", ".mkv", ".webm",
+        ".ttf", ".otf", ".woff", ".woff2", ".eot",
+        ".db", ".sqlite", ".sqlite3", ".mdb", ".bin", ".dat", ".iso", ".dmg",
+    };
+
+    /// <summary>true when the scanner would include this repo-relative path.
+    ///
+    /// Path only. Whether a file with an unremarkable name turns out to be
+    /// binary is a question about its contents, and the two callers answer it
+    /// differently: the folder walk sniffs the bytes, and a commit's tree asks
+    /// libgit2. What they must agree on is this, the part decided by the name.</summary>
+    public static bool Wanted(string relPath, ScanOptions? options = null)
+    {
+        var opts = options ?? ScanOptions.Default;
+        var parts = relPath.Split('/');
+
+        for (int i = 0; i < parts.Length - 1; i++)
+            if (!WantedDir(parts[i], opts)) return false;
+
+        return WantedFile(parts[^1], opts);
+    }
+
+    static bool WantedDir(string name, ScanOptions opts)
+    {
+        if (Never.Contains(name)) return false;
+        if (opts.ShowHidden) return true;
+        if (Noise.Contains(name)) return false;
+        // .github holds real work; other dot directories are tooling
+        return !name.StartsWith('.') || name.Equals(".github", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool WantedFile(string name, ScanOptions opts)
+    {
+        if (Never.Contains(name)) return false;
+        if (Binary.Contains(Path.GetExtension(name))) return false;
+
+        if (!opts.ShowHidden && IsHidden(name)) return false;
+
+        // everything else is assumed to be text until its bytes say otherwise.
+        // An allowlist of extensions left .org, .el, .nix and anything else a
+        // little unusual off the map, and off it silently
+        return true;
+    }
+
+    static bool IsHidden(string name) =>
+        HiddenFiles.Contains(name) ||
+        SecretExt.Contains(Path.GetExtension(name)) ||
+        name.StartsWith(".env", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>a NUL byte in the first few kilobytes. It is what git uses,
+    /// and it is right about everything an extension list is wrong about.</summary>
+    public static bool LooksBinary(ReadOnlySpan<byte> head)
+    {
+        foreach (var b in head) if (b == 0) return true;
+        return false;
+    }
 
     static readonly string[] DeclWords =
     [
@@ -65,21 +137,6 @@ public static class Scanner
         }
         if (t.IndexOfAny(['"', '\'', '`']) >= 0) return Str;
         return Code;
-    }
-
-    /// <summary>true when the scanner would include this repo-relative path.
-    /// used to filter a commit's tree the same way a folder walk is filtered.</summary>
-    public static bool Wanted(string relPath)
-    {
-        var parts = relPath.Split('/');
-        for (int i = 0; i < parts.Length - 1; i++)
-        {
-            if (Skip.Contains(parts[i])) return false;
-            if (parts[i].StartsWith('.') && parts[i] != ".github") return false;
-        }
-        var name = parts[^1];
-        if (name.StartsWith('.') && !Names.Contains(name)) return false;
-        return WantedName(name);
     }
 
     /// <summary>build a map from files that are not on disk - a commit's tree.</summary>
@@ -117,11 +174,13 @@ public static class Scanner
         };
     }
 
-    public static Scan Build(string root)
+    public static Scan Build(string root, ScanOptions? options = null)
     {
+        var opts = options ?? ScanOptions.Default;
         root = Path.GetFullPath(root);
         var files = new List<FileRec>();
-        Walk(new DirectoryInfo(root), root, files);
+        int skipped = 0;
+        Walk(new DirectoryInfo(root), root, files, opts, ref skipped);
         files.Sort((a, b) => string.CompareOrdinal(a.P, b.P));
 
         var districts = Layout(files);
@@ -137,10 +196,14 @@ public static class Scanner
             },
             Districts = districts,
             Files = files,
+            Skipped = skipped,
+            ShowingHidden = opts.ShowHidden,
         };
     }
 
-    static void Walk(DirectoryInfo dir, string root, List<FileRec> into)
+    const long TooBig = 2_000_000;
+
+    static void Walk(DirectoryInfo dir, string root, List<FileRec> into, ScanOptions opts, ref int skipped)
     {
         FileSystemInfo[] entries;
         try { entries = dir.GetFileSystemInfos(); }
@@ -150,18 +213,18 @@ public static class Scanner
         {
             if (e is DirectoryInfo sub)
             {
-                if (sub.Name.StartsWith('.') && sub.Name != ".github") continue;
-                if (Skip.Contains(sub.Name)) continue;
-                Walk(sub, root, into);
+                if (WantedDir(sub.Name, opts)) Walk(sub, root, into, opts, ref skipped);
                 continue;
             }
-            var file = (FileInfo)e;
-            // Wanted() filters a commit's tree the same way; the two must agree
-            if (!WantedName(file.Name) || file.Length > 2_000_000) continue;
 
-            string[] lines;
-            try { lines = File.ReadAllLines(file.FullName); }
-            catch { continue; }
+            var file = (FileInfo)e;
+            // Wanted() filters a commit's tree by the same rule; the two have
+            // to agree on everything decided by the name
+            if (!WantedFile(file.Name, opts)) continue;
+            if (file.Length > TooBig) { skipped++; continue; }
+
+            var lines = ReadText(file.FullName);
+            if (lines is null) { skipped++; continue; }
 
             var d = new int[lines.Length * 3];
             for (int i = 0; i < lines.Length; i++)
@@ -179,6 +242,28 @@ public static class Scanner
                 D = d,
             });
         }
+    }
+
+    /// <summary>a file's lines, or null when it is not text.
+    ///
+    /// The bytes are read once and sniffed before being decoded, so an
+    /// unknown extension does not have to be guessed at - and a binary is
+    /// never handed to the tokeniser as mojibake. Lines are split exactly as
+    /// File.ReadAllLines splits them, because a card's height is its line
+    /// count and everything stored in .atlas points at line numbers.</summary>
+    static string[]? ReadText(string path)
+    {
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            if (LooksBinary(bytes.AsSpan(0, Math.Min(bytes.Length, 8192)))) return null;
+
+            var lines = new List<string>();
+            using var reader = new StreamReader(new MemoryStream(bytes), detectEncodingFromByteOrderMarks: true);
+            while (reader.ReadLine() is { } line) lines.Add(line);
+            return lines.ToArray();
+        }
+        catch { return null; }
     }
 
     /// <summary>a district is one directory. files are gridded inside it and

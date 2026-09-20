@@ -24,6 +24,27 @@ You point it at a folder - the root of a project - and that is the whole
 setup. If the folder is a git repo, review mode turns itself on; if it is
 not, `P` says so and everything else works the same.
 
+### What lands on the map
+
+Every text file, whatever it is called. There is no list of blessed
+extensions, because a list is always missing somebody's `.org`, `.el` or
+`.nix`, and missing them silently.
+
+Out: binaries, by extension and by sniffing for a NUL byte in the first few
+kilobytes, which is what git itself goes on and is right about the formats no
+list anticipated. Anything over 2MB. And `.git` and `.atlas`, at any setting,
+because reading your own notes about a repo as cards in that repo is a hall
+of mirrors.
+
+Hidden but a keypress away: build output and dependencies (`node_modules`,
+`bin`, `obj`, `target`, ...), other dot directories, secrets (`.env`, `*.pem`,
+`id_rsa`) and OS litter. **`.`** toggles them and rescans - `node_modules` is
+not a few extra cards, it is most of the map, so the layout is rebuilt around
+whatever is now on it.
+
+Whatever is skipped is counted and said out loud. A map that quietly omits
+part of a repo is worse than one that shows something ugly.
+
 ### What Atlas writes, and where
 
 **In the repo you are looking at: `.atlas/`.** Boards, annotations and
@@ -146,6 +167,7 @@ your team gets everything you wrote.
 | `N` | add a board note (while on a board) |
 | `F` | fit the whole map, or the whole board |
 | `D` | district outlines on or off |
+| `.` | show or hide build output, dependencies and dotfiles |
 | `F9` | run the benchmark |
 
 Also `--bench`, `--stress`, `--goto x,y,scale` on the command line.

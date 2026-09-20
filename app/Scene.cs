@@ -39,6 +39,19 @@ public sealed class Scan
     [JsonPropertyName("world")] public WorldSize World { get; set; } = new();
     [JsonPropertyName("districts")] public List<District> Districts { get; set; } = [];
     [JsonPropertyName("files")] public List<FileRec> Files { get; set; } = [];
+
+    /// <summary>files the scan passed over: too large, or not text. Reported
+    /// rather than swallowed - a map that quietly omits part of a repo is
+    /// worse than one that shows something ugly.</summary>
+    [JsonPropertyName("skipped")] public int Skipped { get; set; }
+
+    [JsonPropertyName("showingHidden")] public bool ShowingHidden { get; set; }
+}
+
+/// <summary>what the scanner counts as part of the repo.</summary>
+public sealed record ScanOptions(bool ShowHidden = false)
+{
+    public static readonly ScanOptions Default = new();
 }
 
 /// <summary>same level-of-detail rules and colours as the web prototype.</summary>
@@ -263,6 +276,22 @@ public sealed class Scene : IDisposable
         OnSnapshot = true;
         DropCaches();
         Rebuild();
+    }
+
+    /// <summary>swap the working-tree scan for another of the same repo, after
+    /// a rescan. Everything cached is keyed by file index or path, and both
+    /// have just changed, so all of it goes.</summary>
+    public void ShowScan(Scan data)
+    {
+        if (OnSnapshot) return;     // a commit's tree is not ours to replace
+        Data = data;
+        Selection = null;
+        HoverLine = null;
+        Highlight = null;
+        PickedFiles.Clear();
+        DropCaches();
+        Rebuild();
+        EnsureAllAnchored();
     }
 
     public void ShowLive()

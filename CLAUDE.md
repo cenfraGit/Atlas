@@ -92,17 +92,16 @@ change freely.
 
 ### What counts as a file
 
-- [ ] Invert the scanner's rule. It has an allowlist of extensions, so an
-      `.org` file, a `.el`, a `.nix` or anything else a bit unusual is simply
-      absent from the map - and absent without saying so, which is worse than
-      being wrong. The rule should be: show every text file, skip binaries by
-      extension and by sniffing for NUL bytes, and skip the noisy directories
-      (`.git`, `node_modules`, `bin`, `obj`) by default with a toggle to show
-      them. `.atlas` should stay hidden even then: watching your own notes
-      appear as cards is a hall of mirrors.
-- [ ] A count of what was skipped, somewhere visible. The current silence is
-      the actual bug; a map that says "1,200 files, 43 skipped" can be argued
-      with.
+- [x] Inverted the scanner's rule: every text file is in, binaries are out by
+      extension and by NUL sniff, and the noisy directories are behind the `.`
+      toggle. `.git` and `.atlas` stay hidden at any setting.
+- [x] A count of what was skipped, reported rather than swallowed.
+- [ ] **Respect `.gitignore`.** The real answer to "what is noise": a repo
+      already declares it. The hardcoded `Noise` list in `Scanner` is a
+      stand-in that gets `node_modules` and `bin` right and knows nothing
+      about anything else - Atlas's own `data/scan.json` is gitignored and
+      still lands on the map. Wants the pattern syntax, nested
+      `.gitignore` files, and negations.
 
 ### Samples and fixtures
 

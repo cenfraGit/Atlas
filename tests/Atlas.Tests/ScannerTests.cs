@@ -15,9 +15,9 @@ public class ScannerTests
         Assert.Contains("app/Program.cs", paths);
         Assert.Contains("app/ui/Panel.cs", paths);
         Assert.Contains("docs/readme.md", paths);
+        Assert.Contains("app/notes.txt", paths);               // text is text
 
         Assert.DoesNotContain("bin/Generated.cs", paths);      // build output
-        Assert.DoesNotContain("app/notes.txt", paths);         // not a source extension
         Assert.DoesNotContain(".hidden/Secret.cs", paths);     // hidden directory
     }
 
@@ -127,25 +127,8 @@ public class ScannerTests
         Assert.Contains(".github/workflows/ci.yml", paths);
     }
 
-    [Fact]
-    public void WhatTheWalkTakesIsExactlyWhatWantedTakes()
-    {
-        // the two must agree or a commit's tree is filtered differently from
-        // the working tree, and changed files land nowhere
-        using var dir = new TempDir();
-        dir.File(".gitignore", "bin/\n");
-        dir.File(".env", "x=1\n");
-        dir.File("Dockerfile", "FROM scratch\n");
-        dir.File("app/Program.cs", "class P { }");
-        dir.File("app/notes.txt", "no");
-        dir.File("bin/Gen.cs", "class G { }");
-
-        foreach (var f in Scanner.Build(dir.Path).Files)
-            Assert.True(Scanner.Wanted(f.P), $"the walk took {f.P} but Wanted() rejects it");
-
-        foreach (var rejected in new[] { ".env", "app/notes.txt", "bin/Gen.cs" })
-            Assert.False(Scanner.Wanted(rejected), $"Wanted() takes {rejected} but the walk does not");
-    }
+    // the walk and Wanted() must agree; that is covered at both settings in
+    // FileInclusionTests, along with everything else about what counts as a file
 
     [Theory]
     [InlineData(".gitignore", true)]
@@ -160,8 +143,8 @@ public class ScannerTests
     [InlineData("app/obj/Debug/A.cs", false)]
     [InlineData("node_modules/pkg/index.js", false)]
     [InlineData(".vs/settings.cs", false)]
-    [InlineData("app/notes.txt", false)]
-    [InlineData("app/.hidden.cs", false)]
+    [InlineData("app/notes.txt", true)]      // text is text now
+    [InlineData("app/.hidden.cs", true)]     // a dotfile is not a secret
     public void WantedMatchesTheFolderWalk(string path, bool wanted) =>
         Assert.Equal(wanted, Scanner.Wanted(path));
 

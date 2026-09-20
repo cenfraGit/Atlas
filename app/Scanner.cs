@@ -11,7 +11,7 @@ public static class Scanner
     public const int Blank = 0, Comment = 1, Decl = 2, Str = 3, Code = 4;
 
     const float CardW = 240, LineH = 3, HeaderH = 22, Pad = 16;
-    const float GroupPad = 64, MaxCardH = 1400, ShelfW = 26000;
+    const float GroupPad = 64, ShelfW = 26000;
 
     static readonly HashSet<string> Skip = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,6 +26,19 @@ public static class Scanner
         ".c", ".h", ".cpp", ".hpp", ".rb", ".php", ".swift", ".scala", ".sql",
         ".xaml", ".html", ".css", ".scss", ".json", ".yaml", ".yml", ".md", ".sh",
     };
+
+    /// <summary>files worth reading that have no extension, or whose name is
+    /// all extension. A repo's configuration is part of how it works, and a
+    /// commit that adds .gitignore had nothing on the map to light up.</summary>
+    static readonly HashSet<string> Names = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".gitignore", ".gitattributes", ".editorconfig", ".dockerignore",
+        ".npmrc", ".nvmrc", ".prettierrc", ".eslintrc",
+        "Dockerfile", "Makefile", "CMakeLists.txt", "Directory.Build.props",
+    };
+
+    static bool WantedName(string name) =>
+        Names.Contains(name) || Ext.Contains(Path.GetExtension(name));
 
     static readonly string[] DeclWords =
     [
@@ -65,8 +78,8 @@ public static class Scanner
             if (parts[i].StartsWith('.') && parts[i] != ".github") return false;
         }
         var name = parts[^1];
-        if (name.StartsWith('.')) return false;
-        return Ext.Contains(Path.GetExtension(name));
+        if (name.StartsWith('.') && !Names.Contains(name)) return false;
+        return WantedName(name);
     }
 
     /// <summary>build a map from files that are not on disk - a commit's tree.</summary>
@@ -135,15 +148,16 @@ public static class Scanner
 
         foreach (var e in entries)
         {
-            if (e.Name.StartsWith('.') && e.Name != ".github") continue;
             if (e is DirectoryInfo sub)
             {
+                if (sub.Name.StartsWith('.') && sub.Name != ".github") continue;
                 if (Skip.Contains(sub.Name)) continue;
                 Walk(sub, root, into);
                 continue;
             }
             var file = (FileInfo)e;
-            if (!Ext.Contains(file.Extension) || file.Length > 2_000_000) continue;
+            // Wanted() filters a commit's tree the same way; the two must agree
+            if (!WantedName(file.Name) || file.Length > 2_000_000) continue;
 
             string[] lines;
             try { lines = File.ReadAllLines(file.FullName); }
@@ -190,7 +204,10 @@ public static class Scanner
 
             foreach (var f in items)
             {
-                float h = Math.Min(HeaderH + f.N * LineH, MaxCardH);
+                // a card is as tall as its file. It used to be capped, which
+                // meant a long file's card was shorter than its own contents:
+                // the bars stopped early and the text ran out of the box
+                float h = HeaderH + f.N * LineH;
                 int c = 0;
                 for (int i = 1; i < cols; i++) if (colH[i] < colH[c]) c = i;
                 f.X = c * (CardW + Pad);

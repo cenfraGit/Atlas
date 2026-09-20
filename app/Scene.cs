@@ -530,6 +530,13 @@ public sealed class Scene : IDisposable
                     canvas.DrawRect(0, bandY, 2.5f, bandH, _bandEdge);
                 }
 
+                // a card owns its rectangle: nothing it draws may leave it.
+                // the bars picture clamps itself to the card height, but the
+                // text tier did not, so a file taller than its card wrote code
+                // over its neighbours all the way down the column
+                canvas.Save();
+                canvas.ClipRect(new SKRect(0, 0, f.W, f.H));
+
                 if (Tier == 3)
                 {
                     int from = Math.Max(0, (int)((y0 - f.Y - Data.HeaderH) / Data.LineH) - 2);
@@ -542,6 +549,8 @@ public sealed class Scene : IDisposable
                     if (_bars.TryGetValue(i, out var pic)) canvas.DrawPicture(pic);
                     else _queue.Add(i);
                 }
+
+                canvas.Restore();
 
                 if (Review is not null)
                 {

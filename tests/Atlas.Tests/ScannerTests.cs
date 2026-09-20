@@ -149,21 +149,21 @@ public class ScannerTests
         Assert.Equal(wanted, Scanner.Wanted(path));
 
     [Fact]
-    public void ADistrictPerDirectory()
+    public void AFolderPerDirectory()
     {
         using var repo = SampleRepo.Build();
         var scan = Scanner.Build(repo.Path);
 
-        Assert.Equal(["app", "app/ui", "docs"], scan.Districts.Select(d => d.Name).Order());
-        Assert.All(scan.Districts, d => Assert.True(d.W > 0 && d.H > 0, $"{d.Name} has no area"));
+        Assert.Equal(["app", "app/ui", "docs"], scan.Folders.Select(d => d.Name).Order());
+        Assert.All(scan.Folders, d => Assert.True(d.W > 0 && d.H > 0, $"{d.Name} has no area"));
     }
 
     [Fact]
-    public void CardsSitInsideTheirDistrict()
+    public void CardsSitInsideTheirFolder()
     {
         using var repo = SampleRepo.Build();
         var scan = Scanner.Build(repo.Path);
-        var byName = scan.Districts.ToDictionary(d => d.Name);
+        var byName = scan.Folders.ToDictionary(d => d.Name);
 
         foreach (var f in scan.Files)
         {
@@ -192,12 +192,12 @@ public class ScannerTests
     }
 
     [Fact]
-    public void TheWorldBoundsEveryDistrict()
+    public void TheWorldBoundsEveryFolder()
     {
         using var repo = SampleRepo.Build();
         var scan = Scanner.Build(repo.Path);
 
-        Assert.All(scan.Districts, d =>
+        Assert.All(scan.Folders, d =>
         {
             Assert.True(d.X + d.W <= scan.World.W);
             Assert.True(d.Y + d.H <= scan.World.H);
@@ -211,7 +211,7 @@ public class ScannerTests
         var scan = Scanner.Build(dir.Path);
 
         Assert.Empty(scan.Files);
-        Assert.Empty(scan.Districts);
+        Assert.Empty(scan.Folders);
         Assert.Equal(1, scan.World.W);
         Assert.Equal(1, scan.World.H);
     }
@@ -229,7 +229,7 @@ public class ScannerTests
 
         Assert.Equal(fromDisk.Files.Select(f => f.P), fromTree.Files.Select(f => f.P));
         Assert.Equal(fromDisk.Files.Select(f => f.N), fromTree.Files.Select(f => f.N));
-        Assert.Equal(fromDisk.Districts.Select(d => d.Name), fromTree.Districts.Select(d => d.Name));
+        Assert.Equal(fromDisk.Folders.Select(d => d.Name), fromTree.Folders.Select(d => d.Name));
     }
 
     [Fact]

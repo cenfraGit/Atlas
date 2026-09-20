@@ -11,9 +11,9 @@ namespace Atlas.Tests;
 /// any one number - it is in what ends up on the canvas. Whatever mechanism
 /// might let content escape in future, this catches it.
 ///
-/// The fixture is a repo with exactly one file and districts turned off, so
+/// The fixture is a repo with exactly one file and folders turned off, so
 /// the only thing that can put a pixel on the canvas is that one card. A
-/// neighbour or a district wash would make "is anything drawn out here" an
+/// neighbour or a folder wash would make "is anything drawn out here" an
 /// unanswerable question.</summary>
 [Collection("render")]
 public class CardContainmentTests
@@ -33,7 +33,7 @@ public class CardContainmentTests
 
     static Scene Look(TempDir repo, float camS, Func<FileRec, float> camY)
     {
-        var scene = new Scene(Scanner.Build(repo.Path)) { ShowDistricts = false };
+        var scene = new Scene(Scanner.Build(repo.Path)) { ShowFolders = false };
         var f = scene.Data.Files[0];
         scene.CamS = camS;
         scene.CamX = f.X + f.W / 2;

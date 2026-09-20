@@ -101,7 +101,7 @@ public static class ChangeBoard
     }
 
     /// <summary>columns, each window going to whichever is shortest. The same
-    /// shape the scanner uses for a district, and for the same reason: it
+    /// shape the scanner uses for a folder, and for the same reason: it
     /// keeps a tall thing from pushing everything beside it down.</summary>
     static void Pack(List<(BoardItem Item, float H)> windows, Board board)
     {

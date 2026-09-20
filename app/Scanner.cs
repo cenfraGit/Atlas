@@ -166,7 +166,7 @@ public static class Scanner
         }
         recs.Sort((a, b) => string.CompareOrdinal(a.P, b.P));
 
-        var districts = Layout(recs);
+        var folders = Layout(recs);
         return new Scan
         {
             Root = root,
@@ -174,10 +174,10 @@ public static class Scanner
             HeaderH = HeaderH,
             World = new WorldSize
             {
-                W = districts.Count == 0 ? 1 : districts.Max(x => x.X + x.W),
-                H = districts.Count == 0 ? 1 : districts.Max(x => x.Y + x.H),
+                W = folders.Count == 0 ? 1 : folders.Max(x => x.X + x.W),
+                H = folders.Count == 0 ? 1 : folders.Max(x => x.Y + x.H),
             },
-            Districts = districts,
+            Folders = folders,
             Files = recs,
         };
     }
@@ -191,7 +191,7 @@ public static class Scanner
         Walk(new DirectoryInfo(root), root, "", files, opts, ref skipped);
         files.Sort((a, b) => string.CompareOrdinal(a.P, b.P));
 
-        var districts = Layout(files);
+        var folders = Layout(files);
         return new Scan
         {
             Root = root,
@@ -199,10 +199,10 @@ public static class Scanner
             HeaderH = HeaderH,
             World = new WorldSize
             {
-                W = districts.Count == 0 ? 1 : districts.Max(d => d.X + d.W),
-                H = districts.Count == 0 ? 1 : districts.Max(d => d.Y + d.H),
+                W = folders.Count == 0 ? 1 : folders.Max(d => d.X + d.W),
+                H = folders.Count == 0 ? 1 : folders.Max(d => d.Y + d.H),
             },
-            Districts = districts,
+            Folders = folders,
             Files = files,
             Skipped = skipped,
             ShowingHidden = opts.ShowHidden,
@@ -282,9 +282,9 @@ public static class Scanner
         catch { return null; }
     }
 
-    /// <summary>a district is one directory. files are gridded inside it and
-    /// districts are shelf-packed left to right.</summary>
-    static List<District> Layout(List<FileRec> files)
+    /// <summary>a folder is one directory. files are gridded inside it and
+    /// folders are shelf-packed left to right.</summary>
+    static List<Folder> Layout(List<FileRec> files)
     {
         var groups = new SortedDictionary<string, List<FileRec>>(StringComparer.Ordinal);
         foreach (var f in files)
@@ -295,7 +295,7 @@ public static class Scanner
             list.Add(f);
         }
 
-        var districts = new List<District>(groups.Count);
+        var folders = new List<Folder>(groups.Count);
         float shelfX = 0, shelfY = 0, shelfH = 0;
 
         foreach (var (dir, items) in groups)
@@ -329,11 +329,11 @@ public static class Scanner
             }
             foreach (var f in items) { f.X += shelfX; f.Y += shelfY; }
 
-            districts.Add(new District { Name = dir, X = shelfX, Y = shelfY, W = gw, H = gh });
+            folders.Add(new Folder { Name = dir, X = shelfX, Y = shelfY, W = gw, H = gh });
             shelfX += gw + GroupPad;
             shelfH = Math.Max(shelfH, gh);
         }
-        return districts;
+        return folders;
     }
 
     public static void Save(Scan scan, string path)

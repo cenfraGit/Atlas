@@ -74,7 +74,7 @@ them. Every key mentioned is in the table further down.
 
 **Find your way around.** The wheel zooms, dragging pans. What you see
 changes with the zoom rather than just getting bigger: zoomed right out the
-repo is districts, one per directory, labelled with as much of the path as
+repo is one block per folder, labelled with as much of the path as
 fits. Zoom in and each file becomes a card, then coloured bars for its lines,
 then real syntax-highlighted source. `F` fits the whole map again when you
 are lost.
@@ -186,7 +186,7 @@ your team gets everything you wrote.
 | `A` | add the current file to the last opened board |
 | `N` | add a board note (while on a board) |
 | `F` | fit the whole map, or the whole board |
-| `D` | district outlines on or off |
+| `D` | folder outlines on or off |
 | `.` | show or hide build output, dependencies and dotfiles |
 | `F9` | run the benchmark |
 
@@ -233,7 +233,7 @@ Four level-of-detail tiers:
 
 | zoom | tier | what is drawn |
 |---|---|---|
-| < 0.055 | districts | one rect + label per directory |
+| < 0.055 | folders | one rect + label per directory |
 | < 0.45 | cards | one rect per file |
 | < 3.2 | bars | one coloured bar per line, like a minimap |
 | >= 3.2 | text | real glyphs, only the lines on screen |
@@ -345,13 +345,13 @@ in the boards panel, nothing is written to `.atlas/`, and `C` again puts the
 map back exactly where you left it.
 
 Review mode gets **one colour channel: change**. A veil mutes the base map so
-district hues stop competing with green and red, and a changed file is drawn
+folder hues stop competing with green and red, and a changed file is drawn
 as a solid block forced to at least nine pixels - at map zoom a card is
 thinner than a pixel and would flicker in and out as you pan. Close in, where
 the code is readable, a changed file gets an outline drawn on top of the text
 rather than a wash of colour over it.
 
-District outlines are hairlines (Skia stroke width 0), so they stay one pixel
+Folder outlines are hairlines (Skia stroke width 0), so they stay one pixel
 at every zoom instead of shimmering in and out below a pixel.
 
 **Pull requests come from merge commits, not from a host API.** A merge
@@ -369,7 +369,7 @@ Limits worth knowing:
   so outright - `none of these paths exist in the current scan` - rather than
   showing a blank map.
 - Opening a target **rescans the repo as it was at that commit**, so such a
-  branch draws against its own paths: the map itself rebuilds, districts and
+  branch draws against its own paths: the map itself rebuilds, folders and
   all, around folders that no longer exist. The caption says
   `[tree at this commit]` while this is in effect, and `Esc` restores the
   working tree.
@@ -555,9 +555,9 @@ could still bring the item back. Files nothing references are swept when you
 leave the board, and when a board is deleted, both points where the undo
 history is already gone.
 
-## Districts
+## Folders
 
-A district is one directory. Each gets a hue from the golden-ratio sequence,
+A folder is one directory. Each gets a hue from the golden-ratio sequence,
 so neighbours never collide. The hue is drawn twice: as the outline and label
 far out, and as the tint on every card's header bar at any zoom. That second
 channel is what tells you where you are once the outline is off-screen.

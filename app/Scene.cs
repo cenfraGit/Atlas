@@ -16,7 +16,7 @@ public sealed class FileRec
     [JsonPropertyName("h")] public float H { get; set; }
 }
 
-public sealed class District
+public sealed class Folder
 {
     [JsonPropertyName("name")] public string Name { get; set; } = "";
     [JsonPropertyName("x")] public float X { get; set; }
@@ -37,7 +37,7 @@ public sealed class Scan
     [JsonPropertyName("lineH")] public float LineH { get; set; }
     [JsonPropertyName("headerH")] public float HeaderH { get; set; }
     [JsonPropertyName("world")] public WorldSize World { get; set; } = new();
-    [JsonPropertyName("districts")] public List<District> Districts { get; set; } = [];
+    [JsonPropertyName("folders")] public List<Folder> Folders { get; set; } = [];
     [JsonPropertyName("files")] public List<FileRec> Files { get; set; } = [];
 
     /// <summary>files the scan passed over: too large, or not text. Reported
@@ -68,7 +68,7 @@ public sealed class Scene : IDisposable
 {
     const float T_CARD = 0.055f, T_BARS = 0.45f, T_TEXT = 1.9f;
 
-    /// <summary>which level of detail a zoom falls in: 0 districts, 1 cards,
+    /// <summary>which level of detail a zoom falls in: 0 folders, 1 cards,
     /// 2 bars, 3 text. Pulled out of the draw loop so the thresholds can be
     /// checked without a window.</summary>
     public static int TierFor(float camS) =>
@@ -79,8 +79,8 @@ public sealed class Scene : IDisposable
     static readonly SKColor BoardBg = new(0x16, 0x10, 0x28);
     static readonly SKColor CardBg = new(0x08, 0x13, 0x20);
     static readonly SKColor HeaderBg = new(0x0f, 0x23, 0x34);
-    static readonly SKColor DistrictBg = new(0x07, 0x12, 0x1c);
-    static readonly SKColor DistrictEdge = new(0x1b, 0x4c, 0x66);
+    static readonly SKColor FolderBg = new(0x07, 0x12, 0x1c);
+    static readonly SKColor FolderEdge = new(0x1b, 0x4c, 0x66);
     static readonly SKColor LabelCol = new(0x7f, 0xd8, 0xf0);
     static readonly SKColor CodeCol = new(0x9f, 0xd4, 0xea);
 
@@ -96,7 +96,7 @@ public sealed class Scene : IDisposable
     public Scan Data;
     public float CamX, CamY, CamS = 0.05f;
     public int VisibleCards, BuiltThisFrame, Tier;
-    public bool ShowDistricts = true;
+    public bool ShowFolders = true;
 
     /// <summary>lines to mark after arriving at a bookmarked region.</summary>
     public (int File, int From, int To)? Highlight;
@@ -147,7 +147,7 @@ public sealed class Scene : IDisposable
     public (int File, int From, int To)? Selection;
     readonly ConcurrentDictionary<string, List<(Annotation A, Anchor R)>> _anchored = new();
 
-    int[] _districtOf = [];
+    int[] _folderOf = [];
     readonly Dictionary<string, int> _pathIndex = new(StringComparer.Ordinal);
 
     // timing lives here because the draw happens on avalonia's render thread
@@ -188,7 +188,7 @@ public sealed class Scene : IDisposable
     float _charW;
     readonly HashSet<string> _loading = [];
     readonly List<int> _queue = [];
-    SKPicture? _districtPic, _cardPic;
+    SKPicture? _folderPic, _cardPic;
 
     public Scene(Scan data)
     {
@@ -198,7 +198,7 @@ public sealed class Scene : IDisposable
 
     public int ChunksBuilt => _bars.Count;
 
-    static SKColor DistrictHue(int i, byte sat, byte light) =>
+    static SKColor FolderHue(int i, byte sat, byte light) =>
         SKColor.FromHsl((float)(i * 0.6180339887 % 1.0 * 360.0), sat, light);
 
     /// <summary>index of a file by repo-relative path, or -1.</summary>
@@ -257,21 +257,21 @@ public sealed class Scene : IDisposable
         }
     }
 
-    void MapFilesToDistricts()
+    void MapFilesToFolders()
     {
         _pathIndex.Clear();
         for (int i = 0; i < Data.Files.Count; i++) _pathIndex[Data.Files[i].P] = i;
 
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (int i = 0; i < Data.Districts.Count; i++) index[Data.Districts[i].Name] = i;
+        for (int i = 0; i < Data.Folders.Count; i++) index[Data.Folders[i].Name] = i;
 
-        _districtOf = new int[Data.Files.Count];
+        _folderOf = new int[Data.Files.Count];
         for (int i = 0; i < Data.Files.Count; i++)
         {
             var p = Data.Files[i].P;
             int cut = p.LastIndexOf('/');
             var dir = cut < 0 ? "." : p[..cut];
-            _districtOf[i] = index.TryGetValue(dir, out var d) ? d : 0;
+            _folderOf[i] = index.TryGetValue(dir, out var d) ? d : 0;
         }
     }
 
@@ -329,31 +329,31 @@ public sealed class Scene : IDisposable
 
     public void Rebuild()
     {
-        MapFilesToDistricts();
+        MapFilesToFolders();
         foreach (var p in _bars.Values) p.Dispose();
         _bars.Clear();
-        _districtPic?.Dispose();
+        _folderPic?.Dispose();
         _cardPic?.Dispose();
 
         var bounds = new SKRect(0, 0, Data.World.W, Data.World.H);
 
         var rec = new SKPictureRecorder();
         var c = rec.BeginRecording(bounds);
-        using (var fill = new SKPaint { Color = DistrictBg, IsAntialias = false })
+        using (var fill = new SKPaint { Color = FolderBg, IsAntialias = false })
         using (var edge = new SKPaint { IsStroke = true, StrokeWidth = 0, IsAntialias = false })
         using (var lab = new SKPaint { Typeface = _mono, IsAntialias = true })
         {
-            for (int i = 0; i < Data.Districts.Count; i++)
+            for (int i = 0; i < Data.Folders.Count; i++)
             {
-                var d = Data.Districts[i];
+                var d = Data.Folders[i];
                 var r = new SKRect(d.X - 10, d.Y - 26, d.X + d.W + 10, d.Y + d.H + 10);
                 c.DrawRect(r, fill);
-                edge.Color = DistrictHue(i, 55, 40);
+                edge.Color = FolderHue(i, 55, 40);
                 c.DrawRect(r, edge);
             }
 
         }
-        _districtPic = rec.EndRecording();
+        _folderPic = rec.EndRecording();
 
         rec = new SKPictureRecorder();
         c = rec.BeginRecording(bounds);
@@ -364,7 +364,7 @@ public sealed class Scene : IDisposable
             for (int i = 0; i < Data.Files.Count; i++)
             {
                 var f = Data.Files[i];
-                head.Color = DistrictHue(_districtOf[i], 40, 20);
+                head.Color = FolderHue(_folderOf[i], 40, 20);
                 c.DrawRect(f.X, f.Y, f.W, Data.HeaderH, head);
             }
         }
@@ -531,8 +531,8 @@ public sealed class Scene : IDisposable
         float x0 = CamX - hw, y0 = CamY - hh, x1 = CamX + hw, y1 = CamY + hh;
 
         DrawGrid(canvas, x0, y0, x1, y1);
-        if (ShowDistricts) canvas.DrawPicture(_districtPic);
-        if (ShowDistricts) DrawDistrictLabels(canvas, vw, x0, y0, x1, y1);
+        if (ShowFolders) canvas.DrawPicture(_folderPic);
+        if (ShowFolders) DrawFolderLabels(canvas, vw, x0, y0, x1, y1);
         if (Tier >= 1) canvas.DrawPicture(_cardPic);
         if (Review is not null && Tier < 2)
         {
@@ -683,22 +683,22 @@ public sealed class Scene : IDisposable
     }
 
     /// <summary>folder names, sized in screen terms so they stay readable at any
-    /// zoom, and skipped when the district is too small to hold the text.</summary>
-    void DrawDistrictLabels(SKCanvas canvas, float vw, float x0, float y0, float x1, float y1)
+    /// zoom, and skipped when the folder is too small to hold the text.</summary>
+    void DrawFolderLabels(SKCanvas canvas, float vw, float x0, float y0, float x1, float y1)
     {
         float sc = 1f / CamS;
         float size = Math.Clamp(vw / 90f, 13f, 22f) * sc;
         using var lab = new SKPaint { Typeface = _mono, TextSize = size, IsAntialias = true };
 
-        // districts are shelf packed, so a label may spill into the gap beside
+        // folders are shelf packed, so a label may spill into the gap beside
         // it. keep the right edge per row and drop whatever would collide -
         // a readable subset beats a complete but unreadable one
         var rowRight = new Dictionary<int, float>();
         var used = new HashSet<string>(StringComparer.Ordinal);
 
-        for (int i = 0; i < Data.Districts.Count; i++)
+        for (int i = 0; i < Data.Folders.Count; i++)
         {
-            var d = Data.Districts[i];
+            var d = Data.Folders[i];
             if (d.X > x1 || d.X + d.W < x0 || d.Y > y1 || d.Y + d.H < y0) continue;
 
             // "Forms" is useless: every project has one. show as much of the
@@ -706,7 +706,7 @@ public sealed class Scene : IDisposable
             var shown = Shorten(d.Name, lab, d.W * 2.2f);
             if (shown is null) continue;
 
-            // three districts all reading "Pages" name nothing. a repeat is
+            // three folders all reading "Pages" name nothing. a repeat is
             // allowed to run wider so it can say which Pages it is
             if (!used.Add(shown) && Shorten(d.Name, lab, d.W * 6f) is { } longer)
             {
@@ -719,7 +719,7 @@ public sealed class Scene : IDisposable
             if (rowRight.TryGetValue(row, out var right) && d.X < right + 26 * sc) continue;
             rowRight[row] = d.X + wide;
 
-            // a label belongs above its district, except when that would put
+            // a label belongs above its folder, except when that would put
             // it off the top of the window, where it is no label at all
             float ty = Math.Max(d.Y - 30 * sc, y0 + size * 1.2f);
             using (var chip = new SKPaint { Color = new SKColor(0x04, 0x07, 0x0f, 226), IsAntialias = false })
@@ -727,7 +727,7 @@ public sealed class Scene : IDisposable
 
             lab.Color = Review is not null
                 ? new SKColor(0x4a, 0x5a, 0x66)          // reviewing: stay out of the way
-                : DistrictHue(i, 55, 68);
+                : FolderHue(i, 55, 68);
             canvas.DrawText(shown, d.X, ty, lab);
         }
     }
@@ -1232,7 +1232,7 @@ public sealed class Scene : IDisposable
             canvas.Save();
             canvas.Translate(it.X, it.Y);
 
-            head.Color = DistrictHue(_districtOf[i], 40, 22);
+            head.Color = FolderHue(_folderOf[i], 40, 22);
             canvas.DrawRect(0, 0, it.W, WinHeadH, head);
             canvas.DrawRect(0, WinHeadH, it.W, bodyH, body);
             var name = f.P[(f.P.LastIndexOf('/') + 1)..];
@@ -1668,23 +1668,23 @@ public sealed class Scene : IDisposable
     public void Stress()
     {
         var baseFiles = Data.Files;
-        var baseDistricts = Data.Districts;
+        var baseFolders = Data.Folders;
         float W = Data.World.W + 400, H = Data.World.H + 400;
         var files = new List<FileRec>(baseFiles.Count * 9);
-        var districts = new List<District>(baseDistricts.Count * 9);
+        var folders = new List<Folder>(baseFolders.Count * 9);
         for (int gy = 0; gy < 3; gy++)
         for (int gx = 0; gx < 3; gx++)
         {
             foreach (var f in baseFiles)
                 files.Add(new FileRec { P = f.P, N = f.N, D = f.D, X = f.X + gx * W, Y = f.Y + gy * H, W = f.W, H = f.H });
-            foreach (var d in baseDistricts)
-                districts.Add(new District { Name = d.Name, X = d.X + gx * W, Y = d.Y + gy * H, W = d.W, H = d.H });
+            foreach (var d in baseFolders)
+                folders.Add(new Folder { Name = d.Name, X = d.X + gx * W, Y = d.Y + gy * H, W = d.W, H = d.H });
         }
         Data = new Scan
         {
             Root = Data.Root, LineH = Data.LineH, HeaderH = Data.HeaderH,
             World = new WorldSize { W = W * 3, H = H * 3 },
-            Districts = districts, Files = files,
+            Folders = folders, Files = files,
         };
         Rebuild();
     }
@@ -1692,7 +1692,7 @@ public sealed class Scene : IDisposable
     public void Dispose()
     {
         foreach (var p in _bars.Values) p.Dispose();
-        _districtPic?.Dispose();
+        _folderPic?.Dispose();
         _cardPic?.Dispose();
         _mono.Dispose();
         _band.Dispose();

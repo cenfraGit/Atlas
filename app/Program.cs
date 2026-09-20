@@ -152,7 +152,7 @@ public sealed class App : Application
                 Ignored = ignore is null ? null : ignore.Ignored,
             });
             Scanner.Save(fresh, cache);
-            Console.WriteLine($"scanned {fresh.Files.Count} files, {fresh.Districts.Count} districts " +
+            Console.WriteLine($"scanned {fresh.Files.Count} files, {fresh.Folders.Count} folders " +
                               $"in {sw.ElapsedMilliseconds}ms -> {cache}");
             if (fresh.Skipped > 0)
                 Console.WriteLine($"{fresh.Skipped} skipped as binary or too large. " +
@@ -166,8 +166,16 @@ public sealed class App : Application
         {
             using var fs = File.OpenRead(cache);
             var cached = JsonSerializer.Deserialize<Scan>(fs)!;
-            if (Directory.Exists(cached.Root)) return cached;
-            Console.WriteLine($"the cached scan points at {cached.Root}, which is not here.");
+
+            // a cache written by an older Atlas can deserialise into something
+            // shaped right and empty - folders were called districts once -
+            // and a map with files but nowhere to put them draws nothing
+            if (cached.Files.Count > 0 && cached.Folders.Count == 0)
+                Console.WriteLine("the cached scan is from an older Atlas; rescanning.");
+            else if (Directory.Exists(cached.Root))
+                return cached;
+            else
+                Console.WriteLine($"the cached scan points at {cached.Root}, which is not here.");
         }
 
         var self = dir?.FullName ?? ".";
@@ -297,9 +305,9 @@ public sealed class SceneView : Control
     {
         var sorted = _ring.Where(v => v > 0).OrderBy(v => v).ToArray();
         var med = sorted.Length > 0 ? sorted[sorted.Length / 2] : 0;
-        var tierName = new[] { "districts", "cards", "bars", "text" }[_scene.Tier];
+        var tierName = new[] { "folders", "cards", "bars", "text" }[_scene.Tier];
         var line1 = $"{med:F2} ms draw  |  zoom {_scene.CamS:F3}x  |  tier {tierName}";
-        var line2 = $"{_scene.Data.Files.Count} files  {_scene.Data.Districts.Count} districts  " +
+        var line2 = $"{_scene.Data.Files.Count} files  {_scene.Data.Folders.Count} folders  " +
                     $"{_scene.VisibleCards} visible  {_scene.ChunksBuilt} built" +
                     (_scene.BuiltThisFrame > 0 ? $"  +{_scene.BuiltThisFrame}" : "");
         Text(ctx, line1, 12, 10, Color.FromRgb(0xff, 0xd1, 0x66));
@@ -2549,7 +2557,7 @@ public sealed class SceneView : Control
             }
             case Key.G: OpenReviewPanel(branches: true); break;
             case Key.C: ToggleChangeBoard(); break;
-            case Key.D: _scene.ShowDistricts = !_scene.ShowDistricts; break;
+            case Key.D: _scene.ShowFolders = !_scene.ShowFolders; break;
             case Key.OemPeriod: ToggleHidden(); break;
             case Key.M: SaveBookmark(); break;
             case Key.O: _boards?.Show(); break;

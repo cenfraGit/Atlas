@@ -6,7 +6,7 @@ namespace Atlas.Tests;
 public class SceneTests
 {
     [Theory]
-    [InlineData(0.01f, 0)]    // districts
+    [InlineData(0.01f, 0)]    // folders
     [InlineData(0.054f, 0)]
     [InlineData(0.055f, 1)]   // cards
     [InlineData(0.44f, 1)]

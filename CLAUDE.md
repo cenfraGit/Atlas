@@ -53,8 +53,10 @@ change freely.
       the surviving pieces as strokes in their own right.
 - [ ] Resizing a stroke. `Scene.Resizable` excludes strokes today because the
       grip would have to scale every point.
-- [ ] Shape primitives beyond rectangle and arrow: ellipse, diamond,
-      standalone text.
+- [x] Shape primitives: ellipse, diamond and standalone labels. The three
+      outlined shapes are one box with a different path traced round it; a
+      label is words with no panel behind them, which is what makes it a
+      heading rather than a note.
 - [ ] Connectors that attach to elements and follow them when dragged. Bigger
       than free arrows; second pass.
 - [ ] Replay strokes from an `SKPicture` once boards hold hundreds of them.

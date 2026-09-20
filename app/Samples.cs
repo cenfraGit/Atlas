@@ -7,8 +7,9 @@ namespace Atlas;
 public static class Samples
 {
     /// <summary>what to say about a file, and which declaration to say it at.
-    /// a suffix rather than a full path, so the files can move.</summary>
-    /// <summary>Methods rather than classes, deliberately. A note is tinted
+    /// A suffix rather than a full path, so the files can move.
+    ///
+    /// Methods rather than classes, deliberately. A note is tinted
     /// across the lines it covers, so pointing one at a nine hundred line
     /// class either tints all of it or tints an arbitrary window onto it -
     /// and neither reads as a note about anything. A method is a thing a
@@ -17,7 +18,7 @@ public static class Samples
     [
         ("Scene.cs", "TierFor",
             "What you see changes with the zoom rather than just getting bigger. Four tiers: " +
-            "districts, then cards, then a coloured bar per line, then real text."),
+            "folders, then cards, then a coloured bar per line, then real text."),
         ("Scanner.cs", "Classify",
             "Every line is sorted into a kind once, at scan time, so drawing the bars tier is " +
             "a lookup rather than a parse. Layout lives here too, not in the view."),

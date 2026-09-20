@@ -661,6 +661,7 @@ public sealed class SceneView : Control
 
         foreach (var it in picked)
         {
+            if (Strokes.Is(it)) { Strokes.Move(it, dx, dy); continue; }
             it.X += dx;
             it.Y += dy;
             if (it.Kind == "arrow") { it.X2 += dx; it.Y2 += dy; }
@@ -815,6 +816,8 @@ public sealed class SceneView : Control
         Editing = on;
         _dragItem = null;
         _armArrow = false;
+        _armBrush = false;
+        _armEraser = false;
         _scene.Picked.Clear();
         _scene.PickedFiles.Clear();
         _scene.Selection = null;
@@ -835,6 +838,9 @@ public sealed class SceneView : Control
     int _clickCount = 1;
     bool _secondary;
     bool _armArrow;
+    bool _armBrush, _armEraser, _erasing;
+    const float EraserRadius = 14f;
+    public string? PenColor;
     BoardItem? _arrowEnd;
     int _arrowEndWhich;
     ContextMenu? _menu;
@@ -876,7 +882,8 @@ public sealed class SceneView : Control
     }
 
     void RefreshBoardBar() =>
-        _boardBar?.Reflect(_scene.ActiveBoard is not null && Editing, SnapToGrid);
+        _boardBar?.Reflect(_scene.ActiveBoard is not null && Editing, SnapToGrid,
+            _armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null);
 
     void AddOfKind(string kind)
     {
@@ -885,8 +892,57 @@ public sealed class SceneView : Control
             case "note": AddNote(); break;
             case "shape": AddShape(); break;
             case "arrow": AddArrow(); break;
+            case "brush": ArmBrush(); break;
+            case "eraser": ArmEraser(); break;
             case "file": OpenSearch?.Invoke(); break;
         }
+    }
+
+    /// <summary>arms the brush: the next drag draws freehand. Staying armed
+    /// after a stroke is the point - you draw several in a row, and reaching
+    /// for the key between each one is the thing that makes a drawing tool
+    /// unusable.</summary>
+    void ArmBrush()
+    {
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
+        if (!Editing) SetEditing(true);
+        _armEraser = false;
+        _armBrush = !_armBrush;
+        _armArrow = false;
+        _scene.Picked.Clear();
+        RefreshBoardBar();
+        Toast(_armBrush ? "brush on - drag to draw, B to stop" : "brush off");
+    }
+
+    void ArmEraser()
+    {
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
+        if (!Editing) SetEditing(true);
+        _armBrush = false;
+        _armEraser = !_armEraser;
+        _armArrow = false;
+        _scene.Picked.Clear();
+        RefreshBoardBar();
+        Toast(_armEraser ? "eraser on - drag over a stroke, X to stop" : "eraser off");
+    }
+
+    /// <summary>rub out whole strokes rather than pixels, so what is left is
+    /// still a stroke: it can be picked, moved and undone like anything else.</summary>
+    void EraseAt(float wx, float wy)
+    {
+        if (_scene.ActiveBoard is not { } board) return;
+        var hit = _scene.StrokesNear(wx, wy, EraserRadius / _scene.CamS);
+        if (hit.Count == 0) return;
+
+        // one history entry for the whole rub, not one per stroke
+        if (!_erasing) { Remember(); _erasing = true; }
+        foreach (var it in hit)
+        {
+            board.Items.Remove(it);
+            _scene.Picked.Remove(it.Id);
+        }
+        _boardDirty = true;
+        InvalidateVisual();
     }
 
     /// <summary>an arrow needs two picked items: it joins them and follows
@@ -1703,6 +1759,28 @@ public sealed class SceneView : Control
         {
             var (wx, wy) = WorldAt(e.GetPosition(this));
 
+            if (_armBrush)
+            {
+                _scene.StrokeDraft = new BoardItem
+                {
+                    Id = BookmarkStore.NewId(), Kind = "stroke",
+                    Color = PenColor, Weight = Strokes.DefaultWeight,
+                };
+                Strokes.Add(_scene.StrokeDraft, wx, wy);
+                _drag = true;
+                _last = e.GetPosition(this);
+                return;
+            }
+
+            if (_armEraser)
+            {
+                _erasing = false;
+                EraseAt(wx, wy);
+                _drag = true;
+                _last = e.GetPosition(this);
+                return;
+            }
+
             if (_armArrow)
             {
                 _scene.ArrowDraft = (new SkiaSharp.SKPoint(wx, wy), new SkiaSharp.SKPoint(wx, wy));
@@ -1724,7 +1802,7 @@ public sealed class SceneView : Control
             _resizing = _scene.GripAt(wx, wy);
             if (_resizing is not null) { Remember(); _drag = true; _last = e.GetPosition(this); return; }
 
-            var hit = _scene.ItemAt(wx, wy) ?? _scene.ArrowAt(wx, wy);
+            var hit = _scene.ItemAt(wx, wy) ?? _scene.ArrowAt(wx, wy) ?? _scene.StrokeAt(wx, wy);
             if (hit is null)
             {
                 // empty canvas: sweep out a selection
@@ -1785,6 +1863,23 @@ public sealed class SceneView : Control
         _drag = false;
         _axis = 0;
         ApplyCursor();
+
+        _erasing = false;
+
+        if (_scene.StrokeDraft is { } drawn)
+        {
+            _scene.StrokeDraft = null;
+            // a click that never moved is not a stroke, it is a click
+            if (_scene.ActiveBoard is { } sb && Strokes.CountOf(drawn) > 1)
+            {
+                Remember();
+                Strokes.Reframe(drawn);
+                sb.Items.Add(drawn);
+                _boardDirty = true;
+            }
+            InvalidateVisual();
+            return;
+        }
 
         if (_scene.ArrowDraft is { } made)
         {
@@ -1889,6 +1984,25 @@ public sealed class SceneView : Control
         if (!_drag) return;
         _dragDist += Math.Abs(p.X - _last.X) + Math.Abs(p.Y - _last.Y);
 
+        if (_scene.StrokeDraft is { } pen)
+        {
+            var (sx, sy) = WorldAt(p);
+            // the sample spacing is in board units, so a stroke drawn zoomed
+            // out is not stored coarser than one drawn zoomed in
+            if (Strokes.Add(pen, sx, sy, Strokes.MinStep / Math.Max(_scene.CamS, 0.05f)))
+                InvalidateVisual();
+            _last = p;
+            return;
+        }
+
+        if (_armEraser)
+        {
+            var (ex0, ey0) = WorldAt(p);
+            EraseAt(ex0, ey0);
+            _last = p;
+            return;
+        }
+
         if (_scene.ArrowDraft is { } draft)
         {
             var (ax, ay) = WorldAt(p);
@@ -1960,6 +2074,7 @@ public sealed class SceneView : Control
                 float nx = SnapToGrid ? MathF.Round(raw.X / cell) * cell : raw.X;
                 float ny = SnapToGrid ? MathF.Round(raw.Y / cell) * cell : raw.Y;
                 float dx = nx - it.X, dy = ny - it.Y;
+                if (Strokes.Is(it)) { Strokes.Move(it, dx, dy); continue; }
                 it.X = nx;
                 it.Y = ny;
                 if (it.Kind == "arrow") { it.X2 += dx; it.Y2 += dy; }
@@ -2102,6 +2217,8 @@ public sealed class SceneView : Control
                 case Key.Z when _ctrl: Undo(); return;
                 case Key.Y when _ctrl: Redo(); return;
                 case Key.Y: AddArrow(); return;
+                case Key.B: ArmBrush(); return;
+                case Key.X: ArmEraser(); return;
                 case Key.Delete: DeletePicked(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;

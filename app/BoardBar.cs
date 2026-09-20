@@ -11,6 +11,7 @@ public sealed class BoardBar : Border
 {
     readonly StackPanel _row;
     readonly Button _snap;
+    readonly Dictionary<string, Button> _tools = [];
 
     public event Action<string>? Add;
     public event Action? ToggleSnap;
@@ -30,11 +31,13 @@ public sealed class BoardBar : Border
         foreach (var (label, kind) in new[]
                  {
                      ("board note  N", "note"), ("rectangle  T", "shape"),
-                     ("arrow  Y", "arrow"), ("file  A", "file"),
+                     ("arrow  Y", "arrow"), ("brush  B", "brush"),
+                     ("eraser  X", "eraser"), ("file  A", "file"),
                  })
         {
             var b = Make(label);
             b.Click += (_, _) => Add?.Invoke(kind);
+            _tools[kind] = b;
             _row.Children.Add(b);
         }
 
@@ -58,9 +61,13 @@ public sealed class BoardBar : Border
         Cursor = new Cursor(StandardCursorType.Hand),
     };
 
-    public void Reflect(bool editing, bool snap)
+    /// <summary>a tool that stays armed has to look armed, or you draw a
+    /// stroke you did not mean to the next time you drag.</summary>
+    public void Reflect(bool editing, bool snap, string? armed = null)
     {
         IsVisible = editing;
         _snap.Foreground = snap ? Ui.Accent : Ui.Dim;
+        foreach (var (kind, button) in _tools)
+            button.Foreground = kind == armed ? Ui.Accent : Ui.Dim;
     }
 }

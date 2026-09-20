@@ -40,13 +40,16 @@ will work. Boards start empty, grouped in the sidebar (design boards vs
 documentation boards). No stored boards predate this, so the data model can
 change freely.
 
-- [ ] Freehand vector strokes. A stroke is a point array, which is the first
-      board item that does not fit `X/Y/W/H` - add `points` to `BoardItem`
-      rather than splitting the type, so `History` keeps working unchanged.
-- [ ] Stroke hit-testing: point-to-polyline distance, like `ArrowAt` but over
-      N segments, with a cached bounding box so rubberband selection is cheap.
-- [ ] Eraser. Stroke-erase (remove whole strokes you touch), not pixel-erase -
-      strokes stay vectors and undo composes for free.
+- [x] Freehand vector strokes (`Strokes.cs`, `B`). `BoardItem.Points` holds a
+      flat x,y array; `X/Y/W/H` are kept in step as the ink's bounds so every
+      other part of the board goes on treating a stroke like a box.
+- [x] Stroke hit-testing: point-to-polyline distance, bounds as the cheap
+      rejection first.
+- [x] Eraser (`X`), stroke-erase rather than pixel-erase.
+- [ ] Pen colour and weight from the toolbar. `PenColor` and
+      `BoardItem.Weight` exist and are honoured; nothing sets them yet.
+- [ ] Resizing a stroke. `Scene.Resizable` excludes strokes today because the
+      grip would have to scale every point.
 - [ ] Shape primitives beyond rectangle and arrow: ellipse, diamond,
       standalone text.
 - [ ] Connectors that attach to elements and follow them when dragged. Bigger

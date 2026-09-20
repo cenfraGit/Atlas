@@ -902,6 +902,8 @@ public sealed class Scene : IDisposable
     public float ItemHeight(BoardItem it)
     {
         if (it.Kind == "arrow") return 0;
+        // a stroke's box is its ink's bounds, kept in step by Strokes.Reframe
+        if (Strokes.Is(it)) return it.H;
         if (it.Kind == "shape") return Math.Max(40, it.H > 0 ? it.H : 240);
         if (it.Kind == "image") return Math.Max(20, it.H > 0 ? it.H : it.W * 0.6f);
         if (it.Kind == "note")
@@ -951,7 +953,7 @@ public sealed class Scene : IDisposable
         for (int i = ActiveBoard.Items.Count - 1; i >= 0; i--)
         {
             var it = ActiveBoard.Items[i];
-            if (it.Kind == "arrow") continue;
+            if (it.Kind == "arrow" || Strokes.Is(it)) continue;
             // the whole box counts, plus a little slack, so a click near an
             // edge still lands on the thing you were aiming at
             float pad = 3f / CamS;
@@ -1056,7 +1058,7 @@ public sealed class Scene : IDisposable
 
         foreach (var it in board.Items)
         {
-            if (it.Kind == "arrow") continue;          // drawn after, on top
+            if (it.Kind == "arrow" || Strokes.Is(it)) continue;   // drawn after, on top
             if (it.Kind == "shape")
             {
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
@@ -1145,6 +1147,7 @@ public sealed class Scene : IDisposable
             DrawBoardNoteText(canvas, it, f, from, to, k);
         }
 
+        DrawStrokes(canvas, board);
         DrawArrows(canvas, board);
         DrawPickedItems(canvas, board);
         DrawRubberband(canvas);
@@ -1203,6 +1206,61 @@ public sealed class Scene : IDisposable
             if (Math.Abs(wx - it.X2) < r && Math.Abs(wy - it.Y2) < r) return (it, 2);
         }
         return null;
+    }
+
+    /// <summary>the stroke being drawn right now, before it is committed.</summary>
+    public BoardItem? StrokeDraft;
+
+    void DrawStrokes(SKCanvas canvas, Board board)
+    {
+        using var pen = new SKPaint
+        {
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeCap = SKStrokeCap.Round,
+            StrokeJoin = SKStrokeJoin.Round,
+        };
+
+        foreach (var it in board.Items)
+        {
+            if (!Strokes.Is(it)) continue;
+            DrawStroke(canvas, it, pen);
+        }
+        if (StrokeDraft is { } draft) DrawStroke(canvas, draft, pen);
+    }
+
+    void DrawStroke(SKCanvas canvas, BoardItem it, SKPaint pen)
+    {
+        if (Strokes.CountOf(it) == 0) return;
+        pen.Color = ParseColor(it.Color, LabelCol);
+        pen.StrokeWidth = it.Weight > 0 ? it.Weight : Strokes.DefaultWeight;
+        using var path = Strokes.PathOf(it);
+        canvas.DrawPath(path, pen);
+    }
+
+    /// <summary>the topmost stroke under a point, or null. Separate from
+    /// ItemAt for the same reason arrows are: a stroke's box is mostly empty,
+    /// and a click inside it that misses the ink belongs to the canvas.</summary>
+    public BoardItem? StrokeAt(float wx, float wy)
+    {
+        if (ActiveBoard is null) return null;
+        float tol = 7f / CamS;
+        for (int i = ActiveBoard.Items.Count - 1; i >= 0; i--)
+        {
+            var it = ActiveBoard.Items[i];
+            if (Strokes.Is(it) && Strokes.Touches(it, wx, wy, tol)) return it;
+        }
+        return null;
+    }
+
+    /// <summary>every stroke the eraser is touching.</summary>
+    public List<BoardItem> StrokesNear(float wx, float wy, float radius)
+    {
+        var hit = new List<BoardItem>();
+        if (ActiveBoard is null) return hit;
+        foreach (var it in ActiveBoard.Items)
+            if (Strokes.Is(it) && Strokes.Touches(it, wx, wy, radius)) hit.Add(it);
+        return hit;
     }
 
     /// <summary>an arrow near the point, for picking one without a box.</summary>

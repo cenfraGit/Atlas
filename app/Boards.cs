@@ -34,6 +34,19 @@ public sealed class BoardItem
     /// rather than latched to two items, so an arrow can point at anything.</summary>
     [JsonPropertyName("x2")] public float X2 { get; set; }
     [JsonPropertyName("y2")] public float Y2 { get; set; }
+
+    /// <summary>a freehand stroke, as x,y,x,y... in board coordinates. Flat
+    /// rather than a list of points because it is the one thing on a board
+    /// there can be thousands of, and a pair of floats per point costs three
+    /// times as much JSON as two numbers do.
+    ///
+    /// This is the first item that is not a box. X/Y/W/H are kept in step as
+    /// the stroke's bounds, so picking, moving and the rubberband go on
+    /// treating every item the same way.</summary>
+    [JsonPropertyName("points")] public List<float>? Points { get; set; }
+
+    /// <summary>pen width, in board units.</summary>
+    [JsonPropertyName("weight")] public float Weight { get; set; }
 }
 
 /// <summary>a hand-arranged canvas that references files rather than owning

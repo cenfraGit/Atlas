@@ -14,7 +14,7 @@ TextMate grammars for highlighting. No other toolchain - clone and run.
 Double-click `run.cmd` and Atlas opens **on itself** - this repo carries its
 own `.atlas/`, so there are boards and annotations to look at immediately.
 Drag any other folder onto `run.cmd` to open that repo instead. `test.cmd`
-runs every self-check. Or from a shell:
+runs the tests. Or from a shell:
 
 ```bash
 cd app && dotnet run -- ../path/to/some/repo
@@ -71,6 +71,12 @@ an image, and `G` toggles snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
 Hold space to pan without leaving edit mode. `Esc` goes back to the map, and
 the camera returns exactly where you left it.
 
+**Draw on it.** `B` is a freehand brush and stays on until you press it
+again, because you draw several strokes in a row and reaching for the key
+between each one is what makes a drawing tool unusable. `X` is an eraser: it
+rubs out whole strokes rather than pixels, so what is left is still a stroke
+and can be picked, moved and undone like anything else on the board.
+
 **Annotate code.** Notes about code are written on boards, where the
 surrounding code gives them their meaning. On a board, secondary click a line
 inside a file window and choose *Annotate this line*. The note then appears
@@ -109,6 +115,8 @@ your team gets everything you wrote.
 | `ctrl+Z` / `ctrl+Y` | undo / redo on a board |
 | space (board) | hold to pan while editing |
 | `Y` | draw an arrow on a board |
+| `B` | freehand brush on a board; stays on until you press it again |
+| `X` | eraser on a board; rubs out whole strokes |
 | `G` (board) | snap to grid on or off |
 | Delete (board) | remove what is picked |
 | `T` | rectangle on a board |
@@ -165,10 +173,9 @@ It checks the two things a headless test still cannot see: a real window, and
 the real Windows clipboard. The clipboard paste was once broken while every
 self-check passed.
 
-The older in-process self-checks are still there
-(`dotnet run -- --gittest ".."` and friends) but they print their result
-rather than returning it, so a failure does not fail a script. The suite above
-covers the same ground.
+Some of it renders for real and reads the pixels back, because a few rules -
+that a card's contents stay inside the card, for one - are about what lands
+on the canvas rather than about any one number.
 
 ## How it stays smooth
 

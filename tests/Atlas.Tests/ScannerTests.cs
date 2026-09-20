@@ -83,7 +83,76 @@ public class ScannerTests
         Assert.NotEqual(Scanner.Decl, scan.Files.Single().D[2]);
     }
 
+    [Fact]
+    public void ConfigurationFilesAreOnTheMap()
+    {
+        using var dir = new TempDir();
+        dir.File(".gitignore", "bin/\nobj/\n");
+        dir.File(".editorconfig", "root = true\n");
+        dir.File("Dockerfile", "FROM scratch\n");
+        dir.File("app/Program.cs", "class P { }");
+
+        var paths = Scanner.Build(dir.Path).Files.Select(f => f.P).ToList();
+
+        // a commit that adds .gitignore had nothing on the map to light up
+        Assert.Contains(".gitignore", paths);
+        Assert.Contains(".editorconfig", paths);
+        Assert.Contains("Dockerfile", paths);
+    }
+
+    [Fact]
+    public void OtherDotfilesAreStillLeftOut()
+    {
+        using var dir = new TempDir();
+        dir.File(".env", "SECRET=1\n");
+        dir.File(".DS_Store", "junk");
+        dir.File("app/Program.cs", "class P { }");
+
+        var paths = Scanner.Build(dir.Path).Files.Select(f => f.P).ToList();
+
+        Assert.DoesNotContain(".env", paths);
+        Assert.DoesNotContain(".DS_Store", paths);
+    }
+
+    [Fact]
+    public void HiddenDirectoriesAreStillSkipped()
+    {
+        using var dir = new TempDir();
+        dir.File(".secret/Thing.cs", "class T { }");
+        dir.File(".github/workflows/ci.yml", "on: push\n");
+
+        var paths = Scanner.Build(dir.Path).Files.Select(f => f.P).ToList();
+
+        Assert.DoesNotContain(".secret/Thing.cs", paths);
+        Assert.Contains(".github/workflows/ci.yml", paths);
+    }
+
+    [Fact]
+    public void WhatTheWalkTakesIsExactlyWhatWantedTakes()
+    {
+        // the two must agree or a commit's tree is filtered differently from
+        // the working tree, and changed files land nowhere
+        using var dir = new TempDir();
+        dir.File(".gitignore", "bin/\n");
+        dir.File(".env", "x=1\n");
+        dir.File("Dockerfile", "FROM scratch\n");
+        dir.File("app/Program.cs", "class P { }");
+        dir.File("app/notes.txt", "no");
+        dir.File("bin/Gen.cs", "class G { }");
+
+        foreach (var f in Scanner.Build(dir.Path).Files)
+            Assert.True(Scanner.Wanted(f.P), $"the walk took {f.P} but Wanted() rejects it");
+
+        foreach (var rejected in new[] { ".env", "app/notes.txt", "bin/Gen.cs" })
+            Assert.False(Scanner.Wanted(rejected), $"Wanted() takes {rejected} but the walk does not");
+    }
+
     [Theory]
+    [InlineData(".gitignore", true)]
+    [InlineData(".editorconfig", true)]
+    [InlineData("Dockerfile", true)]
+    [InlineData("Makefile", true)]
+    [InlineData(".env", false)]
     [InlineData("app/Program.cs", true)]
     [InlineData("docs/readme.md", true)]
     [InlineData(".github/workflows/ci.yml", true)]

@@ -46,6 +46,12 @@ public sealed class Scene : IDisposable
 {
     const float T_CARD = 0.055f, T_BARS = 0.45f, T_TEXT = 1.9f;
 
+    /// <summary>which level of detail a zoom falls in: 0 districts, 1 cards,
+    /// 2 bars, 3 text. Pulled out of the draw loop so the thresholds can be
+    /// checked without a window.</summary>
+    public static int TierFor(float camS) =>
+        camS < T_CARD ? 0 : camS < T_BARS ? 1 : camS < T_TEXT ? 2 : 3;
+
     static readonly SKColor Bg = new(0x04, 0x07, 0x0f);
     // a board is a different place: indigo instead of the map's blue black
     static readonly SKColor BoardBg = new(0x16, 0x10, 0x28);
@@ -473,7 +479,7 @@ public sealed class Scene : IDisposable
             return;
         }
 
-        Tier = CamS < T_CARD ? 0 : CamS < T_BARS ? 1 : CamS < T_TEXT ? 2 : 3;
+        Tier = TierFor(CamS);
 
         canvas.Save();
         canvas.Translate(vw / 2 - CamX * CamS, vh / 2 - CamY * CamS);

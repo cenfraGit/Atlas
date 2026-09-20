@@ -1270,6 +1270,54 @@ public sealed class Scene : IDisposable
     /// <summary>an arrow being dragged out, in board coordinates.</summary>
     public (SKPoint A, SKPoint B)? ArrowDraft;
 
+    /// <summary>where an arrow's ends actually are.
+    ///
+    /// A loose end is where it was put. A tied end is on the edge of the item
+    /// it is tied to, worked out fresh every frame - which is the whole trick:
+    /// nothing updates a connector when you drag a box, because there is
+    /// nothing stored to update.
+    ///
+    /// The edge is found by aiming at the other end, so an arrow between two
+    /// boxes meets both of them square on rather than reaching into a corner.</summary>
+    public (SKPoint A, SKPoint B) ArrowEnds(BoardItem it)
+    {
+        var from = Bound(it.From);
+        var to = Bound(it.To);
+
+        var a = new SKPoint(it.X, it.Y);
+        var b = new SKPoint(it.X2, it.Y2);
+
+        // each end aims at where the other one is, before either is moved to
+        // an edge, so the pair cannot chase each other round a box
+        if (from is not null) a = EdgeToward(from, to is null ? b : Centre(to));
+        if (to is not null) b = EdgeToward(to, from is null ? a : Centre(from));
+        return (a, b);
+    }
+
+    BoardItem? Bound(string? id)
+    {
+        if (id is null || ActiveBoard is null) return null;
+        foreach (var it in ActiveBoard.Items) if (it.Id == id) return it;
+        return null;   // tied to something that is gone: the end falls loose
+    }
+
+    SKPoint Centre(BoardItem it) => new(it.X + it.W / 2, it.Y + ItemHeight(it) / 2);
+
+    /// <summary>where a ray from an item's centre toward a point leaves its
+    /// box.</summary>
+    SKPoint EdgeToward(BoardItem it, SKPoint target)
+    {
+        float h = ItemHeight(it);
+        float cx = it.X + it.W / 2, cy = it.Y + h / 2;
+        float dx = target.X - cx, dy = target.Y - cy;
+        if (Math.Abs(dx) < 0.01f && Math.Abs(dy) < 0.01f) return new SKPoint(cx, cy);
+
+        float sx = dx == 0 ? float.MaxValue : it.W / 2 / Math.Abs(dx);
+        float sy = dy == 0 ? float.MaxValue : h / 2 / Math.Abs(dy);
+        float s = Math.Min(sx, sy);
+        return new SKPoint(cx + dx * s, cy + dy * s);
+    }
+
     void DrawArrows(SKCanvas canvas, Board board)
     {
         using var line = new SKPaint { IsStroke = true, StrokeWidth = 2.5f, IsAntialias = true };
@@ -1278,8 +1326,7 @@ public sealed class Scene : IDisposable
             if (it.Kind != "arrow") continue;
 
             line.Color = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
-            var p1 = new SKPoint(it.X, it.Y);
-            var p2 = new SKPoint(it.X2, it.Y2);
+            var (p1, p2) = ArrowEnds(it);
             canvas.DrawLine(p1, p2, line);
 
             // a small head, turned to face the direction of travel
@@ -1290,12 +1337,19 @@ public sealed class Scene : IDisposable
             canvas.DrawLine(p2, new SKPoint(
                 p2.X - head * MathF.Cos(ang + 0.4f), p2.Y - head * MathF.Sin(ang + 0.4f)), line);
 
-            // ends are grabbable once the arrow is picked
+            // ends are grabbable once the arrow is picked. A tied end is drawn
+            // hollow: there is no point dragging it, and the ring says which
+            // arrows will follow a box when you move it
             if (!Picked.Contains(it.Id)) continue;
             float sc0 = 1f / CamS;
             using var knob = new SKPaint { Color = new SKColor(0x5f, 0xd3, 0xf3), IsAntialias = true };
-            canvas.DrawCircle(p1, 5 * sc0, knob);
-            canvas.DrawCircle(p2, 5 * sc0, knob);
+            using var ring = new SKPaint
+            {
+                Color = new SKColor(0x5f, 0xd3, 0xf3), IsAntialias = true,
+                IsStroke = true, StrokeWidth = 1.6f * sc0,
+            };
+            canvas.DrawCircle(p1, 5 * sc0, it.From is null ? knob : ring);
+            canvas.DrawCircle(p2, 5 * sc0, it.To is null ? knob : ring);
         }
 
         if (ArrowDraft is { } draft)
@@ -1314,8 +1368,9 @@ public sealed class Scene : IDisposable
         foreach (var it in ActiveBoard.Items)
         {
             if (it.Kind != "arrow" || !Picked.Contains(it.Id)) continue;
-            if (Math.Abs(wx - it.X) < r && Math.Abs(wy - it.Y) < r) return (it, 1);
-            if (Math.Abs(wx - it.X2) < r && Math.Abs(wy - it.Y2) < r) return (it, 2);
+            var (a, b) = ArrowEnds(it);
+            if (Math.Abs(wx - a.X) < r && Math.Abs(wy - a.Y) < r) return (it, 1);
+            if (Math.Abs(wx - b.X) < r && Math.Abs(wy - b.Y) < r) return (it, 2);
         }
         return null;
     }
@@ -1375,6 +1430,42 @@ public sealed class Scene : IDisposable
         return hit;
     }
 
+    /// <summary>everything the eraser is touching, of any kind. A stroke is
+    /// judged by its ink and everything else by its box, which is the same
+    /// rule clicking follows - what looks touched is touched.</summary>
+    public List<BoardItem> ItemsNear(float wx, float wy, float radius)
+    {
+        var hit = new List<BoardItem>();
+        if (ActiveBoard is null) return hit;
+
+        var box = new SKRect(wx - radius, wy - radius, wx + radius, wy + radius);
+        foreach (var it in ActiveBoard.Items)
+        {
+            if (Strokes.Is(it)) { if (Strokes.Touches(it, wx, wy, radius)) hit.Add(it); continue; }
+
+            if (it.Kind == "arrow")
+            {
+                if (NearArrow(it, wx, wy, radius)) hit.Add(it);
+                continue;
+            }
+
+            float h = ItemHeight(it);
+            if (it.X < box.Right && it.X + it.W > box.Left &&
+                it.Y < box.Bottom && it.Y + h > box.Top) hit.Add(it);
+        }
+        return hit;
+    }
+
+    static bool NearArrow(BoardItem it, float wx, float wy, float tol)
+    {
+        float dx = it.X2 - it.X, dy = it.Y2 - it.Y;
+        float len2 = dx * dx + dy * dy;
+        if (len2 < 0.01f) return false;
+        float t = Math.Clamp(((wx - it.X) * dx + (wy - it.Y) * dy) / len2, 0, 1);
+        float px = it.X + dx * t, py = it.Y + dy * t;
+        return (wx - px) * (wx - px) + (wy - py) * (wy - py) <= tol * tol;
+    }
+
     /// <summary>an arrow near the point, for picking one without a box.</summary>
     public BoardItem? ArrowAt(float wx, float wy)
     {
@@ -1383,29 +1474,15 @@ public sealed class Scene : IDisposable
         foreach (var it in ActiveBoard.Items)
         {
             if (it.Kind != "arrow") continue;
-            float dx = it.X2 - it.X, dy = it.Y2 - it.Y;
+            var (a, b) = ArrowEnds(it);
+            float dx = b.X - a.X, dy = b.Y - a.Y;
             float len2 = dx * dx + dy * dy;
             if (len2 < 0.01f) continue;
-            float t = Math.Clamp(((wx - it.X) * dx + (wy - it.Y) * dy) / len2, 0, 1);
-            float px = it.X + dx * t, py = it.Y + dy * t;
+            float t = Math.Clamp(((wx - a.X) * dx + (wy - a.Y) * dy) / len2, 0, 1);
+            float px = a.X + dx * t, py = a.Y + dy * t;
             if (Math.Abs(wx - px) < tol && Math.Abs(wy - py) < tol) return it;
         }
         return null;
-    }
-
-    /// <summary>where a line between two items meets the first one's box.</summary>
-    SKPoint Edge(BoardItem from, BoardItem to)
-    {
-        float fh = ItemHeight(from), th = ItemHeight(to);
-        float cx = from.X + from.W / 2, cy = from.Y + fh / 2;
-        float tx = to.X + to.W / 2, ty = to.Y + th / 2;
-        float dx = tx - cx, dy = ty - cy;
-        if (Math.Abs(dx) < 0.01f && Math.Abs(dy) < 0.01f) return new SKPoint(cx, cy);
-
-        float sx = dx == 0 ? float.MaxValue : from.W / 2 / Math.Abs(dx);
-        float sy = dy == 0 ? float.MaxValue : fh / 2 / Math.Abs(dy);
-        float t = Math.Min(sx, sy);
-        return new SKPoint(cx + dx * t, cy + dy * t);
     }
 
     void DrawPickedItems(SKCanvas canvas, Board board)

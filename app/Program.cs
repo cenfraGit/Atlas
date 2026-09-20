@@ -84,6 +84,9 @@ public sealed class App : Application
             var back = new BackButton();
             view.AttachBack(back);
 
+            var penBar = new PenBar(SceneView.Colours);
+            view.AttachPenBar(penBar);
+
             var islands = new ModeIslands();
             islands.EditChanged += view.SetEditing;
             islands.ZoomChanged += view.SetWheelZoom;
@@ -98,6 +101,7 @@ public sealed class App : Application
             root.Children.Add(notes);
             root.Children.Add(boardBar);
             root.Children.Add(back);
+            root.Children.Add(penBar);
             root.Children.Add(hints);
             root.Children.Add(islands);
             root.Children.Add(commits);
@@ -978,7 +982,48 @@ public sealed class SceneView : Control
     bool _armArrow;
     bool _armBrush, _armEraser, _erasing;
     const float EraserRadius = 14f;
+
+    /// <summary>what the brush draws with. Null is the default ink.</summary>
     public string? PenColor;
+
+    /// <summary>thickness in board units. A ladder rather than a slider: the
+    /// useful widths are few and far apart, and stepping through them is
+    /// faster than aiming at one.</summary>
+    static readonly float[] Weights = [1f, 2f, 3f, 5f, 8f, 13f, 20f];
+    int _weightAt = 2;
+    float PenWeight => Weights[_weightAt];
+
+    void StepWeight(int by)
+    {
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
+        _weightAt = Math.Clamp(_weightAt + by, 0, Weights.Length - 1);
+
+        // a selection makes it mean "make those this thick" as well
+        ApplyToPickedStrokes(it => { it.Weight = PenWeight; Strokes.Reframe(it); });
+        RefreshBoardBar();
+        Toast($"pen {PenWeight:0.#}");
+    }
+
+    void SetPenColour(string hex)
+    {
+        PenColor = hex;
+        ApplyToPickedStrokes(it => it.Color = hex);
+        RefreshBoardBar();
+    }
+
+    /// <summary>apply to every picked stroke, if any, and save. Nothing picked
+    /// means the change is only to the pen.</summary>
+    void ApplyToPickedStrokes(Action<BoardItem> change)
+    {
+        if (_scene.ActiveBoard is not { } board) return;
+        var picked = board.Items.Where(i => Strokes.Is(i) && _scene.Picked.Contains(i.Id)).ToList();
+        if (picked.Count == 0) return;
+
+        Remember();
+        foreach (var it in picked) change(it);
+        _boardDirty = true;
+        InvalidateVisual();
+    }
     BoardItem? _arrowEnd;
     int _arrowEndWhich;
     ContextMenu? _menu;
@@ -1027,11 +1072,23 @@ public sealed class SceneView : Control
         back.Clicked += () => { LeaveBoard(); Focus(); };
     }
 
+    PenBar? _penBar;
+
+    public void AttachPenBar(PenBar bar)
+    {
+        _penBar = bar;
+        bar.ColourPicked += hex => { SetPenColour(hex); Focus(); };
+        bar.WeightStepped += by => { StepWeight(by); Focus(); };
+    }
+
     void RefreshBoardBar()
     {
-        _boardBar?.Reflect(_scene.ActiveBoard is not null && Editing, SnapToGrid,
+        bool editing = _scene.ActiveBoard is not null && Editing;
+        _boardBar?.Reflect(editing, SnapToGrid,
             _armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null);
         _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
+        // the pen's settings earn their room only while you are drawing
+        _penBar?.Reflect(editing && (_armBrush || _armEraser), PenWeight, PenColor);
     }
 
     void AddOfKind(string kind)
@@ -1072,26 +1129,48 @@ public sealed class SceneView : Control
         _armArrow = false;
         _scene.Picked.Clear();
         RefreshBoardBar();
-        Toast(_armEraser ? "eraser on - drag over a stroke, X to stop" : "eraser off");
+        Toast(_armEraser
+            ? $"eraser on - {(_splitErase ? "splits strokes" : "whole strokes")}, shift+X to switch"
+            : "eraser off");
     }
 
-    /// <summary>rub out whole strokes rather than pixels, so what is left is
-    /// still a stroke: it can be picked, moved and undone like anything else.</summary>
+    /// <summary>whole strokes, or a bite out of one. Either way what is left
+    /// is a stroke: it can be picked, moved and undone like anything else.</summary>
+    bool _splitErase;
+
     void EraseAt(float wx, float wy)
     {
         if (_scene.ActiveBoard is not { } board) return;
-        var hit = _scene.StrokesNear(wx, wy, EraserRadius / _scene.CamS);
+        float radius = EraserRadius / _scene.CamS;
+        var hit = _scene.StrokesNear(wx, wy, radius);
         if (hit.Count == 0) return;
 
         // one history entry for the whole rub, not one per stroke
         if (!_erasing) { Remember(); _erasing = true; }
+
         foreach (var it in hit)
         {
+            int at = board.Items.IndexOf(it);
             board.Items.Remove(it);
             _scene.Picked.Remove(it.Id);
+
+            if (!_splitErase) continue;
+
+            // put the surviving pieces back where the stroke was, so erasing
+            // through the middle of something does not bring it to the front
+            var left = Strokes.Erase(it, wx, wy, radius);
+            for (int i = 0; i < left.Count; i++)
+                board.Items.Insert(Math.Min(at + i, board.Items.Count), left[i]);
         }
         _boardDirty = true;
         InvalidateVisual();
+    }
+
+    void ToggleEraseMode()
+    {
+        _splitErase = !_splitErase;
+        RefreshBoardBar();
+        Toast(_splitErase ? "eraser splits strokes" : "eraser takes whole strokes");
     }
 
     /// <summary>an arrow needs two picked items: it joins them and follows
@@ -1587,7 +1666,7 @@ public sealed class SceneView : Control
         Saved($"rectangle on  {board.Name}");
     }
 
-    static readonly (string Name, string Hex)[] Colours =
+    public static readonly (string Name, string Hex)[] Colours =
     [
         ("amber", "#ffd166"), ("cyan", "#5fd3f3"), ("green", "#3fb96a"),
         ("red", "#d95c5c"), ("violet", "#b48ae8"), ("slate", "#8aa0b0"),
@@ -1920,7 +1999,7 @@ public sealed class SceneView : Control
                 _scene.StrokeDraft = new BoardItem
                 {
                     Id = BookmarkStore.NewId(), Kind = "stroke",
-                    Color = PenColor, Weight = Strokes.DefaultWeight,
+                    Color = PenColor, Weight = PenWeight,
                 };
                 Strokes.Add(_scene.StrokeDraft, wx, wy);
                 _drag = true;
@@ -2398,7 +2477,10 @@ public sealed class SceneView : Control
                 case Key.Y when _ctrl: Redo(); return;
                 case Key.Y: AddArrow(); return;
                 case Key.B: ArmBrush(); return;
-
+                case Key.X when e_shift: ToggleEraseMode(); return;
+                case Key.X: ArmEraser(); return;
+                case Key.OemCloseBrackets: StepWeight(1); return;
+                case Key.OemOpenBrackets: StepWeight(-1); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;
             }

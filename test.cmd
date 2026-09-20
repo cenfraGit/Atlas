@@ -1,17 +1,14 @@
 @echo off
-rem runs every self-check against Atlas itself, or against a repo you drag on
+rem runs the unit suite. it is hermetic - it builds its own fixture repos and
+rem its own git history - so it takes no argument and does not depend on what
+rem this repo happens to contain.
 setlocal
-set "REPO=%~1"
-rem no argument: Atlas opens on itself, with the path fully resolved
-if "%REPO%"=="" for %%I in ("%~dp0.") do set "REPO=%%~fI"
 
-cd /d "%~dp0app"
-dotnet build -v q --nologo || (pause & exit /b 1)
+cd /d "%~dp0"
+dotnet test tests\Atlas.Tests\Atlas.Tests.csproj --nologo
+set CODE=%ERRORLEVEL%
 
-for %%T in (flighttest searchtest bookmarktest boardtest annotationtest gittest pickingtest tokentest) do (
-  echo.
-  echo === %%T ===
-  dotnet run --no-build -- --%%T "%REPO%"
-)
 echo.
+if %CODE%==0 (echo ALL TESTS PASSED) else (echo TESTS FAILED)
 pause
+exit /b %CODE%

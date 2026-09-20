@@ -135,6 +135,24 @@ Also `--bench`, `--stress`, `--goto x,y,scale` on the command line.
 
 ## Tests
 
+`test.cmd` runs the suite, or from a shell:
+
+```bash
+dotnet test tests/Atlas.Tests
+```
+
+It is hermetic. Every test builds what it needs - a synthetic repo, a scratch
+directory, or a real git repository with a merged pull request and an unmerged
+branch - so nothing is asserted against whatever this repo happens to contain
+today. That matters most for review mode: the old self-check could only run
+against the repo it was handed, and printed `SKIP` when that repo had no merge
+commits, which is the case for Atlas itself.
+
+Covered: scanning and layout, search ranking, camera flights, symbol and
+context anchoring, board storage, bookmark anchoring and framing, undo,
+file-reference resolution across renames, image storage and pruning,
+concurrent tokenising, and review mode end to end.
+
 An end-to-end test starts the app and drives it with real keystrokes, saving
 a screenshot of each step:
 
@@ -142,23 +160,14 @@ a screenshot of each step:
 powershell -STA -File uitest.ps1
 ```
 
-It checks what a headless test cannot see: that ctrl+V really writes an image
-into `.atlas/images`, and that leaving a board really sweeps one that undo
-threw away. The clipboard paste was broken and every self-check still passed.
+It checks the two things a headless test still cannot see: a real window, and
+the real Windows clipboard. The clipboard paste was once broken while every
+self-check passed.
 
-Self-checks. `test.cmd` runs all of them against this repo; from a shell each
-one takes the repo to run against:
-
-```bash
-dotnet run -- --flighttest
-dotnet run -- --annotationtest
-dotnet run -- --bookmarktest ".."
-dotnet run -- --boardtest ".."
-dotnet run -- --gittest ".."
-dotnet run -- --pickingtest ".."
-dotnet run -- --searchtest ".."
-dotnet run -- --tokentest ".."
-```
+The older in-process self-checks are still there
+(`dotnet run -- --gittest ".."` and friends) but they print their result
+rather than returning it, so a failure does not fail a script. The suite above
+covers the same ground.
 
 ## How it stays smooth
 

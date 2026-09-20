@@ -20,15 +20,8 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        if (args.Contains("--tokentest")) { TokenTest.Run(args); return; }
-        if (args.Contains("--flighttest")) { FlightTest.Run(); return; }
-        if (args.Contains("--searchtest")) { SearchTest.Run(args); return; }
-        if (args.Contains("--bookmarktest")) { BookmarkTest.Run(args); return; }
-        if (args.Contains("--boardtest")) { BoardTest.Run(args); return; }
-        if (args.Contains("--annotationtest")) { AnnotationTest.Run(); return; }
-        if (args.Contains("--gittest")) { GitTest.Run(args); return; }
+        // tests live in tests/Atlas.Tests and run with `dotnet test`
         if (args.Contains("--samples")) { Samples.Run(args); return; }
-        if (args.Contains("--pickingtest")) { PickingTest.Run(args); return; }
         AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
     }
 }

@@ -32,6 +32,11 @@ at once. Tick an item off in the same commit that lands it, and delete ticked
 items once a few have built up. Add to this list whenever a message raises
 something that is not being done immediately.
 
+**Nothing on disk needs preserving.** There are no real Atlas projects yet, so
+`.atlas/` and `data/scan.json` can change shape freely - rename a field,
+delete the files, regenerate them. Do not add compatibility shims for formats
+nobody has.
+
 ### Boards as a diagramming surface
 
 The big one. Boards are currently "a place to arrange code"; they should also
@@ -57,8 +62,18 @@ change freely.
       outlined shapes are one box with a different path traced round it; a
       label is words with no panel behind them, which is what makes it a
       heading rather than a note.
-- [ ] Connectors that attach to elements and follow them when dragged. Bigger
-      than free arrows; second pass.
+- [x] Connectors. `BoardItem.From`/`To` tie an arrow's ends to items; a tied
+      end has no stored position, so dragging a box needs no update anywhere.
+- [ ] Fill and border for the outlined shapes: border colour, fill colour, and
+      a transparent fill. **A transparent shape must keep its hitbox** - it
+      stays clickable and draggable through the middle, which is not what
+      "transparent" does by default in most editors and is what makes one
+      usable as a frame round other things.
+- [ ] Drag to place a shape, the way an arrow already works: arming the tool
+      should do nothing until you drag out the box. Today pressing the tool
+      drops a shape in the middle of the view. The tool button stays lit until
+      the shape is drawn, so the mode is visible, and `Esc` cancels it. Applies
+      to every element, existing and future.
 - [ ] Replay strokes from an `SKPicture` once boards hold hundreds of them.
       Boards redraw every item every frame, which is fine at tens and not at
       thousands; the map already solved this.
@@ -81,6 +96,25 @@ change freely.
       bug.**
 - [ ] The same treatment for the secondary-click menu, which Avalonia owns and
       which is not in the stack.
+
+### Annotations
+
+Notes and annotations are different things. A **note** is a board item: it
+sits on one board and belongs to it. An **annotation** is attached to code -
+to a symbol plus a context fingerprint, never to a line number - so it stays
+on the right line when something is inserted above it, survives a rename via
+the fingerprint, and reports drift or orphanhood when it cannot. That much is
+covered by `AnchorTests` and works.
+
+- [ ] Give an annotation a scope: global or local. Today every annotation is
+      global by construction - it belongs to the file, so it appears on the
+      map and on every board showing that file. Sometimes that is right and
+      sometimes a note is about what *this board* is explaining, and wants to
+      stay here. Wants a `scope` on `Annotation`, plus the board's id when it
+      is local, and filtering wherever annotations are drawn.
+- [ ] Set the scope when the annotation is made, and change it afterwards.
+- [ ] Make annotations selectable, and multi-selectable, so several can be
+      switched between global and local at once.
 
 ### Review mode
 

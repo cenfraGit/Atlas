@@ -113,12 +113,20 @@ the thickness and a row of swatches sets the colour, both of which appear
 only while you are drawing. With something picked they recolour and rethicken
 that instead, which is what a selection makes them mean anyway.
 
-`X` is an eraser, and it rubs out strokes rather than pixels, so what is left
-is still a stroke: it can be picked, moved and undone like anything else.
-`shift+X` switches it between taking a whole stroke and biting a hole in one.
-Whole strokes is the right default - it cannot surprise you - but a long line
-drawn in one gesture is a single stroke, and taking the lot because you
-touched the end of it is not erasing, it is undo.
+`X` is an eraser, and pressing it again walks its modes: whole elements, then
+splitting strokes, then off. Whole elements takes anything it passes over.
+Splitting bites a hole in a stroke and leaves the pieces as strokes in their
+own right - which matters because a long line drawn in one gesture is a
+single stroke, and taking the lot because you touched the end of it is not
+erasing, it is undo. Splitting only ever touches ink.
+
+`[` and `]` size whatever is in your hand, the pen or the eraser.
+
+**Join things up.** An arrow dropped on a box ties to it, either end, and a
+tied end follows the box when you drag or resize it. A ring instead of a dot
+marks a tied end. Drag the end somewhere else to re-tie it, or onto empty
+canvas to let it loose. Two picked items can be joined straight from the
+menu.
 
 **Annotate code.** Notes about code are written on boards, where the
 surrounding code gives them their meaning. On a board, secondary click a line

@@ -87,6 +87,9 @@ public sealed class App : Application
             var penBar = new PenBar(SceneView.Colours);
             view.AttachPenBar(penBar);
 
+            var eraserBar = new EraserBar();
+            view.AttachEraserBar(eraserBar);
+
             var islands = new ModeIslands();
             islands.EditChanged += view.SetEditing;
             islands.ZoomChanged += view.SetWheelZoom;
@@ -102,6 +105,7 @@ public sealed class App : Application
             root.Children.Add(boardBar);
             root.Children.Add(back);
             root.Children.Add(penBar);
+            root.Children.Add(eraserBar);
             root.Children.Add(hints);
             root.Children.Add(islands);
             root.Children.Add(commits);
@@ -295,7 +299,9 @@ public sealed class SceneView : Control
         DrawHud(context);
 
         // only the benchmark free-runs; otherwise input and pending work drive redraws
-        if (_phase >= 0 || _flight is not null || _glide.Running || (_autoBench && !_benchDone))
+        // a toast has to expire off-frame, so keep drawing while one is up
+        if (_phase >= 0 || _flight is not null || _glide.Running || ToastShowing ||
+            (_autoBench && !_benchDone))
             Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Background);
         else
             _lastFrame = -1;   // next frame starts a new gesture, not a huge dt
@@ -607,7 +613,7 @@ public sealed class SceneView : Control
         if (picked.Count == 1 && picked[0].Kind == "file")
             items.Add(ContextActions.Item("Change line range...", () => EditRange(picked[0])));
         if (picked.Count == 2)
-            items.Add(ContextActions.Item("Arrow between these", AddArrow));
+            items.Add(ContextActions.Item("Connect these", () => Connect(picked[0], picked[1])));
 
         // only what applies to everything picked
         if (picked.Count > 0 && picked.All(i => i.Kind is "note" or "shape" or "arrow"))
@@ -788,13 +794,25 @@ public sealed class SceneView : Control
     /// invisible saving reads as no saving at all.</summary>
     void Saved(string what) => Toast($"saved: {what}");
 
+    string _toast = "";
+    double _toastUntil;
+    const double ToastSeconds = 2.6;
+
+    /// <summary>say something for a moment.
+    ///
+    /// This used to write straight into _caption, which is what names the
+    /// board you are on - so every passing message permanently replaced it,
+    /// and a run of them read as the bottom of the screen going haywire. A
+    /// toast is transient and a caption is not, so they are two things.</summary>
     void Toast(string message)
     {
-        _caption = message;
+        _toast = message;
+        _toastUntil = _clock.Elapsed.TotalSeconds + ToastSeconds;
         InvalidateVisual();
     }
 
-    /// <summary>ease the band out instead of snapping it away.</summary>
+    bool ToastShowing => _clock.Elapsed.TotalSeconds < _toastUntil;
+
     /// <summary>snap the picked items as a group, keeping their spacing.</summary>
     void SnapPicked()
     {
@@ -855,8 +873,11 @@ public sealed class SceneView : Control
     /// <summary>the tour narration, centred near the bottom.</summary>
     void DrawCaption(DrawingContext ctx)
     {
-        if (_caption.Length == 0) return;
-        var ft = new FormattedText(_caption, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        // a toast covers the caption while it lasts, then the caption is back
+        var text = ToastShowing ? _toast : _caption;
+        if (text.Length == 0) return;
+
+        var ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface(Ui.Mono), 17, new SolidColorBrush(Color.FromRgb(0xff, 0xd1, 0x66)));
         double x = (Bounds.Width - ft.Width) / 2;
         double y = Bounds.Height - 78;
@@ -993,7 +1014,6 @@ public sealed class SceneView : Control
     bool _secondary;
     bool _armArrow;
     bool _armBrush, _armEraser, _erasing;
-    const float EraserRadius = 14f;
 
     /// <summary>what the brush draws with. Null is the default ink.</summary>
     public string? PenColor;
@@ -1085,6 +1105,21 @@ public sealed class SceneView : Control
     }
 
     PenBar? _penBar;
+    EraserBar? _eraserBar;
+
+    public void AttachEraserBar(EraserBar bar)
+    {
+        _eraserBar = bar;
+        bar.SizeStepped += by => { StepEraser(by); Focus(); };
+        bar.ModePicked += split => { SetEraseMode(split); Focus(); };
+    }
+
+    /// <summary>[ and ] mean "smaller" and "bigger" for whatever is in hand.</summary>
+    void StepTool(int by)
+    {
+        if (_armEraser) StepEraser(by);
+        else StepWeight(by);
+    }
 
     public void AttachPenBar(PenBar bar)
     {
@@ -1099,8 +1134,9 @@ public sealed class SceneView : Control
         _boardBar?.Reflect(editing, SnapToGrid,
             _armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null);
         _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
-        // the pen's settings earn their room only while you are drawing
-        _penBar?.Reflect(editing && (_armBrush || _armEraser), PenWeight, PenColor);
+        // each tool shows its own settings, and only while it is armed
+        _penBar?.Reflect(editing && _armBrush, PenWeight, PenColor);
+        _eraserBar?.Reflect(editing && _armEraser, EraserRadius, _splitErase);
     }
 
     void AddOfKind(string kind)
@@ -1135,32 +1171,72 @@ public sealed class SceneView : Control
         Toast(_armBrush ? "brush on - drag to draw, B to stop" : "brush off");
     }
 
+    /// <summary>X cycles: off, whole elements, splitting strokes, off.
+    ///
+    /// A separate key for the mode was a key nobody would find, and its only
+    /// feedback was a message. Walking the modes with the same key you turned
+    /// it on with means the tool teaches itself, and the panel says which one
+    /// you are in.</summary>
     void ArmEraser()
     {
         if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
         if (!Editing) SetEditing(true);
         _armBrush = false;
-        _armEraser = !_armEraser;
         _armArrow = false;
+
+        if (!_armEraser) { _armEraser = true; _splitErase = false; }
+        else if (!_splitErase) _splitErase = true;
+        else { _armEraser = false; _splitErase = false; }
+
         _scene.Picked.Clear();
         RefreshBoardBar();
+        ApplyCursor();
         Toast(_armEraser
-            ? $"eraser on - {(_splitErase ? "splits strokes" : "whole strokes")}, shift+X to switch"
+            ? _splitErase ? "eraser splits strokes" : "eraser takes whole elements"
             : "eraser off");
     }
 
-    /// <summary>whole strokes, or a bite out of one. Either way what is left
-    /// is a stroke: it can be picked, moved and undone like anything else.</summary>
+    void SetEraseMode(bool split)
+    {
+        if (!_armEraser) ArmEraser();
+        _splitErase = split;
+        RefreshBoardBar();
+        Toast(split ? "eraser splits strokes" : "eraser takes whole elements");
+    }
+
+    /// <summary>how wide the rub is, in screen pixels.</summary>
+    static readonly float[] EraserSizes = [6f, 10f, 14f, 22f, 34f, 52f];
+    int _eraserAt = 2;
+    float EraserRadius => EraserSizes[_eraserAt];
+
+    void StepEraser(int by)
+    {
+        _eraserAt = Math.Clamp(_eraserAt + by, 0, EraserSizes.Length - 1);
+        RefreshBoardBar();
+        Toast($"eraser {EraserRadius:0}");
+    }
+
+    /// <summary>true when the eraser takes a bite out of a stroke rather than
+    /// a whole element.</summary>
     bool _splitErase;
 
+    /// <summary>rub something out.
+    ///
+    /// Whole elements is the blunt one: anything the eraser passes over goes,
+    /// note or shape or window or stroke. Splitting is for ink only - taking
+    /// a bite out of a note is not a thing a note can survive - so in that
+    /// mode nothing but strokes is touched.</summary>
     void EraseAt(float wx, float wy)
     {
         if (_scene.ActiveBoard is not { } board) return;
         float radius = EraserRadius / _scene.CamS;
-        var hit = _scene.StrokesNear(wx, wy, radius);
+
+        var hit = _splitErase
+            ? _scene.StrokesNear(wx, wy, radius)
+            : _scene.ItemsNear(wx, wy, radius);
         if (hit.Count == 0) return;
 
-        // one history entry for the whole rub, not one per stroke
+        // one history entry for the whole rub, not one per element
         if (!_erasing) { Remember(); _erasing = true; }
 
         foreach (var it in hit)
@@ -1181,23 +1257,40 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
-    void ToggleEraseMode()
-    {
-        _splitErase = !_splitErase;
-        RefreshBoardBar();
-        Toast(_splitErase ? "eraser splits strokes" : "eraser takes whole strokes");
-    }
 
     /// <summary>an arrow needs two picked items: it joins them and follows
     /// them when either is moved.</summary>
     /// <summary>arms the arrow tool: the next drag draws one.</summary>
     void AddArrow()
     {
-        if (_scene.ActiveBoard is null) return;
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
         if (!Editing) SetEditing(true);
+        _armBrush = _armEraser = false;
         _armArrow = true;
         _scene.Picked.Clear();
-        Toast("drag to draw the arrow");
+        RefreshBoardBar();
+        ApplyCursor();
+        Toast("drag to draw the arrow - over a box, it ties to it");
+    }
+
+    /// <summary>tie two picked items together. The same connector a drag from
+    /// one to the other makes, for when they are already both picked.</summary>
+    void Connect(BoardItem from, BoardItem to)
+    {
+        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly) return;
+        if (ReferenceEquals(from, to)) return;
+
+        Remember();
+        board.Items.Add(new BoardItem
+        {
+            Id = BookmarkStore.NewId(), Kind = "arrow",
+            From = from.Id, To = to.Id, Color = PenColor,
+            // a fallback for if either is ever cut
+            X = from.X + from.W / 2, Y = from.Y,
+            X2 = to.X + to.W / 2, Y2 = to.Y,
+        });
+        _boardStore?.Save(board);
+        Saved("connector");
     }
 
     public void AttachHints(HintBar bar)
@@ -2181,13 +2274,24 @@ public sealed class SceneView : Control
                 (Math.Abs(made.B.X - made.A.X) > 4 || Math.Abs(made.B.Y - made.A.Y) > 4))
             {
                 Remember();
+
+                // an end dropped on something ties to it. Drawing a connector
+                // and attaching a connector should not be two gestures, and
+                // there is nothing else a line ending on a box could mean
+                var from = _scene.ItemAt(made.A.X, made.A.Y);
+                var to = _scene.ItemAt(made.B.X, made.B.Y);
+                if (from is not null && ReferenceEquals(from, to)) to = null;   // not to itself
+
                 b.Items.Add(new BoardItem
                 {
                     Id = BookmarkStore.NewId(), Kind = "arrow",
                     X = made.A.X, Y = made.A.Y, X2 = made.B.X, Y2 = made.B.Y,
+                    From = from?.Id, To = to?.Id,
                 });
                 _boardStore?.Save(b);
-                Saved("arrow");
+                Saved(from is null && to is null ? "arrow"
+                    : from is not null && to is not null ? "connector"
+                    : "arrow, one end tied");
             }
             _drag = false;
             e.Pointer.Capture(null);
@@ -2307,8 +2411,22 @@ public sealed class SceneView : Control
         if (_arrowEnd is not null)
         {
             var (ex, ey) = WorldAt(p);
-            if (_arrowEndWhich == 1) { _arrowEnd.X = ex; _arrowEnd.Y = ey; }
-            else { _arrowEnd.X2 = ex; _arrowEnd.Y2 = ey; }
+
+            // dragging an end re-ties it to whatever it is over, and unties it
+            // over empty canvas - the same rule that made it in the first place
+            var over = _scene.ItemAt(ex, ey);
+            if (ReferenceEquals(over, _arrowEnd)) over = null;
+
+            if (_arrowEndWhich == 1)
+            {
+                _arrowEnd.X = ex; _arrowEnd.Y = ey;
+                _arrowEnd.From = over?.Id == _arrowEnd.To ? null : over?.Id;
+            }
+            else
+            {
+                _arrowEnd.X2 = ex; _arrowEnd.Y2 = ey;
+                _arrowEnd.To = over?.Id == _arrowEnd.From ? null : over?.Id;
+            }
             _boardDirty = true;
             _last = p;
             InvalidateVisual();
@@ -2537,10 +2655,10 @@ public sealed class SceneView : Control
                 case Key.Y when _ctrl: Redo(); return;
                 case Key.Y: AddArrow(); return;
                 case Key.B: ArmBrush(); return;
-                case Key.X when e_shift: ToggleEraseMode(); return;
                 case Key.X: ArmEraser(); return;
-                case Key.OemCloseBrackets: StepWeight(1); return;
-                case Key.OemOpenBrackets: StepWeight(-1); return;
+                // one pair of keys, whichever tool is armed
+                case Key.OemCloseBrackets: StepTool(1); return;
+                case Key.OemOpenBrackets: StepTool(-1); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;
             }

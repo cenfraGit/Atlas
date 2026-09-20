@@ -96,12 +96,11 @@ change freely.
       extension and by NUL sniff, and the noisy directories are behind the `.`
       toggle. `.git` and `.atlas` stay hidden at any setting.
 - [x] A count of what was skipped, reported rather than swallowed.
-- [ ] **Respect `.gitignore`.** The real answer to "what is noise": a repo
-      already declares it. The hardcoded `Noise` list in `Scanner` is a
-      stand-in that gets `node_modules` and `bin` right and knows nothing
-      about anything else - Atlas's own `data/scan.json` is gitignored and
-      still lands on the map. Wants the pattern syntax, nested
-      `.gitignore` files, and negations.
+- [x] Respect `.gitignore`, asked of libgit2 (`GitIgnore.cs`) rather than
+      reimplemented, so nested ignore files, negations and
+      tracked-beats-pattern come along with it. The hardcoded `Noise` list
+      stays as a fallback for repos that never got round to ignoring their
+      build output, and for folders that are not repos at all.
 
 ### Samples and fixtures
 

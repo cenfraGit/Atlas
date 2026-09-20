@@ -71,10 +71,18 @@ public static class Scanner
         var opts = options ?? ScanOptions.Default;
         var parts = relPath.Split('/');
 
+        // ask about each directory on the way down, the way the walk does, so
+        // a rule like `build/` prunes a whole branch rather than being tested
+        // against every leaf under it
+        int at = 0;
         for (int i = 0; i < parts.Length - 1; i++)
+        {
             if (!WantedDir(parts[i], opts)) return false;
+            at += parts[i].Length + 1;
+            if (opts.IsIgnored(relPath[..at])) return false;
+        }
 
-        return WantedFile(parts[^1], opts);
+        return WantedFile(parts[^1], opts) && !opts.IsIgnored(relPath);
     }
 
     static bool WantedDir(string name, ScanOptions opts)
@@ -180,7 +188,7 @@ public static class Scanner
         root = Path.GetFullPath(root);
         var files = new List<FileRec>();
         int skipped = 0;
-        Walk(new DirectoryInfo(root), root, files, opts, ref skipped);
+        Walk(new DirectoryInfo(root), root, "", files, opts, ref skipped);
         files.Sort((a, b) => string.CompareOrdinal(a.P, b.P));
 
         var districts = Layout(files);
@@ -203,7 +211,11 @@ public static class Scanner
 
     const long TooBig = 2_000_000;
 
-    static void Walk(DirectoryInfo dir, string root, List<FileRec> into, ScanOptions opts, ref int skipped)
+    /// <summary>prefix is the repo-relative path of dir, with a trailing
+    /// slash, so .gitignore can be asked about a whole directory before its
+    /// contents are read at all.</summary>
+    static void Walk(DirectoryInfo dir, string root, string prefix,
+        List<FileRec> into, ScanOptions opts, ref int skipped)
     {
         FileSystemInfo[] entries;
         try { entries = dir.GetFileSystemInfos(); }
@@ -213,7 +225,10 @@ public static class Scanner
         {
             if (e is DirectoryInfo sub)
             {
-                if (WantedDir(sub.Name, opts)) Walk(sub, root, into, opts, ref skipped);
+                if (!WantedDir(sub.Name, opts)) continue;
+                var here = prefix + sub.Name + "/";
+                if (opts.IsIgnored(here)) continue;
+                Walk(sub, root, here, into, opts, ref skipped);
                 continue;
             }
 
@@ -221,6 +236,7 @@ public static class Scanner
             // Wanted() filters a commit's tree by the same rule; the two have
             // to agree on everything decided by the name
             if (!WantedFile(file.Name, opts)) continue;
+            if (opts.IsIgnored(prefix + file.Name)) continue;
             if (file.Length > TooBig) { skipped++; continue; }
 
             var lines = ReadText(file.FullName);

@@ -142,7 +142,11 @@ public sealed class App : Application
         if (repo is not null)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var fresh = Scanner.Build(repo);
+            using var ignore = GitIgnore.For(repo);
+            var fresh = Scanner.Build(repo, new ScanOptions
+            {
+                Ignored = ignore is null ? null : ignore.Ignored,
+            });
             Scanner.Save(fresh, cache);
             Console.WriteLine($"scanned {fresh.Files.Count} files, {fresh.Districts.Count} districts " +
                               $"in {sw.ElapsedMilliseconds}ms -> {cache}");
@@ -428,7 +432,9 @@ public sealed class SceneView : Control
         var opts = _scanOptions;
         Task.Run(() =>
         {
-            var fresh = Scanner.Build(root, opts);
+            // the repo handle is not thread safe, so it belongs to this scan
+            using var ignore = GitIgnore.For(root);
+            var fresh = Scanner.Build(root, opts with { Ignored = ignore is null ? null : ignore.Ignored });
             Dispatcher.UIThread.Post(() =>
             {
                 _scene.ShowScan(fresh);

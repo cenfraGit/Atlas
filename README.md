@@ -36,11 +36,19 @@ list anticipated. Anything over 2MB. And `.git` and `.atlas`, at any setting,
 because reading your own notes about a repo as cards in that repo is a hall
 of mirrors.
 
-Hidden but a keypress away: build output and dependencies (`node_modules`,
-`bin`, `obj`, `target`, ...), other dot directories, secrets (`.env`, `*.pem`,
-`id_rsa`) and OS litter. **`.`** toggles them and rescans - `node_modules` is
-not a few extra cards, it is most of the map, so the layout is rebuilt around
-whatever is now on it.
+Hidden but a keypress away: **whatever the repo's own `.gitignore` says is
+not its source**, which is the only answer that is right about a repo nobody
+anticipated. Nested ignore files and negations come along with it, because
+the question is put to libgit2 rather than reimplemented. A file that is
+already tracked is never hidden, whatever the patterns say - that is what
+lets a repo commit its `.atlas/` folder.
+
+Hidden too: build output and dependencies (`node_modules`, `bin`, `obj`,
+`target`, ...) for repos that never got round to ignoring them, other dot
+directories, secrets (`.env`, `*.pem`, `id_rsa`) and OS litter.
+
+**`.`** shows the lot and rescans - `node_modules` is not a few extra cards,
+it is most of the map, so the layout is rebuilt around whatever is now on it.
 
 Whatever is skipped is counted and said out loud. A map that quietly omits
 part of a repo is worse than one that shows something ugly.

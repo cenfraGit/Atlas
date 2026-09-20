@@ -51,6 +51,15 @@ public sealed class Scan
 /// <summary>what the scanner counts as part of the repo.</summary>
 public sealed record ScanOptions(bool ShowHidden = false)
 {
+    /// <summary>true when the repo's own .gitignore says a path is not part
+    /// of its source. Null when there is no repo to ask, which is a normal
+    /// way to use Atlas. Bypassed entirely by ShowHidden - "show me
+    /// everything" has to mean everything.</summary>
+    public Func<string, bool>? Ignored { get; init; }
+
+    public bool IsIgnored(string relPath) =>
+        !ShowHidden && Ignored is not null && Ignored(relPath);
+
     public static readonly ScanOptions Default = new();
 }
 

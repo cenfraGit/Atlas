@@ -186,7 +186,7 @@ public sealed class SceneView : Control
         Focusable = true;
         ClipToBounds = true;
         DoubleTapped += OnDoubleTapped;
-
+        ApplyCursor();
     }
 
     protected override void OnSizeChanged(SizeChangedEventArgs e)
@@ -684,12 +684,17 @@ public sealed class SceneView : Control
 
     /// <summary>the plain arrow means you are looking; the move cursor means
     /// you can grab things here, which is what edit mode is.</summary>
+    /// <summary>outside edit mode the canvas is something you take hold of, so
+    /// it gets the open hand, and the closed one while you are holding it.
+    /// Holding space to pan while editing means the same thing and looks the
+    /// same way.</summary>
     void ApplyCursor()
     {
-        Cursor = new Cursor(
-            _spaceDown || (_drag && !Editing) ? StandardCursorType.SizeAll
-            : Editing ? StandardCursorType.DragMove
-            : StandardCursorType.Arrow);
+        bool panning = _spaceDown || !Editing;
+
+        Cursor = _armBrush || _armEraser ? new Cursor(StandardCursorType.Cross)
+            : panning ? (_drag ? Cursors.Closed : Cursors.Open)
+            : new Cursor(StandardCursorType.DragMove);
     }
 
     void Select(int fileIndex, int from, int to)

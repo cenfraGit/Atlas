@@ -1,0 +1,66 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Media;
+
+namespace Atlas;
+
+/// <summary>what you can drop on a board, along the top while editing.</summary>
+public sealed class BoardBar : Border
+{
+    readonly StackPanel _row;
+    readonly Button _snap;
+
+    public event Action<string>? Add;
+    public event Action? ToggleSnap;
+
+    public BoardBar()
+    {
+        IsVisible = false;
+        Background = Ui.PanelBg;
+        BorderBrush = Ui.Edge;
+        BorderThickness = new Thickness(1);
+        Padding = new Thickness(6, 4);
+        HorizontalAlignment = HorizontalAlignment.Center;
+        VerticalAlignment = VerticalAlignment.Top;
+        Margin = new Thickness(0, 10, 0, 0);
+
+        _row = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var (label, kind) in new[]
+                 {
+                     ("board note  N", "note"), ("rectangle  T", "shape"),
+                     ("arrow  Y", "arrow"), ("file  A", "file"),
+                 })
+        {
+            var b = Make(label);
+            b.Click += (_, _) => Add?.Invoke(kind);
+            _row.Children.Add(b);
+        }
+
+        _snap = Make("snap  G");
+        _snap.Click += (_, _) => ToggleSnap?.Invoke();
+        _row.Children.Add(_snap);
+
+        Child = _row;
+    }
+
+    static Button Make(string text) => new()
+    {
+        Content = text,
+        FontFamily = Ui.Mono,
+        FontSize = 11,
+        Padding = new Thickness(10, 4),
+        Margin = new Thickness(2, 0),
+        Background = Brushes.Transparent,
+        Foreground = Ui.Dim,
+        BorderThickness = new Thickness(0),
+        Cursor = new Cursor(StandardCursorType.Hand),
+    };
+
+    public void Reflect(bool editing, bool snap)
+    {
+        IsVisible = editing;
+        _snap.Foreground = snap ? Ui.Accent : Ui.Dim;
+    }
+}

@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/app/">
+    <Project Path="app/Atlas.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,27 @@
+# build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+TestResults/
+*.user
+*.suo
+
+# the layout cache: records the absolute path of the folder it scanned, so it
+# is machine specific and must never be committed. Atlas notices a cache from
+# another machine and rescans rather than drawing it.
+/data/
+
+# ide
+.vs/
+.idea/
+.vscode/
+
+# os
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# uitest screenshots, if someone points -OutDir at the repo
+atlas_uitest/

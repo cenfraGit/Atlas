@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
@@ -49,6 +50,8 @@ public sealed class App : Application
             var search = new SearchOverlay(scene);
             search.Chosen += view.OnFileChosen;
             view.OpenSearch = search.Open;
+            view.SearchOpen = () => search.IsVisible;
+            view.CloseSearch = search.Close;
 
             var store = BookmarkStore.Load(scene.Data.Root);
             var prompt = new PromptOverlay();
@@ -78,6 +81,9 @@ public sealed class App : Application
             var boardBar = new BoardBar();
             view.AttachBoardBar(boardBar);
 
+            var back = new BackButton();
+            view.AttachBack(back);
+
             var islands = new ModeIslands();
             islands.EditChanged += view.SetEditing;
             islands.ZoomChanged += view.SetWheelZoom;
@@ -91,12 +97,16 @@ public sealed class App : Application
             root.Children.Add(boards);
             root.Children.Add(notes);
             root.Children.Add(boardBar);
+            root.Children.Add(back);
             root.Children.Add(hints);
             root.Children.Add(islands);
             root.Children.Add(commits);
             root.Children.Add(reviews);
             root.Children.Add(prompt);
-            desktop.MainWindow = new Window
+
+            view.BuildLayers();
+
+            var window = new Window
             {
                 Title = "Atlas",
                 Width = 1400,
@@ -104,6 +114,17 @@ public sealed class App : Application
                 Background = Brushes.Black,
                 Content = root,
             };
+
+            // tunnel, so the window sees Escape on the way *down* to whatever
+            // holds focus. A dialog that owns the key can only handle it while
+            // it owns focus, and that is exactly how dialogs got stranded
+            window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                if (e.Key != Key.Escape) return;
+                if (view.Escape()) e.Handled = true;
+            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+            desktop.MainWindow = window;
         }
         base.OnFrameworkInitializationCompleted();
     }
@@ -387,6 +408,58 @@ public sealed class SceneView : Control
 
     /// <summary>one menu at a time: clicking repeatedly used to stack them.</summary>
     /// <summary>a prompt must never outlive the thing it was asking about.</summary>
+    public readonly Layers Layers = new();
+
+    /// <summary>build the Escape order once every overlay is attached.
+    /// Innermost first: a prompt sits over a panel, a panel over the canvas,
+    /// and an armed tool is the last thing standing.</summary>
+    public void BuildLayers()
+    {
+        Layers.Add("prompt", () => _prompt is { IsVisible: true }, () => { _prompt!.Close(); Focus(); });
+        Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
+        Layers.Add("boards", () => _boards is { IsVisible: true }, () => _boards!.Close());
+        Layers.Add("bookmarks", () => _marks is { IsVisible: true }, () => _marks!.Close());
+        Layers.Add("annotations", () => _notes is { IsVisible: true }, () => _notes!.Close());
+        Layers.Add("reviews", () => _reviews is { IsVisible: true }, () => _reviews!.Close());
+        Layers.Add("tour", () => _tour is not null, EndTour);
+        Layers.Add("tool", () => _armBrush || _armEraser || _armArrow, DisarmTools);
+        Layers.Add("selection", HasSelection, ClearSelection);
+        Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
+    }
+
+    public Func<bool>? SearchOpen;
+    public Action? CloseSearch;
+
+    bool HasSelection() =>
+        _scene.Picked.Count > 0 || _scene.PickedFiles.Count > 0 || _scene.Selection is not null;
+
+    void ClearSelection()
+    {
+        _scene.Picked.Clear();
+        _scene.PickedFiles.Clear();
+        _scene.Selection = null;
+        InvalidateVisual();
+    }
+
+    void DisarmTools()
+    {
+        _armBrush = _armEraser = _armArrow = false;
+        _scene.StrokeDraft = null;
+        _scene.ArrowDraft = null;
+        RefreshBoardBar();
+        ApplyCursor();
+        InvalidateVisual();
+    }
+
+    /// <summary>close one thing. The window calls this before the key reaches
+    /// whatever has focus, so nothing can hold Escape hostage.</summary>
+    public bool Escape()
+    {
+        bool closed = Layers.Dismiss() is not null;
+        if (closed) InvalidateVisual();
+        return closed;
+    }
+
     void DismissPrompt() => _prompt?.Close();
 
     void OpenMenu(List<MenuItem> items)
@@ -901,9 +974,20 @@ public sealed class SceneView : Control
         };
     }
 
-    void RefreshBoardBar() =>
+    BackButton? _back;
+
+    public void AttachBack(BackButton back)
+    {
+        _back = back;
+        back.Clicked += () => { LeaveBoard(); Focus(); };
+    }
+
+    void RefreshBoardBar()
+    {
         _boardBar?.Reflect(_scene.ActiveBoard is not null && Editing, SnapToGrid,
             _armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null);
+        _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
+    }
 
     void AddOfKind(string kind)
     {
@@ -2208,22 +2292,19 @@ public sealed class SceneView : Control
             return;
         }
         _ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        _alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         HandleKey(e.Key, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
     }
 
-    bool _ctrl;
+    bool _ctrl, _alt;
 
     public void HandleKey(Key key) => HandleKey(key, false);
 
     public void HandleKey(Key key, bool e_shift)
     {
-        if (key == Key.Escape && _prompt is { IsVisible: true })
-        {
-            _prompt.Close();
-            Focus();
-            InvalidateVisual();
-            return;
-        }
+        // Escape belongs to the window, which has already peeled a layer off
+        // by the time the key gets here. Nothing below may claim it
+        if (key == Key.Escape) return;
 
         // panels have no focus of their own; the canvas drives them
         if (_marks is { IsVisible: true } && _marks.HandleKey(key)) { InvalidateVisual(); return; }
@@ -2237,7 +2318,6 @@ public sealed class SceneView : Control
             {
                 case Key.OemCloseBrackets: StepCommit(1); return;
                 case Key.OemOpenBrackets: StepCommit(-1); return;
-                case Key.Escape: LeaveReview(); return;
             }
         }
 
@@ -2246,7 +2326,7 @@ public sealed class SceneView : Control
             // a generated board reads and navigates; it does not author
             switch (key)
             {
-                case Key.Escape or Key.Back or Key.C: LeaveBoard(); return;
+                case Key.C: LeaveBoard(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.OemCloseBrackets: StepCommit(1); RebuildChangeBoard(); return;
                 case Key.OemOpenBrackets: StepCommit(-1); RebuildChangeBoard(); return;
@@ -2258,7 +2338,8 @@ public sealed class SceneView : Control
         {
             switch (key)
             {
-                case Key.Escape or Key.Back: LeaveBoard(); return;
+                case Key.Back or Key.Delete: DeletePicked(); return;
+                case Key.Left when _alt: LeaveBoard(); return;
                 case Key.N: AddNote(); return;
                 case Key.T: AddShape(); return;
                 case Key.G:
@@ -2271,8 +2352,7 @@ public sealed class SceneView : Control
                 case Key.Y when _ctrl: Redo(); return;
                 case Key.Y: AddArrow(); return;
                 case Key.B: ArmBrush(); return;
-                case Key.X: ArmEraser(); return;
-                case Key.Delete: DeletePicked(); return;
+
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;
             }
@@ -2302,7 +2382,6 @@ public sealed class SceneView : Control
             case Key.B: _marks?.Open(); break;
             case Key.Space or Key.Right when _tour is not null: Step(1); break;
             case Key.Left when _tour is not null: Step(-1); break;
-            case Key.Escape: EndTour(); break;
             case Key.OemQuestion:
                 OpenSearch?.Invoke();
                 break;

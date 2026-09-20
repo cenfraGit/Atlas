@@ -1398,6 +1398,55 @@ public sealed class Scene : IDisposable
         CamY = Data.World.H / 2;
     }
 
+    /// <summary>everything there is to look at, in world coordinates: the
+    /// scanned world on the map, whatever is on the board otherwise. An empty
+    /// board still gets an area, so a board you have not drawn on yet has
+    /// somewhere to be.</summary>
+    public SKRect ContentBounds()
+    {
+        var board = ActiveBoard;
+        if (board is null)
+            return new SKRect(0, 0, Math.Max(1, Data.World.W), Math.Max(1, Data.World.H));
+
+        if (board.Items.Count == 0) return new SKRect(-EmptyBoard, -EmptyBoard, EmptyBoard, EmptyBoard);
+
+        return new SKRect(
+            board.Items.Min(i => Math.Min(i.X, i.Kind == "arrow" ? i.X2 : i.X)),
+            board.Items.Min(i => Math.Min(i.Y, i.Kind == "arrow" ? i.Y2 : i.Y)),
+            board.Items.Max(i => Math.Max(i.X + i.W, i.Kind == "arrow" ? i.X2 : i.X)),
+            board.Items.Max(i => Math.Max(i.Y + ItemHeight(i), i.Kind == "arrow" ? i.Y2 : i.Y)));
+    }
+
+    const float EmptyBoard = 1200;
+
+    /// <summary>keep the camera near what there is to see. Without this the
+    /// canvas pans into empty space forever and the only way back is F.
+    ///
+    /// The slack is a screen either side, so you can still pull content off
+    /// centre to work beside it - you just cannot lose it.</summary>
+    public void ClampCamera(float vw, float vh)
+    {
+        var b = ContentBounds();
+        float slackX = vw / CamS, slackY = vh / CamS;
+
+        float x0 = b.Left - slackX, x1 = b.Right + slackX;
+        float y0 = b.Top - slackY, y1 = b.Bottom + slackY;
+
+        // when the content is smaller than the slack the range can invert;
+        // centring on it is the only sensible answer
+        CamX = x1 < x0 ? (b.Left + b.Right) / 2 : Math.Clamp(CamX, x0, x1);
+        CamY = y1 < y0 ? (b.Top + b.Bottom) / 2 : Math.Clamp(CamY, y0, y1);
+    }
+
+    /// <summary>the smallest zoom that still shows everything, less a little,
+    /// so you cannot zoom out until the content is a speck.</summary>
+    public float MinZoomFor(float vw, float vh)
+    {
+        var b = ContentBounds();
+        float fit = Math.Min(vw / Math.Max(1, b.Width), vh / Math.Max(1, b.Height));
+        return Math.Clamp(fit * 0.35f, 0.006f, 1f);
+    }
+
     public void Stress()
     {
         var baseFiles = Data.Files;

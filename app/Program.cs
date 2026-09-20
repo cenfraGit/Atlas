@@ -1885,6 +1885,7 @@ public sealed class SceneView : Control
         {
             _scene.CamX -= (float)(p.X - _last.X) / _scene.CamS;
             _scene.CamY -= (float)(p.Y - _last.Y) / _scene.CamS;
+            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
         }
         _last = p;
         InvalidateVisual();
@@ -1899,6 +1900,7 @@ public sealed class SceneView : Control
         if (Math.Abs(e.Delta.X) > 0.01)
         {
             _scene.CamX -= (float)e.Delta.X * (float)Bounds.Width * 0.12f / _scene.CamS;
+            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
             InvalidateVisual();
             return;
         }
@@ -1912,6 +1914,7 @@ public sealed class SceneView : Control
             float down = (float)Bounds.Height * 0.12f / _scene.CamS;
             if (sideways) _scene.CamX -= (float)e.Delta.Y * across;
             else _scene.CamY -= (float)e.Delta.Y * down;
+            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
             InvalidateVisual();
             return;
         }
@@ -1920,9 +1923,11 @@ public sealed class SceneView : Control
         // keep the world point under the cursor pinned while zooming
         float wx = _scene.CamX + ((float)p.X - vw / 2) / _scene.CamS;
         float wy = _scene.CamY + ((float)p.Y - vh / 2) / _scene.CamS;
-        _scene.CamS = Math.Clamp(_scene.CamS * MathF.Exp((float)e.Delta.Y * 0.18f), 0.006f, 40f);
+        _scene.CamS = Math.Clamp(_scene.CamS * MathF.Exp((float)e.Delta.Y * 0.18f),
+            _scene.MinZoomFor(vw, vh), 40f);
         _scene.CamX = wx - ((float)p.X - vw / 2) / _scene.CamS;
         _scene.CamY = wy - ((float)p.Y - vh / 2) / _scene.CamS;
+        _scene.ClampCamera(vw, vh);
         InvalidateVisual();
     }
 

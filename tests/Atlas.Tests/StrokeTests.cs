@@ -277,6 +277,142 @@ public class StrokeTests
         // resizing would have to scale every point; the grip would lie
         Assert.False(Scene.Resizable(new BoardItem { Kind = "stroke" }));
 
+    // --- the splitting eraser --------------------------------------------
+
+    /// <summary>a horizontal line of points one unit apart.</summary>
+    static BoardItem Line(int points = 21)
+    {
+        var it = new BoardItem { Id = "s1", Kind = "stroke", Weight = 1 };
+        for (int i = 0; i < points; i++) Strokes.Add(it, i * 10, 0, minStep: 0);
+        return it;
+    }
+
+    [Fact]
+    public void ABiteOutOfTheMiddleLeavesTwoStrokes()
+    {
+        var pieces = Strokes.Erase(Line(), x: 100, y: 0, radius: 15);
+
+        Assert.Equal(2, pieces.Count);
+        Assert.All(pieces, p => Assert.Equal("stroke", p.Kind));
+    }
+
+    [Fact]
+    public void TheTwoHalvesAreOnEitherSideOfTheHole()
+    {
+        var pieces = Strokes.Erase(Line(), x: 100, y: 0, radius: 15);
+
+        var left = pieces[0];
+        var right = pieces[1];
+
+        Assert.True(left.X + left.W < 100, "the left piece should end before the hole");
+        Assert.True(right.X > 100, "the right piece should start after the hole");
+    }
+
+    [Fact]
+    public void RubbingAnEndOffLeavesOneStroke()
+    {
+        var pieces = Strokes.Erase(Line(), x: 0, y: 0, radius: 25);
+
+        var only = Assert.Single(pieces);
+        Assert.True(only.X > 0, "the rubbed end should be gone");
+    }
+
+    [Fact]
+    public void RubbingTheWholeThingLeavesNothing()
+    {
+        Assert.Empty(Strokes.Erase(Line(points: 3), x: 10, y: 0, radius: 500));
+    }
+
+    [Fact]
+    public void RubbingNowhereNearLeavesItWhole()
+    {
+        var only = Assert.Single(Strokes.Erase(Line(), x: 0, y: 900, radius: 10));
+
+        Assert.Equal(21, Strokes.CountOf(only));
+    }
+
+    [Fact]
+    public void ALoneSurvivingPointIsDroppedRatherThanLeftAsLitter()
+    {
+        // a dot left behind where a line used to be is not a stroke
+        var pieces = Strokes.Erase(Line(points: 3), x: 10, y: 0, radius: 5);
+
+        Assert.All(pieces, p => Assert.True(Strokes.CountOf(p) >= 2));
+    }
+
+    [Fact]
+    public void ThePiecesKeepTheStrokesLook()
+    {
+        var it = Line();
+        it.Color = "#d95c5c";
+        it.Weight = 7;
+        Strokes.Reframe(it);
+
+        foreach (var piece in Strokes.Erase(it, 100, 0, 15))
+        {
+            Assert.Equal("#d95c5c", piece.Color);
+            Assert.Equal(7, piece.Weight);
+        }
+    }
+
+    [Fact]
+    public void EachPieceGetsItsOwnId()
+    {
+        var pieces = Strokes.Erase(Line(), 100, 0, 15);
+
+        Assert.Equal(2, pieces.Select(p => p.Id).Distinct().Count());
+        Assert.DoesNotContain(pieces, p => p.Id == "s1");
+    }
+
+    [Fact]
+    public void EachPieceIsFramedAroundItsOwnInk()
+    {
+        foreach (var piece in Strokes.Erase(Line(), 100, 0, 15))
+            for (int i = 0; i < Strokes.CountOf(piece); i++)
+            {
+                var p = Strokes.PointAt(piece, i);
+                Assert.InRange(p.X, piece.X, piece.X + piece.W);
+                Assert.InRange(p.Y, piece.Y, piece.Y + piece.H);
+            }
+    }
+
+    [Fact]
+    public void AFatterStrokeIsRubbedWiderJustAsItIsHitWider()
+    {
+        var thin = Line();
+        var fat = Line();
+        fat.Weight = 30;
+        Strokes.Reframe(fat);
+
+        // same rub, same place: the fat one loses more of itself
+        int thinLeft = Strokes.Erase(thin, 100, 0, 5).Sum(Strokes.CountOf);
+        int fatLeft = Strokes.Erase(fat, 100, 0, 5).Sum(Strokes.CountOf);
+
+        Assert.True(fatLeft < thinLeft, $"fat kept {fatLeft}, thin kept {thinLeft}");
+    }
+
+    [Fact]
+    public void ErasingAnEmptyStrokeIsHarmless() =>
+        Assert.Empty(Strokes.Erase(new BoardItem { Kind = "stroke" }, 0, 0, 10));
+
+    [Fact]
+    public void RepeatedRubsFragmentButNeverResurrect()
+    {
+        var it = Line(41);
+        var pieces = new List<BoardItem> { it };
+
+        for (int at = 50; at < 350; at += 100)
+            pieces = pieces.SelectMany(p => Strokes.Erase(p, at, 0, 12)).ToList();
+
+        Assert.True(pieces.Count > 1, "rubbing in several places should fragment it");
+        Assert.All(pieces, p => Assert.True(Strokes.CountOf(p) >= 2));
+        // nothing survives inside a hole
+        foreach (var p in pieces)
+            for (int i = 0; i < Strokes.CountOf(p); i++)
+                Assert.DoesNotContain(new[] { 50, 150, 250 },
+                    hole => Math.Abs(Strokes.PointAt(p, i).X - hole) < 6);
+    }
+
     // --- persistence and undo --------------------------------------------
 
     [Fact]

@@ -46,15 +46,11 @@ change freely.
 - [x] Stroke hit-testing: point-to-polyline distance, bounds as the cheap
       rejection first.
 - [x] Eraser (`X`), stroke-erase rather than pixel-erase.
-- [ ] Pen colour and weight from the toolbar. `PenColor` and
-      `BoardItem.Weight` exist and are honoured; nothing sets them yet. Weight
-      wants `[` and `]` on a board as well as a picker, since it is the thing
-      you change most while drawing.
-- [ ] Eraser modes: whole-stroke (what it does now) and a split mode that
-      takes a bite out of a stroke and leaves the two halves as separate
-      strokes. Brush strokes only - it must not touch notes or windows.
-      `Strokes.Points` makes the split easy; the work is the mode switch and
-      not fragmenting into hundreds of two-point strokes.
+- [x] Pen colour and weight (`PenBar.cs`), shown only while drawing. `[` and
+      `]` step a ladder of widths; swatches set the colour. With a selection
+      they change that too, which is what a selection makes them mean anyway.
+- [x] Eraser modes (`shift+X`): a whole stroke, or a bite out of one leaving
+      the surviving pieces as strokes in their own right.
 - [ ] Resizing a stroke. `Scene.Resizable` excludes strokes today because the
       grip would have to scale every point.
 - [ ] Shape primitives beyond rectangle and arrow: ellipse, diamond,

@@ -131,6 +131,62 @@ public static class Strokes
         return MathF.Sqrt((x - px) * (x - px) + (y - py) * (y - py));
     }
 
+    /// <summary>rub a hole in a stroke and hand back what is left.
+    ///
+    /// The whole-stroke eraser is the right default - it is what you want
+    /// nine times out of ten and it cannot surprise you - but a long line
+    /// drawn in one gesture is a single stroke, and taking the lot because
+    /// you touched the end of it is not erasing, it is undo.
+    ///
+    /// Returns the surviving pieces, each a stroke in its own right: none
+    /// when the rub covered everything, one when it took an end off, two when
+    /// it bit out the middle. A piece of a single point is dropped, because a
+    /// dot left behind where a line used to be is litter.</summary>
+    public static List<BoardItem> Erase(BoardItem it, float x, float y, float radius)
+    {
+        var pieces = new List<BoardItem>();
+        int n = CountOf(it);
+        if (n == 0) return pieces;
+
+        float reach = radius + Math.Max(it.Weight, DefaultWeight) / 2;
+        var run = new List<float>();
+
+        for (int i = 0; i < n; i++)
+        {
+            var p = PointAt(it, i);
+            bool rubbed = (x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y) <= reach * reach;
+
+            if (rubbed)
+            {
+                Flush(it, run, pieces);
+                continue;
+            }
+            run.Add(p.X);
+            run.Add(p.Y);
+        }
+        Flush(it, run, pieces);
+        return pieces;
+    }
+
+    static void Flush(BoardItem from, List<float> run, List<BoardItem> into)
+    {
+        // two points is the shortest thing that is still a line
+        if (run.Count >= 4)
+        {
+            var piece = new BoardItem
+            {
+                Id = BookmarkStore.NewId(),
+                Kind = "stroke",
+                Color = from.Color,
+                Weight = from.Weight,
+                Points = [.. run],
+            };
+            Reframe(piece);
+            into.Add(piece);
+        }
+        run.Clear();
+    }
+
     /// <summary>true when a point is near enough to count as touching. The
     /// pen's own width counts: a fat stroke is easier to hit, as it looks.</summary>
     public static bool Touches(BoardItem it, float x, float y, float tolerance)

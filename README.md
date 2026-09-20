@@ -107,9 +107,17 @@ leaving is.
 
 **Draw on it.** `B` is a freehand brush and stays on until you press it
 again, because you draw several strokes in a row and reaching for the key
-between each one is what makes a drawing tool unusable. `X` is an eraser: it
-rubs out whole strokes rather than pixels, so what is left is still a stroke
-and can be picked, moved and undone like anything else on the board.
+between each one is what makes a drawing tool unusable. `[` and `]` change
+the thickness and a row of swatches sets the colour, both of which appear
+only while you are drawing. With something picked they recolour and rethicken
+that instead, which is what a selection makes them mean anyway.
+
+`X` is an eraser, and it rubs out strokes rather than pixels, so what is left
+is still a stroke: it can be picked, moved and undone like anything else.
+`shift+X` switches it between taking a whole stroke and biting a hole in one.
+Whole strokes is the right default - it cannot surprise you - but a long line
+drawn in one gesture is a single stroke, and taking the lot because you
+touched the end of it is not erasing, it is undo.
 
 **Annotate code.** Notes about code are written on boards, where the
 surrounding code gives them their meaning. On a board, secondary click a line
@@ -153,7 +161,9 @@ your team gets everything you wrote.
 | `<` or alt+left | back to the map from a board |
 | Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |
-| `X` | eraser on a board; rubs out whole strokes |
+| `X` | eraser on a board |
+| `shift+X` | eraser takes a whole stroke, or bites a hole in one |
+| `[` `]` (board) | pen thickness |
 | `G` (board) | snap to grid on or off |
 | Delete (board) | remove what is picked |
 | `T` | rectangle on a board |

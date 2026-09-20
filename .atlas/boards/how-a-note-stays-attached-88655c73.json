@@ -1,0 +1,86 @@
+{
+  "id": "sample-2",
+  "name": "How a note stays attached",
+  "items": [
+    {
+      "id": "7b19b228",
+      "kind": "file",
+      "file": "app/Annotations.cs",
+      "line": 106,
+      "endLine": 140,
+      "x": 0,
+      "y": 0,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "18b91123",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "A note records the symbol it was written on, plus the lines around it.",
+      "x": 900,
+      "y": 0,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "c6859252",
+      "kind": "file",
+      "file": "app/Symbols.cs",
+      "line": 19,
+      "endLine": 53,
+      "x": 0,
+      "y": 345.25,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "1e629eef",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "Symbols come from Roslyn, parsing only: no build, no project references.",
+      "x": 900,
+      "y": 345.25,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "66d6a173",
+      "kind": "file",
+      "file": "app/FileKeys.cs",
+      "line": 8,
+      "endLine": 39,
+      "x": 0,
+      "y": 690.5,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "13659b19",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "And the file itself is fingerprinted, so a rename does not orphan anything.",
+      "x": 900,
+      "y": 690.5,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    }
+  ],
+  "group": "",
+  "order": 0
+}

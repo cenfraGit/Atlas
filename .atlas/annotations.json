@@ -1,0 +1,59 @@
+{
+  "annotations": [
+    {
+      "id": "sample-5e74c6",
+      "text": "The renderer. It holds the camera, decides the level of detail from the zoom, and replays one recorded picture per file instead of redrawing the geometry.",
+      "file": "app/Scene.cs",
+      "key": "8E58AE577EFA",
+      "symbol": "Atlas.Scene",
+      "offset": 0,
+      "span": 9,
+      "line": 44,
+      "context": "571C33A8666A"
+    },
+    {
+      "id": "sample-83c883",
+      "text": "Reads the repo once and lays every file out by directory. Nothing here knows about drawing: it produces positions and line classifications, and that is all.",
+      "file": "app/Scanner.cs",
+      "key": "330A4DB55F30",
+      "symbol": "Atlas.Scanner",
+      "offset": 0,
+      "span": 9,
+      "line": 7,
+      "context": "3DE9C8205745"
+    },
+    {
+      "id": "sample-9043a5",
+      "text": "A note is anchored to a symbol plus the lines around it, never to a line number. This is what survives the file being edited underneath it.",
+      "file": "app/Annotations.cs",
+      "key": "4BADB4F9F588",
+      "symbol": "Atlas.Anchors",
+      "offset": 0,
+      "span": 9,
+      "line": 106,
+      "context": "030371EC3CE4"
+    },
+    {
+      "id": "sample-040542",
+      "text": "Boards are one JSON file each so two people editing different boards never conflict.",
+      "file": "app/Boards.cs",
+      "key": "436A2D4CBA8B",
+      "symbol": "Atlas.BoardStore",
+      "offset": 0,
+      "span": 9,
+      "line": 55,
+      "context": "4E081B176981"
+    },
+    {
+      "id": "sample-69eeaf",
+      "text": "Images are re-encoded on the way in. A pasted screenshot is megabytes of raw clipboard data, and it would sit in git forever at that size.",
+      "file": "app/Images.cs",
+      "key": "2D88C74D1232",
+      "symbol": "Atlas.ImageStore",
+      "offset": 0,
+      "span": 9,
+      "line": 8,
+      "context": "EB188FD24AE5"
+    }
+  ]
+}

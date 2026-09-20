@@ -1,0 +1,86 @@
+{
+  "id": "sample-1",
+  "name": "How a frame is drawn",
+  "items": [
+    {
+      "id": "fcb1fbee",
+      "kind": "file",
+      "file": "app/Scanner.cs",
+      "line": 7,
+      "endLine": 41,
+      "x": 0,
+      "y": 0,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "0d0128fb",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "First the repo is read and laid out. Once only, cached to data/scan.json.",
+      "x": 900,
+      "y": 0,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "a856c845",
+      "kind": "file",
+      "file": "app/Scene.cs",
+      "line": 44,
+      "endLine": 78,
+      "x": 0,
+      "y": 345.25,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "a4c5c4b0",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "Then the camera decides the tier, and each tier draws a different thing.",
+      "x": 900,
+      "y": 345.25,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "5f056466",
+      "kind": "file",
+      "file": "app/Highlighter.cs",
+      "line": 14,
+      "endLine": 48,
+      "x": 0,
+      "y": 690.5,
+      "w": 620,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    },
+    {
+      "id": "e935db7d",
+      "kind": "note",
+      "line": 0,
+      "endLine": -1,
+      "text": "Syntax colours come from TextMate grammars, built once per file.",
+      "x": 900,
+      "y": 690.5,
+      "w": 380,
+      "h": 0,
+      "x2": 0,
+      "y2": 0
+    }
+  ],
+  "group": "",
+  "order": 0
+}

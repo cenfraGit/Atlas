@@ -654,8 +654,9 @@ public sealed class SceneView : Control
         if (picked.Count == 0) return;
 
         float ax = picked[0].X, ay = picked[0].Y;
-        float dx = MathF.Round(ax / GridStep) * GridStep - ax;
-        float dy = MathF.Round(ay / GridStep) * GridStep - ay;
+        float step = _scene.SnapStep(GridStep);
+        float dx = MathF.Round(ax / step) * step - ax;
+        float dy = MathF.Round(ay / step) * step - ay;
         if (dx == 0 && dy == 0) return;
 
         foreach (var it in picked)
@@ -1872,8 +1873,9 @@ public sealed class SceneView : Control
                 raw = (raw.X + mx, raw.Y + my);
                 _unsnapped[it.Id] = raw;
 
-                float nx = SnapToGrid ? MathF.Round(raw.X / GridStep) * GridStep : raw.X;
-                float ny = SnapToGrid ? MathF.Round(raw.Y / GridStep) * GridStep : raw.Y;
+                float cell = _scene.SnapStep(GridStep);
+                float nx = SnapToGrid ? MathF.Round(raw.X / cell) * cell : raw.X;
+                float ny = SnapToGrid ? MathF.Round(raw.Y / cell) * cell : raw.Y;
                 float dx = nx - it.X, dy = ny - it.Y;
                 it.X = nx;
                 it.Y = ny;

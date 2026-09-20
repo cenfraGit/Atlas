@@ -963,20 +963,54 @@ public sealed class Scene : IDisposable
     public static SKColor ParseColor(string? hex, SKColor fallback) =>
         hex is not null && SKColor.TryParse(hex, out var c) ? c : fallback;
 
+    /// <summary>the grid cell to draw at this zoom. A single fixed cell either
+    /// turns to mush when you zoom out or leaves nothing to align to when you
+    /// zoom in, so the cell steps through a 1-2-5 ladder - the same one a
+    /// ruler uses - to keep it near a readable size on screen.</summary>
+    static readonly float[] GridLadder =
+        [0.0625f, 0.125f, 0.25f, 0.5f, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
+
+    public static float GridStepFor(float cell, float camS, float minPx = 14f)
+    {
+        if (cell <= 0 || camS <= 0) return 0;
+        foreach (var m in GridLadder)
+            if (cell * m * camS >= minPx) return cell * m;
+        return cell * GridLadder[^1];
+    }
+
+    /// <summary>the cell things snap to: whatever the grid is actually showing,
+    /// so what you snap to is what you can see.</summary>
+    public float SnapStep(float fallback) =>
+        Grid > 0 ? GridStepFor(Grid, CamS) : fallback;
+
     void DrawGrid(SKCanvas canvas, float x0, float y0, float x1, float y1)
     {
         if (Grid <= 0) return;
-        // fade the grid out as it gets dense rather than turning to mush
-        float onScreen = Grid * CamS;
-        if (onScreen < 5) return;
-        byte alpha = (byte)Math.Clamp((onScreen - 5) * 6, 0, 40);
 
-        using var dot = new SKPaint { Color = new SKColor(0x7f, 0xd8, 0xf0, alpha), IsAntialias = false };
-        float step = Grid;
-        for (float x = MathF.Floor(x0 / step) * step; x < x1; x += step)
-            canvas.DrawRect(x, y0, 1f / CamS, y1 - y0, dot);
-        for (float y = MathF.Floor(y0 / step) * step; y < y1; y += step)
-            canvas.DrawRect(x0, y, x1 - x0, 1f / CamS, dot);
+        float minor = GridStepFor(Grid, CamS);
+        if (minor <= 0) return;
+        float major = minor * 5;
+
+        // the minor grid fades in as it earns its place; the major one stays
+        // legible so there is always something to read the scale against
+        byte minorAlpha = (byte)Math.Clamp((minor * CamS - 6) * 5, 0, 30);
+
+        float hair = 1f / CamS;
+        using var fine = new SKPaint { Color = new SKColor(0x7f, 0xd8, 0xf0, minorAlpha), IsAntialias = false };
+        using var coarse = new SKPaint { Color = new SKColor(0x7f, 0xd8, 0xf0, 54), IsAntialias = false };
+
+        if (minorAlpha > 0)
+        {
+            for (float x = MathF.Floor(x0 / minor) * minor; x < x1; x += minor)
+                canvas.DrawRect(x, y0, hair, y1 - y0, fine);
+            for (float y = MathF.Floor(y0 / minor) * minor; y < y1; y += minor)
+                canvas.DrawRect(x0, y, x1 - x0, hair, fine);
+        }
+
+        for (float x = MathF.Floor(x0 / major) * major; x < x1; x += major)
+            canvas.DrawRect(x, y0, hair, y1 - y0, coarse);
+        for (float y = MathF.Floor(y0 / major) * major; y < y1; y += major)
+            canvas.DrawRect(x0, y, x1 - x0, hair, coarse);
     }
 
     void DrawBoard(SKCanvas canvas, float vw, float vh)

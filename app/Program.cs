@@ -1321,7 +1321,10 @@ public sealed class SceneView : Control
         SaveBoardIfDirty();
         PruneImages();
         _scene.ActiveBoard = null;
-        _scene.Grid = 0;
+        // the map has a grid too, so hand it back rather than clearing it:
+        // leaving a board while editing used to land on a map with no grid
+        // until E was pressed twice
+        _scene.Grid = Editing ? GridStep : 0;
         _scene.Picked.Clear();
         RefreshBoardBar();
         RefreshHints();

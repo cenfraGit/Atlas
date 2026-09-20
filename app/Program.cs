@@ -162,6 +162,8 @@ public sealed class SceneView : Control
 
     Flight? _flight;
     double _flightT0;
+    readonly Glide _glide = new();
+    double _lastFrame = -1;
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
     // bench: (zoom, world-units of pan per frame, frame count)
@@ -217,12 +219,23 @@ public sealed class SceneView : Control
         if (w < 2 || h < 2) return;
         context.FillRectangle(_bg, new Rect(0, 0, w, h));
 
+        double now = _clock.Elapsed.TotalSeconds;
+        // a long gap means the canvas was idle, not that one frame took a
+        // second; easing across it would fling the camera
+        float dt = _lastFrame < 0 ? 0 : (float)Math.Min(now - _lastFrame, 0.05);
+        _lastFrame = now;
+
         if (_flight is not null)
         {
             if (!_flight.Sample(_clock.Elapsed.TotalMilliseconds - _flightT0,
                                 out var fx, out var fy, out var fs))
                 _flight = null;
+                _glide.Stop();
             _scene.CamX = fx; _scene.CamY = fy; _scene.CamS = fs;
+        }
+        else
+        {
+            _glide.Step(_scene, dt);
         }
 
         if (_autoBench && _phase < 0 && !_benchDone && ++_warmFrames > 30) { _phase = 0; _phaseFrame = 0; }
@@ -242,8 +255,10 @@ public sealed class SceneView : Control
         DrawHud(context);
 
         // only the benchmark free-runs; otherwise input and pending work drive redraws
-        if (_phase >= 0 || _flight is not null || (_autoBench && !_benchDone))
+        if (_phase >= 0 || _flight is not null || _glide.Running || (_autoBench && !_benchDone))
             Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Background);
+        else
+            _lastFrame = -1;   // next frame starts a new gesture, not a huge dt
     }
 
     void DrawHud(DrawingContext ctx)
@@ -1212,6 +1227,7 @@ public sealed class SceneView : Control
     void OpenBoard(Board b)
     {
         _flight = null;
+        _glide.Stop();
         _boards?.Close();
         if (_scene.ActiveBoard is null) _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.ActiveBoard = b;
@@ -1244,6 +1260,7 @@ public sealed class SceneView : Control
         }
 
         _flight = null;
+        _glide.Stop();
         _boards?.Close();
         _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.ActiveBoard = board;
@@ -1733,6 +1750,7 @@ public sealed class SceneView : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         _flight = null;
+        _glide.Stop();
 
         // the OS already swaps buttons for left handed mice, so "right" here
         // simply means whichever button the user treats as secondary. it pans,
@@ -2096,17 +2114,43 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    /// <summary>where the camera is heading: the glide's target while one is
+    /// running, else where it already is. Aiming from here rather than from
+    /// the live camera is what lets a flurry of wheel notches add up instead
+    /// of each one restarting from a camera that has not caught up.</summary>
+    (float X, float Y, float S) Aim() =>
+        _glide.Running ? (_glide.X, _glide.Y, _glide.S) : (_scene.CamX, _scene.CamY, _scene.CamS);
+
+    void GlideTo(float x, float y, float s)
+    {
+        float camX = _scene.CamX, camY = _scene.CamY, camS = _scene.CamS;
+        // the clamp works on the camera, so aim it at the target, read the
+        // result back and put the camera where it was
+        _scene.CamX = x; _scene.CamY = y; _scene.CamS = s;
+        _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
+        _glide.To(_scene.CamX, _scene.CamY, _scene.CamS);
+        _scene.CamX = camX; _scene.CamY = camY; _scene.CamS = camS;
+        InvalidateVisual();
+    }
+
+    void GlideBy(float dx, float dy)
+    {
+        var a = Aim();
+        GlideTo(a.X + dx, a.Y + dy, a.S);
+    }
+
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
+        // the flight goes, but not the glide: this notch aims from where the
+        // last one was already heading, which is what makes a fast wheel add
+        // up instead of stalling
         _flight = null;
         var p = e.GetPosition(this);
 
         // a tilt wheel or a trackpad swipe reads sideways in either mode
         if (Math.Abs(e.Delta.X) > 0.01)
         {
-            _scene.CamX -= (float)e.Delta.X * (float)Bounds.Width * 0.12f / _scene.CamS;
-            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
-            InvalidateVisual();
+            GlideBy(-(float)e.Delta.X * (float)Bounds.Width * 0.12f / Aim().S, 0);
             return;
         }
 
@@ -2115,25 +2159,26 @@ public sealed class SceneView : Control
         bool sideways = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         if ((!WheelZoom || sideways) && !e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            float across = (float)Bounds.Width * 0.12f / _scene.CamS;
-            float down = (float)Bounds.Height * 0.12f / _scene.CamS;
-            if (sideways) _scene.CamX -= (float)e.Delta.Y * across;
-            else _scene.CamY -= (float)e.Delta.Y * down;
-            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
-            InvalidateVisual();
+            var aim = Aim();
+            float across = (float)Bounds.Width * 0.12f / aim.S;
+            float down = (float)Bounds.Height * 0.12f / aim.S;
+            if (sideways) GlideBy(-(float)e.Delta.Y * across, 0);
+            else GlideBy(0, -(float)e.Delta.Y * down);
             return;
         }
 
         float vw = (float)Bounds.Width, vh = (float)Bounds.Height;
-        // keep the world point under the cursor pinned while zooming
-        float wx = _scene.CamX + ((float)p.X - vw / 2) / _scene.CamS;
-        float wy = _scene.CamY + ((float)p.Y - vh / 2) / _scene.CamS;
-        _scene.CamS = Math.Clamp(_scene.CamS * MathF.Exp((float)e.Delta.Y * 0.18f),
+        var from = Aim();
+
+        // keep the world point under the cursor pinned while zooming. The pin
+        // is on where the wheel is taking us, not on where the camera has got
+        // to, so a second notch mid-glide zooms toward the same place
+        float wx = from.X + ((float)p.X - vw / 2) / from.S;
+        float wy = from.Y + ((float)p.Y - vh / 2) / from.S;
+        float s = Math.Clamp(from.S * MathF.Exp((float)e.Delta.Y * 0.18f),
             _scene.MinZoomFor(vw, vh), 40f);
-        _scene.CamX = wx - ((float)p.X - vw / 2) / _scene.CamS;
-        _scene.CamY = wy - ((float)p.Y - vh / 2) / _scene.CamS;
-        _scene.ClampCamera(vw, vh);
-        InvalidateVisual();
+
+        GlideTo(wx - ((float)p.X - vw / 2) / s, wy - ((float)p.Y - vh / 2) / s, s);
     }
 
     protected override void OnKeyUp(KeyEventArgs e)

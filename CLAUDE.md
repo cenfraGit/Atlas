@@ -60,9 +60,13 @@ change freely.
 
 ### Canvas and interaction
 
-- [ ] Smooth scrolling. Wheel and pan movement should ease rather than step.
-- [ ] Cursors outside edit mode: open hand by default, closed "grabbing" hand
-      while dragging. These should be the defaults in pan and scroll modes.
+- [x] Smooth scrolling (`Glide.cs`). The wheel moves a target and the camera
+      eases toward it. A drag stays one to one - easing something the hand is
+      already holding reads as lag.
+- [x] Cursors outside edit mode: open and closed hands (`Cursors.cs`). CSS
+      calls them grab and grabbing; Avalonia has neither, so they are drawn.
+- [ ] Kinetic flick: a fast drag released should carry on and slow down.
+      `Glide` is the mechanism; only the wheel uses it so far.
 
 ### Review mode
 

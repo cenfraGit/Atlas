@@ -35,6 +35,16 @@ public sealed class BoardItem
     [JsonPropertyName("x2")] public float X2 { get; set; }
     [JsonPropertyName("y2")] public float Y2 { get; set; }
 
+    /// <summary>ids of the items an arrow is tied to, either end. Null means
+    /// that end is loose and X/Y (or X2/Y2) is where it is.
+    ///
+    /// A tied end has no stored position worth trusting: it is wherever the
+    /// edge of that item is now. The coordinates are still kept up to date as
+    /// a fallback, so cutting the item an arrow was tied to leaves the arrow
+    /// where it was rather than collapsing it to the origin.</summary>
+    [JsonPropertyName("from")] public string? From { get; set; }
+    [JsonPropertyName("to")] public string? To { get; set; }
+
     /// <summary>a freehand stroke, as x,y,x,y... in board coordinates. Flat
     /// rather than a list of points because it is the one thing on a board
     /// there can be thousands of, and a pair of floats per point costs three

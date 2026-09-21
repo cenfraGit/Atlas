@@ -123,20 +123,23 @@ public class ChangeBoardTests
     }
 
     [Fact]
-    public void AWindowIsBuiltForEachHunk()
+    public void OneWindowPerFileHoweverManyHunksItHas()
     {
         using var repo = SampleRepo.Build();
         using var scene = new Scene(Scanner.Build(repo.Path));
 
         var board = ChangeBoard.Build(SetOf(Change(SampleRepo.LongFile, [10, 200])), scene, "a commit");
 
-        Assert.Equal(2, board.Items.Count);
-        Assert.All(board.Items, i => Assert.Equal("file", i.Kind));
-        Assert.All(board.Items, i => Assert.Equal(SampleRepo.LongFile, i.File));
+        var item = Assert.Single(board.Items);
+        Assert.Equal("file", item.Kind);
+        Assert.Equal(SampleRepo.LongFile, item.File);
     }
 
+    /// <summary>a window used to be cut to the hunk plus three lines, which
+    /// is what a diff shows and throws away the one thing this view has that
+    /// a diff does not: the rest of the file the change landed in.</summary>
     [Fact]
-    public void AWindowShowsOnlyItsHunk()
+    public void AWindowShowsTheWholeFile()
     {
         using var repo = SampleRepo.Build();
         using var scene = new Scene(Scanner.Build(repo.Path));
@@ -144,9 +147,40 @@ public class ChangeBoardTests
         var item = Assert.Single(ChangeBoard.Build(
             SetOf(Change(SampleRepo.LongFile, [100])), scene, "a commit").Items);
 
-        Assert.InRange(item.Line, 90, 100);
-        Assert.InRange(item.EndLine, 100, 110);
-        Assert.True(item.EndLine - item.Line < 30, "the window should be the hunk, not the file");
+        Assert.Equal(0, item.Line);
+        Assert.Equal(SampleRepo.LongFileLines - 1, item.EndLine);
+    }
+
+    /// <summary>and the view opens looking at the change rather than at line
+    /// one, which with whole files is a long way from it.</summary>
+    [Fact]
+    public void TheViewKnowsWhereTheFirstChangeIs()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+
+        var set = SetOf(Change(SampleRepo.LongFile, [200]));
+        var board = ChangeBoard.Build(set, scene, "a commit");
+        var item = Assert.Single(board.Items);
+
+        var spot = ChangeBoard.FirstChange(board, set, scene);
+
+        Assert.NotNull(spot);
+        // well below the top of the window, and inside it
+        Assert.True(spot!.Value.Y > item.Y + Scene.WinHeadH);
+        Assert.True(spot.Value.Y < item.Y + scene.ItemHeight(item));
+    }
+
+    [Fact]
+    public void AChangeThatTouchedNoLinesHasNowhereToLookFirst()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+
+        var set = SetOf(Change(SampleRepo.LongFile, []));
+        var board = ChangeBoard.Build(set, scene, "a commit");
+
+        Assert.Null(ChangeBoard.FirstChange(board, set, scene));
     }
 
     [Fact]

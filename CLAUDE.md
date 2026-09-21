@@ -188,9 +188,27 @@ covered by `AnchorTests` and works.
       you open the list of branches and the one you are on is not in it. A
       branch with nothing ahead of the base is shown as its own recent
       history instead, and the detail line says which case a row is.
-- [ ] The gathered change view (`C`) has never been driven by hand - the logic
-      is tested, the wiring is not. Needs a look on a repo with real merge
-      commits.
+- [x] The map lights the diff rather than the file it is in. A changed
+      file was painted solid edge to edge, and since size on the map is
+      size of *file*, a two line fix in a long file looked like the
+      biggest commit in the repo. Changed lines are merged into runs,
+      floored to a few pixels so they survive map zoom, and the card
+      behind them is a dim silhouette saying "touched". Removals glow too.
+- [x] The gathered change view (`C`) shows whole files, not hunks. Windows
+      there are real syntax-coloured code, and cutting them to three lines
+      of context threw away the one thing the view has that a diff does
+      not. The changed lines glow inside the window, which they did not
+      before - the view showed the right code and no sign of what about it
+      had changed - and it opens looking at the first change rather than at
+      line one of a three thousand line file.
+- [ ] The gathered change view still has not been driven by hand on a repo
+      with real merge commits.
+- [ ] A file the commit **deleted** has no card on the map, because the scan
+      is of what is there now, so it cannot be shown at all. It should
+      appear somewhere - probably at the folder that lost it.
+- [ ] Opening a panel or the commit list takes a visible moment with no sign
+      that anything is happening, so it reads as broken until it appears.
+      Needs a spinner, or the list up front and its contents filled in.
 
 ### What counts as a file
 

@@ -1863,10 +1863,28 @@ public sealed class SceneView : Control
         // is thrown away the moment you leave
         RefreshBoardBar();
         RefreshHints();
-        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+        ShowFirstChange(board, set);
         _caption = $"{label}  [changed code]";
         Focus();
         InvalidateVisual();
+    }
+
+    /// <summary>frame the first change rather than the whole board.
+    ///
+    /// The windows are whole files now, so fitting the board puts three
+    /// thousand lines on screen at a size nobody can read, and landing at
+    /// the top of the first one puts you at line 1 with the change you came
+    /// for somewhere off the bottom.</summary>
+    void ShowFirstChange(Board board, ChangeSet set)
+    {
+        if (ChangeBoard.FirstChange(board, set, _scene) is not { } spot)
+        {
+            _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+            return;
+        }
+        _scene.CamX = spot.X;
+        _scene.CamY = spot.Y + (float)Bounds.Height / 6;
+        _scene.CamS = 1f;
     }
 
     /// <summary>after stepping to another commit, gather that one instead.</summary>
@@ -1884,7 +1902,7 @@ public sealed class SceneView : Control
 
         _scene.ActiveBoard = board;
         _scene.Picked.Clear();
-        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+        ShowFirstChange(board, set);
         _caption = $"{label}  [changed code]";
         InvalidateVisual();
     }

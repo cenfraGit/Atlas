@@ -9,7 +9,14 @@ namespace Atlas;
 ///
 /// The board this builds is generated, never stored: it is not in the boards
 /// panel, it is not written to .atlas/, and it is read only. Leaving it
-/// throws it away.</summary>
+/// throws it away.
+///
+/// One window per file, whole. It used to be one window per hunk, which is
+/// what a diff tool shows and is wrong here: the windows are real code with
+/// real syntax colouring, and cutting them to three lines of context throws
+/// away the thing this view has that a diff does not - the rest of the file
+/// the change landed in. The changed lines glow, so finding them inside a
+/// whole file is no harder than finding them on the map.</summary>
 public static class ChangeBoard
 {
     /// <summary>a run of lines worth showing, in zero-based file lines.</summary>
@@ -22,7 +29,7 @@ public static class ChangeBoard
     const int Merge = 10;       // closer than this and two hunks read as one
     const float WindowW = 620;
     const float Gap = 56;
-    const int MaxWindows = 60;  // a rewrite-the-world commit is not a board
+    const int MaxWindows = 40;  // a rewrite-the-world commit is not a board
 
     /// <summary>the parts of a file a change actually touched, merged when
     /// they are close enough that two windows would just be one window with a
@@ -79,25 +86,49 @@ public static class ChangeBoard
             if (i < 0) continue;            // the caption already reports these
             var file = scene.Data.Files[i];
 
-            foreach (var h in HunksOf(change, file.N))
+            var item = new BoardItem
             {
-                var item = new BoardItem
-                {
-                    Id = BookmarkStore.NewId(),
-                    Kind = "file",
-                    File = change.Path,
-                    Line = h.From,
-                    EndLine = h.To,
-                    W = WindowW,
-                };
-                windows.Add((item, scene.ItemHeight(item)));
-                if (windows.Count >= MaxWindows) break;
-            }
+                Id = BookmarkStore.NewId(),
+                Kind = "file",
+                File = change.Path,
+                Line = 0,
+                EndLine = Math.Max(0, file.N - 1),
+                W = WindowW,
+            };
+            windows.Add((item, scene.ItemHeight(item)));
             if (windows.Count >= MaxWindows) break;
         }
 
         Pack(windows, board);
         return board;
+    }
+
+    /// <summary>where in board coordinates the first changed line of the
+    /// first window is, so the view can open looking at a change.
+    ///
+    /// This is what whole-file windows cost and why the hunks are still
+    /// worth working out: land at the top of the first window and you are
+    /// looking at line one of a three thousand line file, with the thing
+    /// you came to see somewhere off the bottom of the screen.</summary>
+    public static (float X, float Y)? FirstChange(Board board, ChangeSet set, Scene scene)
+    {
+        foreach (var item in board.Items)
+        {
+            if (item.File is null || !set.ByPath.TryGetValue(item.File, out var change)) continue;
+            int i = scene.IndexOfPath(item.File);
+            if (i < 0) continue;
+
+            var file = scene.Data.Files[i];
+            var hunks = HunksOf(change, file.N);
+            if (hunks.Count == 0) continue;
+
+            // windows are scaled to a fixed width, so a file's own line
+            // height is not the height of a line on the board
+            float k = item.W / file.W;
+            float y = item.Y + Scene.WinHeadH + (hunks[0].From - item.Line) * scene.Data.LineH * k;
+            return (item.X + item.W / 2, y);
+        }
+        return null;
     }
 
     /// <summary>columns, each window going to whichever is shortest. The same

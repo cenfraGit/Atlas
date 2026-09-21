@@ -1046,7 +1046,10 @@ public sealed class Scene : IDisposable
     // at the same size as an annotation callout. 6.5pt was unreadable
     const float NotePad = 10, NoteFont = 11f, NoteLineH = 14;
     // a window's header is a fixed size on the board; only its code scales
-    const float WinHeadH = 26;
+    /// <summary>the strip at the top of a board's file window, with the
+    /// file name in it. Public because ChangeBoard has to place things
+    /// against it, and two copies of a number like this drift.</summary>
+    public const float WinHeadH = 26;
     const char LF = (char)10;
     const char TabChar = (char)9;
 
@@ -1478,6 +1481,10 @@ public sealed class Scene : IDisposable
                 if (!_bars.TryGetValue(i, out var pic)) { pic = BuildBars(i); BuiltThisFrame++; }
                 canvas.DrawPicture(pic);
             }
+            // the same glow the map uses, in the same card-local coordinates.
+            // Without it the gathered change view shows the right code and no
+            // indication of what about it changed, which is most of the point
+            if (Review is not null && Review.ByPath.ContainsKey(f.P)) DrawReviewLines(canvas, f);
             DrawBoardPicks(canvas, f, i);
             canvas.Restore();
             canvas.Restore();

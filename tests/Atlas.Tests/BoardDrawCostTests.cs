@@ -36,7 +36,13 @@ public class BoardDrawCostTests
         return board;
     }
 
-    /// <summary>median milliseconds to draw one frame of the board.</summary>
+    /// <summary>the cheapest of several frames, in milliseconds.
+    ///
+    /// The fastest run, not the median: contention only ever adds time, so
+    /// the minimum is the closest thing to what the code costs on its own.
+    /// A median failed once under load and passed alone, which is exactly
+    /// what a timing test is worth when it measures the machine as well as
+    /// the program.</summary>
     static double FrameCost(Board board, TempDir repo)
     {
         using var scene = new Scene(Scanner.Build(repo.Path))
@@ -60,8 +66,7 @@ public class BoardDrawCostTests
 
         bmp.Dispose();
         scene.ActiveBoard = null;
-        times.Sort();
-        return times[times.Count / 2];
+        return times.Min();
     }
 
     [Fact]
@@ -88,11 +93,17 @@ public class BoardDrawCostTests
         Assert.True(ms < 33, $"1000 strokes cost {ms:0.00}ms a frame");
     }
 
+    /// <summary>a first frame against a median of later ones was the obvious
+    /// way to show the cache working, and it passed alone and failed under
+    /// load: at a thousand strokes the recording frame is not much dearer
+    /// than a replay of the same thousand paths, so the margin is inside the
+    /// noise. Counting re-recordings says the same thing and cannot be told
+    /// a lie by the machine being busy.</summary>
     [Fact]
-    public void ReplayIsWhyAThousandStrokesAreAffordable()
+    public void TheInkIsRecordedOnceAndReplayedAfterThat()
     {
         using var repo = SampleRepo.Build();
-        var board = WithStrokes(1000);
+        var board = WithStrokes(200);
 
         using var scene = new Scene(Scanner.Build(repo.Path))
         {
@@ -101,30 +112,48 @@ public class BoardDrawCostTests
         var bmp = new SKBitmap(W, H, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bmp);
 
-        // the first frame records the picture, the rest replay it
-        var first = Stopwatch.StartNew();
-        scene.Draw(canvas, W, H);
-        canvas.Flush();
-        double recorded = first.Elapsed.TotalMilliseconds;
+        for (int i = 0; i < 20; i++) scene.Draw(canvas, W, H);
 
-        var times = new List<double>();
-        for (int i = 0; i < Frames; i++)
-        {
-            var sw = Stopwatch.StartNew();
-            scene.Draw(canvas, W, H);
-            canvas.Flush();
-            times.Add(sw.Elapsed.TotalMilliseconds);
-        }
-        times.Sort();
-        double replayed = times[times.Count / 2];
+        Assert.Equal(1, scene.StrokeRebuilds);
 
         bmp.Dispose();
         scene.ActiveBoard = null;
+    }
 
-        // the recording frame is the old cost; every frame after it is the
-        // new one. If they are the same, the cache is not being hit
-        Assert.True(replayed < recorded * 0.7,
-            $"record {recorded:0.00}ms, replay {replayed:0.00}ms - the picture is not being reused");
+    [Fact]
+    public void TheStrokeUnderTheHandDoesNotReRecordEveryFrame()
+    {
+        using var repo = SampleRepo.Build();
+        var board = WithStrokes(5);
+
+        using var scene = new Scene(Scanner.Build(repo.Path))
+        {
+            ActiveBoard = board, CamX = 0, CamY = 0, CamS = 1f,
+        };
+        var bmp = new SKBitmap(W, H, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bmp);
+
+        scene.Draw(canvas, W, H);
+        int settled = scene.StrokeRebuilds;
+
+        // the draft changes every frame by definition, so it is drawn live
+        var draft = new BoardItem { Id = "draft", Kind = "stroke", Weight = 3 };
+        scene.StrokeDraft = draft;
+        for (int i = 0; i < 10; i++)
+        {
+            Strokes.Add(draft, i * 20, i * 5, minStep: 0);
+            scene.Draw(canvas, W, H);
+        }
+        Assert.Equal(settled, scene.StrokeRebuilds);
+
+        // and joins the recording once it is let go
+        scene.StrokeDraft = null;
+        board.Items.Add(draft);
+        scene.Draw(canvas, W, H);
+        Assert.Equal(settled + 1, scene.StrokeRebuilds);
+
+        bmp.Dispose();
+        scene.ActiveBoard = null;
     }
 
     [Fact]

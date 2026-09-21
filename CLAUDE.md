@@ -31,6 +31,14 @@ Pushing is publishing: it goes to a repository other people can see and it
 cannot be taken back cleanly. So push finished work, not a checkpoint, and
 never force push or rewrite anything already pushed without being asked.
 
+**Never name another repository.** Atlas gets opened on private and
+work-owned codebases, and a bug found while looking at one is still just a
+bug. Nothing that goes into this repo - commit messages, comments, tests,
+docs, sample data - may name or hint at where it was noticed: not the repo,
+not its projects, files, branches or types. Describe the defect and the rule
+it breaks, which is the part worth keeping anyway. Fixtures are synthetic
+(`SampleRepo`), so a test never needs a real path to make its point.
+
 ## TODO
 
 Everything outstanding, so nothing is lost when several things are in flight
@@ -125,6 +133,27 @@ change freely.
       O(strokes) not O(samples) and cannot be forgotten at a call site the
       way an explicit invalidation can. `Scene.StrokeRebuilds` counts
       re-recordings, which is what the tests assert on rather than a clock.
+
+### Boards, reviewed end to end
+
+A read of the whole board subsystem, and what it turned up. Each of these has
+a test that was checked to fail against the old code first.
+
+- [x] The UI thread no longer measures a board's words. `LastHeight` reads
+      what the draw loop left behind; nine call sites went through
+      `ItemHeight`, which wraps a note's text with SkiaSharp.
+- [x] A tied arrow is asked where it is drawn, not where it was tied. The
+      eraser hunted with the stored pair and so rubbed out the place a line
+      used to be; `ArrowAt` had it right and they share the test now.
+- [x] `Scene.Remove` unties an arrow from an item on its way out.
+- [x] `BoundsOf`, so an arrow is as big as the line it draws.
+- [x] Undo records when something changes, not when it is clicked.
+- [x] A finished stroke is saved on the spot, and gives the pointer capture
+      back like the branches beside it.
+- [x] Escape leaves a board again - see Dialogs.
+- [x] Every stored file reference carries a fingerprint: windows, bookmarks
+      and the fly-to for an annotation, which had one and ignored it.
+- [x] `.atlas/` is written with LF - see the storage contract.
 
 ### Presentation boards
 
@@ -362,10 +391,33 @@ zoom are a pure canvas transform with no geometry rebuild. Construction is
 budgeted to 14 cards per frame so flinging into unseen territory never blocks.
 If you add per-frame geometry work, you have broken this.
 
-**A path is not an identity.** Board windows and annotations reference files by
-path *and* a content fingerprint (`FileKeys`). `Scene.ResolveFile` tries the
-path, then a uniquely named file, then the fingerprint. Anything that stores a
-file reference must store the key too.
+**A path is not an identity.** Board windows, annotations and bookmarks
+reference files by path *and* a content fingerprint (`FileKeys`).
+`Scene.ResolveFile` tries the path, then a uniquely named file, then the
+fingerprint. Anything that stores a file reference must store the key too, and
+must resolve with `ResolveFile` rather than `IndexOfPath` - the rule was
+written here first and then three of the four places quietly broke it, which
+only showed up as a board full of `missing:` after somebody renamed a file.
+`Scene.KeyFor` makes a key; `Scene.EnsureKeys` fills in what older boards are
+missing when they open. Covered by `FileReferenceTests`.
+
+**An arrow is not a box.** Its `W` is whatever the default was when it was
+made and its `H` is nothing, so its stored rectangle is six hundred units of
+empty canvas beside the tail. Ask `Scene.BoundsOf` how big anything is - it
+resolves an arrow through its two ends, and a tied end through the box it is
+tied to. Fitting the view and the rubberband both read the phantom before it
+existed.
+
+**Deleting goes through `Scene.Remove`.** An arrow tied to an item that is
+gone falls back to coordinates from whenever the tie was made, so removing a
+box used to fling its connectors across the board. `Remove` cuts such a tie
+and writes the end's current position back first. Four call sites became one;
+keep it that way.
+
+**Undo records at the first mutation, not on press.** `Mutating()` takes one
+snapshot per gesture, the first time a handler is about to change something.
+Recording on press meant selecting three things left three undo steps that
+undid nothing.
 
 ## Conventions
 
@@ -388,7 +440,17 @@ team shares boards and notes. Never add it to a `.gitignore`. It holds
 `boards/*.json`, `annotations.json`, `bookmarks.json` and `images/`.
 
 There is no save step: stores write on every change and the canvas shows
-`saved: ...`. If you add state a user authors, it saves itself the same way.
+`saved: ...`. If you add state a user authors, it saves itself the same way -
+and immediately, in the handler that made it, rather than leaving a dirty flag
+for some later gesture to notice.
+
+**What the app writes is what git stores.** `.gitattributes` pins the
+repository to LF (`*.cmd` and `*.bat` excepted - cmd.exe is the one thing
+still entitled to CRLF), and the JSON stores set `NewLine = "\n"` because
+`System.Text.Json` otherwise writes this machine's newline. Without that,
+opening Atlas and touching nothing leaves every board it saved looking
+modified, which teaches you to ignore what git says about the one folder you
+are meant to commit.
 
 ## Tests
 

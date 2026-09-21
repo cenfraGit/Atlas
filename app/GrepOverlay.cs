@@ -28,6 +28,14 @@ public sealed class GrepOverlay : Border
     /// or which thread to do it on; it asks, and is handed the answers.</summary>
     public event Action<string>? Requested;
 
+    /// <summary>the query changed. Raised on every keystroke so the canvas
+    /// can light up what is already on screen straight away - that costs a
+    /// substring search of the lines being drawn and nothing else.</summary>
+    public event Action<string>? Typed;
+
+    /// <summary>move to another match, by one, in that direction.</summary>
+    public event Action<int>? Stepped;
+
     public GrepOverlay()
     {
         Reveal.Attach(this);
@@ -53,10 +61,18 @@ public sealed class GrepOverlay : Border
         {
             switch (e.Key)
             {
-                case Key.Enter: e.Handled = true; Requested?.Invoke(_box.Text ?? ""); break;
-                case Key.Down: e.Handled = true; Move(1); break;
-                case Key.Up: e.Handled = true; Move(-1); break;
+                // shift+Enter goes back, the way it does in an editor's find
+                case Key.Enter when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                    e.Handled = true; Stepped?.Invoke(-1); break;
+                case Key.Enter: e.Handled = true; Stepped?.Invoke(1); break;
+                case Key.Down: e.Handled = true; Stepped?.Invoke(1); break;
+                case Key.Up: e.Handled = true; Stepped?.Invoke(-1); break;
             }
+        };
+        _box.TextChanged += (_, _) =>
+        {
+            Typed?.Invoke(_box.Text ?? "");
+            Requested?.Invoke(_box.Text ?? "");
         };
 
         _hint = new TextBlock
@@ -91,6 +107,17 @@ public sealed class GrepOverlay : Border
 
     public void Searching() => _hint.Text = "searching...";
 
+    /// <summary>which row is the one being looked at. Driven from outside,
+    /// because stepping works after this panel is closed too - the list is
+    /// the view of the matches, not the owner of them.</summary>
+    public void Select(int at)
+    {
+        if (at < 0 || at >= _found.Count) return;
+        if (_list.SelectedIndex == at) return;
+        _list.SelectedIndex = at;
+        _list.ScrollIntoView(at);
+    }
+
     public void Show(List<Found> found, string query, string where, bool capped)
     {
         _found = found;
@@ -102,7 +129,6 @@ public sealed class GrepOverlay : Border
             : $"{found.Count}{(capped ? "+" : "")} in {Grep.FilesIn(found)} file" +
               $"{(Grep.FilesIn(found) == 1 ? "" : "s")}   -   up/down: walk them   esc: close";
 
-        if (found.Count > 0) _list.SelectedIndex = 0;
     }
 
     static string Label(Found f)
@@ -121,18 +147,10 @@ public sealed class GrepOverlay : Border
     {
         switch (key)
         {
-            case Key.Down: Move(1); return true;
-            case Key.Up: Move(-1); return true;
+            case Key.Down: Stepped?.Invoke(1); return true;
+            case Key.Up: Stepped?.Invoke(-1); return true;
             default: return false;
         }
-    }
-
-    void Move(int by)
-    {
-        if (_found.Count == 0) return;
-        _list.SelectedIndex = Math.Clamp(_list.SelectedIndex + by, 0, _found.Count - 1);
-        _list.ScrollIntoView(_list.SelectedIndex);
-        Go();
     }
 
     void Go()

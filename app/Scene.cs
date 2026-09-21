@@ -741,6 +741,32 @@ public sealed class Scene : IDisposable
     /// <summary>draws source lines [from, to) of a file at the current canvas
     /// origin, in card-local coordinates. false when the text is not loaded yet.
     /// shared by the map and by a board's file windows.</summary>
+    /// <summary>every occurrence of the search on one drawn line.
+    ///
+    /// Recomputed per line per frame rather than stored: a match is a
+    /// substring of a line that is already in hand, the lines on screen are
+    /// few, and anything stored would have to be invalidated every time the
+    /// query changed by a keystroke - which is the whole point of it.</summary>
+    void MarkFinds(SKCanvas canvas, string line, int li, int fileIndex, string needle, float x0, float baseline)
+    {
+        using var paint = new SKPaint { IsAntialias = false };
+        float top = baseline - Data.LineH * 0.78f, bottom = baseline + Data.LineH * 0.22f;
+
+        int at = 0;
+        while ((at = line.IndexOf(needle, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            // the text itself stops at 160 characters, so a mark past there
+            // would point at nothing
+            if (at >= 160) break;
+            int end = Math.Min(at + needle.Length, 160);
+
+            bool now = FindAt is { } c && c.File == fileIndex && c.Line == li && c.Col == at;
+            paint.Color = now ? FindNowCol : FindCol;
+            canvas.DrawRect(x0 + at * _charW, top, (end - at) * _charW, bottom - top, paint);
+            at += Math.Max(1, needle.Length);
+        }
+    }
+
     /// <summary>how many characters wide the number column is for a file of
     /// this many lines. Sized from the whole file rather than from the lines
     /// on screen, so the code does not shift sideways as you scroll past
@@ -787,6 +813,10 @@ public sealed class Scene : IDisposable
 
             var s = lines[li];
             if (s.Length == 0) continue;
+
+            // behind the text, so the words stay readable through it
+            if (Find is { Length: > 0 } needle) MarkFinds(canvas, s, li, i, needle, x0, baseline);
+
             var lineRuns = runs?[li];
             if (lineRuns is null || lineRuns.Length == 0)
             {
@@ -1933,6 +1963,23 @@ public sealed class Scene : IDisposable
         }
         return null;
     }
+
+    /// <summary>what the search is showing, highlighted wherever it appears
+    /// in any file on screen. Null or empty means nothing is being searched.
+    ///
+    /// Only where the code is actually drawn: at the bars tier there is no
+    /// text to mark and a highlight would be a lie about a line you cannot
+    /// read anyway.</summary>
+    public string? Find;
+
+    /// <summary>which occurrence is the one being looked at, so it can be
+    /// picked out from the others. The rest are context - "and here are the
+    /// other places" - and drawing them all alike loses your place the
+    /// moment two land on the same screen.</summary>
+    public (int File, int Line, int Col)? FindAt;
+
+    static readonly SKColor FindCol = new(0xff, 0xd1, 0x66, 0x4a);
+    static readonly SKColor FindNowCol = new(0xff, 0xd1, 0x66, 0xb4);
 
     /// <summary>the item whose words are being typed into an editor laid
     /// over it. Its own text is left undrawn while that is up, or the same

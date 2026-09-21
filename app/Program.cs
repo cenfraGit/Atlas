@@ -565,6 +565,10 @@ public sealed class SceneView : Control
         Layers.Add("reviews", () => Reveal.Showing(_reviews), () => _reviews!.Close());
         Layers.Add("tour", () => _tour is not null, EndTour);
         Layers.Add("tool", () => _armBrush || _armEraser || _armArrow || _armShape is not null, DisarmTools);
+        // before the selection, and it clears that too. A search leaves a
+        // selection behind on the line it landed on, so with the selection
+        // first you had to press Escape twice to be rid of one search
+        Layers.Add("matches", () => !string.IsNullOrEmpty(_scene.Find), ClearFind);
         Layers.Add("selection", HasSelection, ClearSelection);
         // deliberately no "board" layer. Escape closes what is open - a
         // dialog, a menu, an armed tool, a selection - and leaving the board
@@ -1809,16 +1813,83 @@ public sealed class SceneView : Control
     GrepOverlay? _grep;
     CancellationTokenSource? _grepping;
 
+    List<Found> _found = [];
+    int _foundAt = -1;
+    DispatcherTimer? _grepSoon;
+
     public void AttachGrep(GrepOverlay panel)
     {
         _grep = panel;
-        panel.Requested += RunGrep;
+        panel.Typed += HighlightAs;
+        panel.Requested += QueueGrep;
+        panel.Stepped += StepMatch;
         panel.Picked += GoToMatch;
+    }
+
+    /// <summary>light up what is already on screen, on every keystroke.
+    ///
+    /// This costs a substring search of the lines being drawn, so it can
+    /// run at typing speed - unlike the list, which has to read files.</summary>
+    void HighlightAs(string query)
+    {
+        _scene.Find = query;
+        _scene.FindAt = null;
+        InvalidateVisual();
+    }
+
+    /// <summary>and the list after a pause. Every keystroke would start a
+    /// read of every file that is not already loaded, and "cl" on the way
+    /// to "ClampCamera" matches most of the repo.</summary>
+    void QueueGrep(string query)
+    {
+        _grepSoon?.Stop();
+        _grepSoon = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        _grepSoon.Tick += (_, _) =>
+        {
+            _grepSoon?.Stop();
+            _grepSoon = null;
+            RunGrep(query);
+        };
+        _grepSoon.Start();
+    }
+
+    /// <summary>the next match, or the previous one. Works with the panel
+    /// closed: the matches belong to the view, and the panel is a list of
+    /// them rather than the thing that holds them.</summary>
+    void StepMatch(int by)
+    {
+        if (_found.Count == 0) { Toast("nothing to step through"); return; }
+        _foundAt = _foundAt < 0
+            ? (by > 0 ? 0 : _found.Count - 1)
+            : (_foundAt + by + _found.Count) % _found.Count;
+
+        _grep?.Select(_foundAt);
+        GoToMatch(_found[_foundAt]);
+    }
+
+    /// <summary>stop highlighting. The innermost thing Escape can peel off
+    /// once the panel itself has gone, so the marks do not outlive the
+    /// search that made them.</summary>
+    void ClearFind()
+    {
+        _scene.Find = null;
+        _scene.FindAt = null;
+        _found = [];
+        _foundAt = -1;
+        // and what going to a match left behind, or Escape would clear the
+        // marks and leave the line it had picked out still lit
+        _scene.Highlight = null;
+        _scene.Selection = null;
+        _caption = "";
+        InvalidateVisual();
     }
 
     void OpenGrep()
     {
         if (_grep is null) return;
+        _found = [];
+        _foundAt = -1;
+        _scene.FindAt = null;
         _grep.Open(GrepScope().Where);
         InvalidateVisual();
     }
@@ -1849,7 +1920,13 @@ public sealed class SceneView : Control
         _grepping = cts;
 
         var (only, where) = GrepScope();
-        if (query.Length == 0) { _grep.Show([], query, where, false); return; }
+        if (query.Length == 0)
+        {
+            _found = [];
+            _foundAt = -1;
+            _grep.Show([], query, where, false);
+            return;
+        }
 
         _grep.Searching();
         var scan = _scene.Data;
@@ -1864,6 +1941,8 @@ public sealed class SceneView : Control
             Dispatcher.UIThread.Post(() =>
             {
                 if (cts.IsCancellationRequested || _grep is null) return;
+                _found = found;
+                _foundAt = -1;
                 _grep.Show(found, query, where, found.Count >= Grep.Limit);
                 InvalidateVisual();
             });
@@ -1893,6 +1972,11 @@ public sealed class SceneView : Control
     {
         int i = _scene.ResolveFile(m.Path, null);
         if (i < 0) { Toast($"{m.Path} is not in this scan"); return; }
+
+        // so the one being looked at is drawn differently from the rest
+        _scene.FindAt = (i, m.Line, m.Col);
+        int seen = _found.IndexOf(m);
+        if (seen >= 0) _foundAt = seen;
 
         if (_scene.ActiveBoard is not null) { ShowMatchOnBoard(m, i); return; }
 
@@ -3307,6 +3391,16 @@ public sealed class SceneView : Control
         if (e.Key == Key.F && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
             OpenGrep();
+            e.Handled = true;
+            return;
+        }
+
+        // F3 steps the matches wherever you are, panel open or not - it is
+        // the one search key that has to work while you are reading the
+        // code rather than reading the list
+        if (e.Key == Key.F3)
+        {
+            StepMatch(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
             e.Handled = true;
             return;
         }

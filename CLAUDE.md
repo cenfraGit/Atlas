@@ -269,6 +269,14 @@ covered by `AnchorTests` and works.
 - [x] Up and down step the commits, which is what a list of commits down
       the side looks like it does. Not while a tour is running: those are
       its arrows.
+- [ ] Show each file as it was *at that commit*, so the code under the
+      marks is the code the commit changed rather than today's. The
+      snapshot already exists (`ShowSnapshot`); what is missing is doing it
+      per commit as you step, and the marks would then want to be
+      see-through so the lines under them still read.
+- [ ] Reading a commit's tree blocks the window. It is synchronous because
+      libgit2's handle is not thread safe and the bracket keys reach for
+      the same one; a background read needs that handle owned by one place.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
       is of what is there now, so it cannot be shown at all. It should
       appear somewhere - probably at the folder that lost it.
@@ -294,9 +302,16 @@ covered by `AnchorTests` and works.
       searches the working copy, a commit's tree and a couple of arrays in a
       test. It runs off the UI thread and takes a token, so a superseded
       search stops.
-- [ ] Search as you type. It runs on Enter because a keystroke would
-      re-read every file that is not already loaded; it wants a cache of its
-      own, which `Scene.ReadLines` deliberately is not.
+- [x] Highlighting as you type. Every occurrence on screen is marked on
+      each keystroke - that costs a substring search of the lines being
+      drawn and nothing else - and the one being looked at is marked more
+      strongly, or two matches on a screen lose your place. The *list*
+      follows after a 180ms pause, because a keystroke starts a read of
+      every file not already loaded.
+- [x] Previous and next: Enter and shift+Enter in the box, up and down in
+      the list, F3 and shift+F3 anywhere. The matches belong to the view
+      rather than the panel, so F3 still steps them once it is closed, and
+      Escape clears the marks along with the selection the last jump left.
 - [ ] Regular expressions, and whole-word. Plain case-insensitive substring
       for now.
 

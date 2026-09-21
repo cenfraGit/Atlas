@@ -22,7 +22,16 @@ public static class ImageStore
         try
         {
             var path = Path.Combine(DirFor(root), name);
-            if (File.Exists(path)) img = SKImage.FromEncodedData(path);
+            // read the bytes and decode those, rather than handing Skia the
+            // path. The path overload keeps the file open for the life of the
+            // image, and on windows an open file cannot be deleted - so an
+            // image that had been looked at once could never be pruned, and
+            // the app looks at one the moment it is pasted
+            if (File.Exists(path))
+            {
+                using var data = SKData.CreateCopy(File.ReadAllBytes(path));
+                img = SKImage.FromEncodedData(data);
+            }
         }
         catch { }
         Cache[name] = img;
@@ -76,7 +85,11 @@ public static class ImageStore
         {
             var name = Path.GetFileName(path);
             if (live.Contains(name)) continue;
-            try { File.Delete(path); Cache.Remove(name); gone++; } catch { }
+            // a delete that fails is worth knowing about: it used to be
+            // swallowed here, so the bytes stayed on disk and the count said
+            // they had gone
+            try { File.Delete(path); Cache.Remove(name); gone++; }
+            catch (Exception ex) { Console.WriteLine($"could not prune {name}: {ex.Message}"); }
         }
         return gone;
     }

@@ -28,15 +28,40 @@ public class TextOnBoardTests
     [InlineData("stroke")]
     public void TheseAreNot(string kind) => Assert.False(Scene.HasText(kind));
 
-    [Fact]
-    public void ALabelIsLargeAndANoteIsSmall() =>
-        Assert.True(Scene.DefaultSize("text") > Scene.DefaultSize("note"));
+    /// <summary>everything with words starts at the same size, and that
+    /// size is the code's.
+    ///
+    /// The three kinds used to have three defaults - a label at 34 because
+    /// a heading is large - and on a board that is mostly file windows the
+    /// result was text towering over the source it was written about.</summary>
+    [Theory]
+    [InlineData("text")]
+    [InlineData("note")]
+    [InlineData("shape")]
+    [InlineData("ellipse")]
+    [InlineData("diamond")]
+    public void EveryKindStartsAtTheCodeSize(string kind) =>
+        Assert.Equal(Scene.CodeSize, Scene.DefaultSize(kind));
 
+    /// <summary>and `CodeSize` really is the size code comes out at.
+    ///
+    /// It is written as a plain number, because it is a choice about type
+    /// rather than a formula - so this is what stops the two drifting apart
+    /// when the card width, the line height or the default window changes.</summary>
     [Fact]
-    public void WordsInAShapeSitBetweenTheTwo()
+    public void TheDefaultIsTheSizeCodeComesOutAt()
     {
-        Assert.True(Scene.DefaultSize("shape") > Scene.DefaultSize("note"));
-        Assert.True(Scene.DefaultSize("shape") < Scene.DefaultSize("text"));
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        var f = scene.Data.Files.First(x => x.P == SampleRepo.LongFile);
+
+        // what DrawCode uses, in card units...
+        float inCard = scene.Data.LineH * 0.78f;
+        // ...scaled the way a board's file window scales its card
+        float windowW = new BoardItem().W;
+        float onBoard = inCard * (windowW / f.W);
+
+        Assert.Equal(onBoard, Scene.CodeSize, 0.5);
     }
 
     [Theory]
@@ -273,13 +298,16 @@ public class TextOnBoardTests
             var board = new Board { Id = "b", Name = "editing" };
             board.Items.Add(new BoardItem
             {
+                // sized here rather than left to the default: this is a
+                // test about editing, and it should not start failing
+                // because the default type got smaller - which it did
                 Id = "a", Kind = "shape", X = -180, Y = -80, W = 160, H = 100,
-                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "first",
+                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "first", Size = 18,
             });
             board.Items.Add(new BoardItem
             {
                 Id = "b2", Kind = "shape", X = 20, Y = -80, W = 160, H = 100,
-                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "second",
+                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "second", Size = 18,
             });
 
             using var scene = new Scene(Scanner.Build(repo.Path))

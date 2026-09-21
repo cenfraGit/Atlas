@@ -316,7 +316,7 @@ public class ShapeTests
         using (scene)
         {
             var unset = new BoardItem { Kind = "text", W = 600, Text = "heading" };
-            var set = new BoardItem { Kind = "text", W = 600, Text = "heading", Size = Scene.LabelSize };
+            var set = new BoardItem { Kind = "text", W = 600, Text = "heading", Size = Scene.CodeSize };
 
             Assert.Equal(scene.ItemHeight(set), scene.ItemHeight(unset), 2);
 

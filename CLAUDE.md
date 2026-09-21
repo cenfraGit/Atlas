@@ -122,12 +122,16 @@ change freely.
       left edge reads as a quote in a document rather than as a card on a
       canvas, and the other three sides are where a note meets what it
       overlaps.
-- [x] Type size on anything with words in it, from a "Text size" menu. The
-      default is per kind rather than one number - a label is large because
-      being large is what makes it a heading, a note is small because it is
-      an aside, a shape's words sit between - and 0 means "whatever this
-      kind is normally", which is the one value that cannot be a real size.
-      `Scene.LineStep` moves the lines apart as the type grows.
+- [x] Type size on anything with words in it, from a "Text size" menu. 0
+      means the default, which is the one value that cannot be a real size,
+      and `Scene.LineStep` moves the lines apart as the type grows.
+- [x] That default is `Scene.CodeSize` for every kind: the size source
+      comes out at inside a board's file window. The three kinds used to
+      have three defaults, a label at 34 on the grounds that a heading is
+      large, and on a board that is mostly file windows the result was text
+      towering over the code it was written about. A heading is still a
+      heading - it is one because you set its size, not because of what
+      kind it is.
 - [x] Line width. A shape's border and an arrow's shaft were a hairline -
       one screen pixel at any zoom, the one width that says nothing about
       what it outlines. They now share the stroke's `Weight`, so `[`, `]`

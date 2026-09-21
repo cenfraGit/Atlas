@@ -1127,7 +1127,7 @@ public sealed class Scene : IDisposable
 
     // a note is read at the same distance as the code beside it, so it is set
     // at the same size as an annotation callout. 6.5pt was unreadable
-    const float NotePad = 10, NoteFont = 11f, NoteLineH = 14;
+    const float NotePad = 10;
     // a window's header is a fixed size on the board; only its code scales
     /// <summary>the strip at the top of a board's file window, with the
     /// file name in it. Public because ChangeBoard has to place things
@@ -1301,23 +1301,27 @@ public sealed class Scene : IDisposable
         return path;
     }
 
-    /// <summary>type size when the item has not been given one. A label is
-    /// large because being large is what makes it a heading; a note is small
-    /// because it is an aside; words inside a shape sit between the two.
+    /// <summary>the size source code comes out at inside a board's file
+    /// window, in board units.
     ///
-    /// Every one of them is only a default: `Size` on the item wins, and the
-    /// "Text size" menu sets it, so anything with words in it can be made
-    /// any size. Zero means "whatever this kind is normally", which is the
-    /// one value that cannot be mistaken for a real size.</summary>
-    public const float LabelSize = 34f;
-    public const float ShapeFont = 18f;
+    /// A card's code is drawn at `LineH * 0.78` in card units, and a window
+    /// scales its card by `window width / card width` - so for the default
+    /// 620 wide window onto a 240 wide card that is about six. Written as a
+    /// number rather than that expression because it is a *choice* of type
+    /// size that happens to agree with the code today, and
+    /// `TextSizeTests.TheDefaultIsTheSizeCodeComesOutAt` is what keeps the
+    /// two honest if either moves.</summary>
+    public const float CodeSize = 6f;
 
-    public static float DefaultSize(string kind) => kind switch
-    {
-        "text" => LabelSize,
-        "note" => NoteFont,
-        _ => ShapeFont,
-    };
+    /// <summary>type size when the item has not been given one.
+    ///
+    /// Everything with words in it starts at the size of the code beside it.
+    /// The three kinds used to have three defaults - a label at 34 on the
+    /// grounds that a heading is large - and on a board that is mostly file
+    /// windows the result was text towering over the source it was written
+    /// about. A heading is still a heading; it is now a heading because you
+    /// chose to make it one, from the "Text size" menu.</summary>
+    public static float DefaultSize(string kind) => CodeSize;
 
     public static float SizeOf(BoardItem it) => it.Size > 0 ? it.Size : DefaultSize(it.Kind);
 
@@ -1552,7 +1556,7 @@ public sealed class Scene : IDisposable
             Color = new SKColor(0xff, 0xd1, 0x66, 200),
             IsStroke = true, StrokeWidth = DefaultBorder, IsAntialias = true,
         };
-        using var noteText = new SKPaint { Color = new SKColor(0xe8, 0xd8, 0xa8), Typeface = _mono, TextSize = NoteFont, IsAntialias = true };
+        using var noteText = new SKPaint { Color = new SKColor(0xe8, 0xd8, 0xa8), Typeface = _mono, TextSize = CodeSize, IsAntialias = true };
         using var missing = new SKPaint { Color = new SKColor(0x6a, 0x2b, 0x2b), IsAntialias = false };
         if (_charW == 0) _charW = code.MeasureText("0");
 

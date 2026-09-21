@@ -1952,6 +1952,15 @@ public sealed class SceneView : Control
         }, cts.Token);
     }
 
+    /// <summary>re-pin everything that was just dragged. A multi-selection
+    /// moves as one, so every member of it may have landed somewhere new.</summary>
+    void RepinPicked()
+    {
+        if (_scene.ActiveBoard is not { } board) return;
+        foreach (var it in board.Items)
+            if (_scene.Picked.Contains(it.Id)) { _scene.PinOver(it); _boardDirty = true; }
+    }
+
     /// <summary>how far to push the view down so the match lands below the
     /// results, in world units.
     ///
@@ -2134,7 +2143,7 @@ public sealed class SceneView : Control
         // have been inserted above it since, which would otherwise leave it
         // showing different code with the drawings still over the old spot
         bool keys = _scene.EnsureKeys(b);
-        bool moved = _scene.AnchorWindows(b);
+        bool moved = _scene.AnchorBoard(b);
         if (keys || moved) _boardStore?.Save(b);
         if (moved) Toast("windows followed their code");
         _scene.Grid = Editing ? GridStep : 0;
@@ -2412,6 +2421,7 @@ public sealed class SceneView : Control
             X = box.Left, Y = box.Top, W = box.Width, H = box.Height,
         };
         board.Items.Add(item);
+        _scene.PinOver(item);
         _scene.Picked.Clear();
         _scene.Picked.Add(item.Id);
         _boardStore?.Save(board);
@@ -2431,6 +2441,7 @@ public sealed class SceneView : Control
             X = box.Left, Y = box.Top, W = box.Width, Color = PenColor,
         };
         board.Items.Add(item);
+        _scene.PinOver(item);
         _scene.Picked.Clear();
         _scene.Picked.Add(item.Id);
         _boardStore?.Save(board);
@@ -2693,6 +2704,7 @@ public sealed class SceneView : Control
             Y = _scene.CamY - 40,
         };
         board.Items.Add(item);
+        _scene.PinOver(item);
         _scene.Picked.Clear();
         _scene.Picked.Add(item.Id);
         _boardStore?.Save(board);
@@ -3058,6 +3070,8 @@ public sealed class SceneView : Control
                 Remember();
                 Strokes.Reframe(drawn);
                 sb.Items.Add(drawn);
+                // ink drawn across a file window is about that code
+                _scene.PinOver(drawn);
                 _boardDirty = true;
                 // a finished stroke is finished. This used to return before
                 // the save, so a drawing sat in memory until something else
@@ -3093,14 +3107,19 @@ public sealed class SceneView : Control
                 if (from is not null && to is not null &&
                     ReferenceEquals(from.Value.Item, to.Value.Item)) to = null;   // not to itself
 
-                b.Items.Add(new BoardItem
+                var arrow = new BoardItem
                 {
                     Id = BookmarkStore.NewId(), Kind = "arrow",
                     X = made.A.X, Y = made.A.Y, X2 = made.B.X, Y2 = made.B.Y,
                     From = from?.Item.Id, To = to?.Item.Id,
                     FromSide = from?.Side ?? -1,
                     ToSide = to?.Side ?? -1,
-                });
+                };
+                b.Items.Add(arrow);
+                // an arrow with both ends tied follows those items already;
+                // one drawn loose across a window is about the code it
+                // crosses, so it gets pinned like anything else
+                if (from is null || to is null) _scene.PinOver(arrow);
                 _boardStore?.Save(b);
                 Saved(from is null && to is null ? "arrow"
                     : from is not null && to is not null ? "connector"
@@ -3113,6 +3132,11 @@ public sealed class SceneView : Control
         _arrowEnd = null;
 
         if (_band) { _band = false; FadeRubberband(); }
+
+        // what a drawing is about is whatever it was let go of on top of,
+        // so this is where it gains a window - or loses one, by being
+        // dragged off onto bare canvas
+        if (_dragItem is not null) RepinPicked();
 
         _dragItem = null;
         _resizing = null;

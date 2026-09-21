@@ -84,10 +84,27 @@ public sealed class BoardItem
 
     public const string NoFill = "none";
 
-    /// <summary>a file window's anchor: the declaration its first line sits
-    /// in, how far down that declaration it is, and a fingerprint of the
-    /// line and its neighbours. The same three an annotation carries, and
-    /// resolved by the same ladder.
+    /// <summary>the window this item is pinned over, if it is sitting on
+    /// one. A rectangle drawn across a file window is about the code under
+    /// it, so it belongs to that code rather than to a spot on the board -
+    /// insert lines inside the window and the code moves out from under an
+    /// unpinned drawing.
+    ///
+    /// Null for a window itself, and for anything on bare canvas.</summary>
+    [JsonPropertyName("host")] public string? Host { get; set; }
+
+    /// <summary>how far below the anchored line the item sits, in board
+    /// units. The line puts it on the right code; this keeps it where it
+    /// was between two lines.</summary>
+    [JsonPropertyName("dy")] public float Dy { get; set; }
+
+    /// <summary>an anchor into a file: the declaration the line sits in, how
+    /// far down that declaration it is, and a fingerprint of the line and
+    /// its neighbours. The same three an annotation carries, and resolved by
+    /// the same ladder.
+    ///
+    /// For a file window this is the line its range *starts* at. For
+    /// anything pinned over one it is the line the item sits on.
     ///
     /// <c>Line</c> and <c>EndLine</c> are line *numbers*, and a line number
     /// stops meaning the same thing the moment somebody inserts above it -

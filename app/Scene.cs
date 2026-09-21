@@ -623,6 +623,155 @@ public sealed class Scene : IDisposable
         return changed;
     }
 
+    /// <summary>the file window under a point, if any. The topmost one, the
+    /// same order a click resolves in.</summary>
+    public BoardItem? WindowAt(float wx, float wy, BoardItem? ignore = null)
+    {
+        if (ActiveBoard is null) return null;
+        for (int n = ActiveBoard.Items.Count - 1; n >= 0; n--)
+        {
+            var it = ActiveBoard.Items[n];
+            if (it.Kind != "file" || ReferenceEquals(it, ignore) || it.File is null) continue;
+            if (wx < it.X || wx > it.X + it.W) continue;
+            if (wy < it.Y || wy > it.Y + LastHeight(it)) continue;
+            return it;
+        }
+        return null;
+    }
+
+    /// <summary>how tall one source line is on the board, inside a window.
+    /// A window scales its whole card, so this is not the file's own line
+    /// height.</summary>
+    public float LineStepIn(BoardItem window, FileRec f) =>
+        Data.LineH * (window.W / Math.Max(1f, f.W));
+
+    /// <summary>pin an item to whatever file window it is sitting on, or
+    /// unpin it when it is on bare canvas.
+    ///
+    /// Called whenever something is made or let go of, because that is when
+    /// a drawing acquires - or loses - a thing it is about. What it records
+    /// is the line under the item's top left corner and how far below that
+    /// line it sits; those two put it back afterwards.</summary>
+    public void PinOver(BoardItem it)
+    {
+        if (it.Kind == "file" || ActiveBoard is null) return;
+
+        var host = WindowAt(it.X, it.Y, it);
+        if (host?.File is null)
+        {
+            it.Host = null;
+            it.Symbol = null;
+            it.Context = null;
+            it.Dy = 0;
+            return;
+        }
+
+        int i = ResolveFile(host.File, host.Key);
+        if (i < 0) return;
+        var f = Data.Files[i];
+        var lines = ReadLines(f.P);
+        if (lines.Length == 0) return;
+
+        float step = LineStepIn(host, f);
+        if (step <= 0) return;
+
+        var (from, to) = RangeOf(host, f);
+        float top = host.Y + WinHeadH;
+        int line = Math.Clamp(from + (int)MathF.Floor((it.Y - top) / step), 0, Math.Max(0, lines.Length - 1));
+
+        var full = Path.Combine(Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
+        var (symbol, offset) = Anchors.CaptureAt(full, line);
+
+        it.Host = host.Id;
+        it.Symbol = symbol;
+        it.Offset = offset;
+        it.Context = Anchors.ContextOf(lines, line);
+        it.Dy = it.Y - (top + (line - from) * step);
+    }
+
+    /// <summary>move everything pinned to a window back onto its code.
+    ///
+    /// Run after <see cref="AnchorWindows"/>, which has already put the
+    /// windows' ranges right - so a drawing only has to follow what moved
+    /// *inside* its window. Insert above and the window's range carries
+    /// everything; insert in the middle and this is what catches the
+    /// drawings below the insertion.</summary>
+    public bool AnchorItems(Board board)
+    {
+        bool changed = false;
+        foreach (var it in board.Items)
+        {
+            if (it.Host is null || it.Context is null || it.Kind == "file") continue;
+
+            var host = board.Items.FirstOrDefault(w => w.Id == it.Host && w.Kind == "file");
+            // the window it was pinned to is gone. Leave the drawing where
+            // it is rather than moving it somewhere arbitrary, and let it go
+            if (host?.File is null) { it.Host = null; changed = true; continue; }
+
+            int i = ResolveFile(host.File, host.Key);
+            if (i < 0) continue;
+            var f = Data.Files[i];
+            var lines = ReadLines(f.P);
+            if (lines.Length == 0) continue;
+
+            var full = Path.Combine(Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
+            var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, 0, full, lines);
+            if (!at.Resolved) continue;      // an orphan stays where it is
+
+            float step = LineStepIn(host, f);
+            var (from, _) = RangeOf(host, f);
+            float want = host.Y + WinHeadH + (at.Line - from) * step + it.Dy;
+            float dy = want - it.Y;
+            if (Math.Abs(dy) < 0.01f) continue;
+
+            Move(it, 0, dy);
+            changed = true;
+        }
+        return changed;
+    }
+
+    /// <summary>shift one item, whatever kind it is.</summary>
+    public static void Move(BoardItem it, float dx, float dy)
+    {
+        if (Strokes.Is(it)) { Strokes.Move(it, dx, dy); return; }
+        it.X += dx;
+        it.Y += dy;
+        // an arrow is two points; its box is a phantom, so both ends move
+        if (it.Kind == "arrow") { it.X2 += dx; it.Y2 += dy; }
+    }
+
+    /// <summary>put a whole board back on its code: the windows first, then
+    /// whatever is pinned to them.</summary>
+    public bool AnchorBoard(Board board)
+    {
+        bool windows = AnchorWindows(board);
+        bool items = AnchorItems(board);
+        bool pinned = PinLoose(board);
+        return windows || items || pinned;
+    }
+
+    /// <summary>pin anything sitting on a window that is not pinned yet.
+    ///
+    /// A drawing is pinned when it is made or let go of, so a board made
+    /// before any of this has none - the same catching-up `EnsureKeys` does
+    /// for fingerprints. It takes the item where it is now as the truth,
+    /// which for a board that has already drifted is the best available
+    /// answer and stops it drifting any further.
+    ///
+    /// Last, so it sees the positions the two passes above settled on.</summary>
+    public bool PinLoose(Board board)
+    {
+        bool pinned = false;
+        foreach (var it in board.Items)
+        {
+            if (it.Kind == "file" || it.Host is not null) continue;
+            if (WindowAt(it.X, it.Y, it) is null) continue;
+            PinOver(it);
+            pinned |= it.Host is not null;
+        }
+        return pinned;
+    }
+
     /// <summary>record where a window points now, after something moved it
     /// deliberately - clipping it, or changing its range by hand. Without
     /// this the next re-anchor would drag it back to where it used to be.</summary>

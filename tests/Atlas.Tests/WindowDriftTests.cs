@@ -201,3 +201,243 @@ public class WindowDriftTests
         }
     }
 }
+
+/// <summary>a drawing pinned over a window follows the code inside it.
+///
+/// The window's own anchor handles lines inserted *above* it - the range
+/// moves and everything on top stays right. This is the other half: lines
+/// inserted *inside* the range, where the window keeps its first line and
+/// the code below the insertion slides down out from under whatever was
+/// drawn on it.</summary>
+[Collection("render")]
+public class PinnedItemTests
+{
+    const string Path = "app/Pinned.cs";
+
+    static string Source(int fillerInsideFirst)
+    {
+        var lf = ((char)10).ToString();
+        var t = new System.Text.StringBuilder();
+        t.Append("namespace Demo;").Append(lf).Append(lf);
+        t.Append("public class Pinned").Append(lf).Append('{').Append(lf);
+        t.Append("    public int First()").Append(lf).Append("    {").Append(lf);
+        for (int i = 0; i < fillerInsideFirst; i++) t.Append("        // filler").Append(lf);
+        t.Append("        return 1;").Append(lf).Append("    }").Append(lf).Append(lf);
+        t.Append("    public int Second()").Append(lf).Append("    {").Append(lf);
+        t.Append("        return 2;").Append(lf).Append("    }").Append(lf);
+        t.Append('}').Append(lf);
+        return t.ToString();
+    }
+
+    static int LineOf(Scene scene, string needle)
+    {
+        var lines = scene.ReadLines(Path);
+        for (int i = 0; i < lines.Length; i++)
+            if (lines[i].Contains(needle, StringComparison.Ordinal)) return i;
+        return -1;
+    }
+
+    /// <summary>a window onto the whole class, with a rectangle laid over
+    /// the second method - which is below the place the filler goes.</summary>
+    static (Scene Scene, Board Board, BoardItem Window, BoardItem Mark, TempDir Repo) Drawn(int filler)
+    {
+        var repo = SampleRepo.Build();
+        repo.File(Path, Source(filler));
+
+        var scene = new Scene(Scanner.Build(repo.Path));
+        var board = new Board { Id = "b", Name = "pinned" };
+        scene.ActiveBoard = board;
+
+        var f = scene.Data.Files[scene.IndexOfPath(Path)];
+        var window = new BoardItem
+        {
+            Id = "w", Kind = "file", File = Path, Key = scene.KeyFor(Path),
+            X = 0, Y = 0, W = 620, Line = 0, EndLine = -1,
+        };
+        board.Items.Add(window);
+        scene.Reanchor(window);
+
+        float step = scene.LineStepIn(window, f);
+        var mark = new BoardItem
+        {
+            Id = "m", Kind = "shape", W = 200, H = 20,
+            X = 10, Y = window.Y + Scene.WinHeadH + LineOf(scene, "public int Second()") * step,
+        };
+        board.Items.Add(mark);
+        scene.PinOver(mark);
+
+        return (scene, board, window, mark, repo);
+    }
+
+    [Fact]
+    public void ADrawingOverAWindowIsPinnedToIt()
+    {
+        var (scene, _, window, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            Assert.Equal(window.Id, mark.Host);
+            Assert.NotNull(mark.Context);
+            Assert.Equal("Demo.Pinned.Second(0)", mark.Symbol);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void ADrawingOnBareCanvasIsNotPinned()
+    {
+        var (scene, board, _, _, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            var loose = new BoardItem { Id = "l", Kind = "shape", X = 5000, Y = 5000, W = 80, H = 40 };
+            board.Items.Add(loose);
+            scene.PinOver(loose);
+
+            Assert.Null(loose.Host);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>the case this exists for: twenty lines go into the *first*
+    /// method, the second slides down, and the rectangle over it follows.</summary>
+    [Fact]
+    public void InsertingInsideTheWindowMovesWhatIsDrawnBelowIt()
+    {
+        var (scene, board, window, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            float before = mark.Y;
+
+            repo.File(Path, Source(21));                 // twenty more, inside First()
+            Assert.True(scene.AnchorBoard(board), "nothing followed the code");
+
+            Assert.Equal(before + 20 * step, mark.Y, 0.5);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and it is still over the same declaration afterwards, which
+    /// is the thing that actually matters.</summary>
+    [Fact]
+    public void TheDrawingIsStillOverTheSameCode()
+    {
+        var (scene, board, window, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            repo.File(Path, Source(21));
+            scene.AnchorBoard(board);
+
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            var (from, _) = scene.RangeOf(window, f);
+            int under = from + (int)MathF.Round((mark.Y - (window.Y + Scene.WinHeadH)) / step);
+
+            Assert.Equal(LineOf(scene, "public int Second()"), under);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a drawing from a board made before any of this is pinned
+    /// where it is, not moved to where it should have been.
+    ///
+    /// The board may already have drifted, and there is no record of where
+    /// the drawing was meant to be - so taking its current position as the
+    /// truth is the best available answer, and it stops the drift there.
+    /// The same catching-up EnsureKeys does for fingerprints.</summary>
+    [Fact]
+    public void AnUnpinnedDrawingIsPinnedWhereItIsRatherThanMoved()
+    {
+        var (scene, board, _, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            mark.Host = null;
+            mark.Context = null;
+            float before = mark.Y;
+
+            repo.File(Path, Source(21));
+            scene.AnchorBoard(board);
+
+            Assert.Equal(before, mark.Y);
+            Assert.NotNull(mark.Host);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and once pinned it follows the next edit.</summary>
+    [Fact]
+    public void APinnedLooseDrawingFollowsTheNextEdit()
+    {
+        var (scene, board, window, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            mark.Host = null;
+            mark.Context = null;
+            scene.AnchorBoard(board);           // picks it up where it is
+
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            float before = mark.Y;
+
+            repo.File(Path, Source(21));
+            scene.AnchorBoard(board);
+
+            Assert.Equal(before + 20 * step, mark.Y, 0.5);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>ink is points rather than a box, so it has to be translated
+    /// rather than have its Y set.</summary>
+    [Fact]
+    public void InkFollowsToo()
+    {
+        var (scene, board, window, _, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            float at = window.Y + Scene.WinHeadH + LineOf(scene, "public int Second()") * step;
+
+            var ink = new BoardItem { Id = "ink", Kind = "stroke", Weight = 3 };
+            for (int i = 0; i <= 10; i++) Strokes.Add(ink, 20 + i * 8, at, minStep: 0);
+            board.Items.Add(ink);
+            scene.PinOver(ink);
+            Assert.Equal(window.Id, ink.Host);
+
+            float before = ink.Points![1];
+            repo.File(Path, Source(21));
+            scene.AnchorBoard(board);
+
+            Assert.Equal(before + 20 * step, ink.Points[1], 0.5);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a drawing whose window has been removed is let go rather
+    /// than moved somewhere arbitrary.</summary>
+    [Fact]
+    public void LosingTheWindowUnpinsRatherThanMoves()
+    {
+        var (scene, board, window, mark, repo) = Drawn(1);
+        using (repo)
+        using (scene)
+        {
+            float before = mark.Y;
+            board.Items.Remove(window);
+
+            scene.AnchorBoard(board);
+
+            Assert.Null(mark.Host);
+            Assert.Equal(before, mark.Y);
+            scene.ActiveBoard = null;
+        }
+    }
+}

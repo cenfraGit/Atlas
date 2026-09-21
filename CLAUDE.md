@@ -281,12 +281,10 @@ covered by `AnchorTests` and works.
 - [x] Up and down step the commits, which is what a list of commits down
       the side looks like it does. Not while a tour is running: those are
       its arrows.
-- [ ] Drawings still drift when code is inserted *inside* a window's range
-      rather than above it - the range follows the code, but a rectangle
-      over the fifth visible line stays over the fifth visible line. The
-      fix is the same ladder per item: an anchor on anything overlapping a
-      window, resolved the way the window's own is. Worth doing once
-      someone hits it; the common case is insertion above.
+- [ ] A drawing is pinned by its top left corner, so one that spans two
+      windows, or hangs off the bottom of one, follows only the line under
+      that corner. Good enough for a mark on a method; wrong for a frame
+      drawn round two of them.
 - [ ] Show each file as it was *at that commit*, so the code under the
       marks is the code the commit changed rather than today's. The
       snapshot already exists (`ShowSnapshot`); what is missing is doing it
@@ -464,6 +462,15 @@ alongside `_runs` by the loader, and an entry in one without the other means
 `DrawCode` finds text with no syntax runs beside it and paints that whole
 file in a single colour. The search reads every file in the repo, so caching
 there would leave the map grey.
+
+**A drawing over a window belongs to the code, not to the board.** A
+rectangle, note, stroke or loose arrow let go of on top of a file window is
+pinned to the line under its top left corner (`Scene.PinOver`), and
+`Scene.AnchorItems` moves it when that line moves. `Scene.AnchorBoard` runs
+all three passes in order on open: windows first, then what is pinned to
+them, then `PinLoose` picks up anything from a board made before this - where
+it is now, since there is no record of where it was meant to be. Covered by
+`PinnedItemTests`.
 
 **A line number is not a place either.** A board's file window stores
 `Line`/`EndLine`, and inserting twenty lines above line 100 leaves the window

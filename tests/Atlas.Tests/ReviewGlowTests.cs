@@ -65,6 +65,29 @@ public class ReviewGlowTests
     public void ABlockOfChangesIsOneRectangle() =>
         Assert.Single(Scene.Runs(Enumerable.Range(0, 200)));
 
+    // --- a removal is a point, not a span ------------------------------------
+
+    /// <summary>a deletion has no line of its own in the new file: it is
+    /// recorded at the line it was taken from, and several in a row all
+    /// land on the same number. Merging nearby ones into a span therefore
+    /// claims lines that are still there.</summary>
+    [Fact]
+    public void RemovalsAtTheSamePlaceAreOneMark() =>
+        Assert.Equal([40], Scene.Marks([40, 40, 40, 40, 40]));
+
+    [Fact]
+    public void RemovalsNearbyStaySeparateMarks() =>
+        Assert.Equal([40, 42, 44], Scene.Marks([44, 40, 42, 40]));
+
+    /// <summary>which is the difference from Runs, whose whole job is to
+    /// merge - right for additions, wrong for these.</summary>
+    [Fact]
+    public void RunsWouldHaveMergedThem()
+    {
+        var run = Assert.Single(Scene.Runs([40, 42, 44]));
+        Assert.Equal((40, 44), run);
+    }
+
     // --- what is actually painted -------------------------------------------
 
     [Collection("render")]
@@ -287,6 +310,51 @@ public class ReviewGlowTests
 
                 Assert.True(moved > before.Length / 20,
                     $"marking every line changed only {moved} pixels of {before.Length}");
+            }
+        }
+
+        /// <summary>five removals scattered down a file drew one tall solid
+        /// rectangle over the code between them, because the marks were
+        /// merged into a span and the span was filled. The lines between
+        /// two deletions are lines that are still there.</summary>
+        [Fact]
+        public void ScatteredRemovalsDoNotPaintOverTheCodeBetweenThem()
+        {
+            var (spread, repo, _) = Reviewing(
+                0, 5, removedAt: [36, 38, 40, 42, 44], zoom: 1.2f, focusLine: 40);
+
+            using (repo)
+            using (spread)
+            {
+                var px = Pixels(spread);
+
+                // rows that are *filled* with red across the card, not rows
+                // the glow merely reaches. A glow spreading over the code is
+                // the point of it; an opaque band hiding the code is not
+                var del = new SKColor(0xd9, 0x5c, 0x5c);
+                var filled = new bool[H];
+                for (int y = 0; y < H; y++)
+                {
+                    int solid = 0;
+                    for (int x = 0; x < W; x++)
+                    {
+                        var c = px[y * W + x];
+                        if (Math.Abs(c.Red - del.Red) < 40 && Math.Abs(c.Green - del.Green) < 40 &&
+                            Math.Abs(c.Blue - del.Blue) < 40) solid++;
+                    }
+                    filled[y] = solid > 120;
+                }
+
+                int longest = 0, run = 0;
+                foreach (var hit in filled)
+                {
+                    run = hit ? run + 1 : 0;
+                    longest = Math.Max(longest, run);
+                }
+
+                Assert.Contains(true, filled);
+                Assert.True(longest < 8,
+                    $"a {longest} row unbroken band of solid red - that is a block over live code, not marks");
             }
         }
 

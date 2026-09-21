@@ -345,8 +345,11 @@ public class TextOnBoardTests
             var board = new Board { Id = "b", Name = "note" };
             board.Items.Add(new BoardItem
             {
+                // an explicit width: this is a test about the border going
+                // all the way round, and it should not start failing
+                // because the default got thinner - which it did
                 Id = "n", Kind = "note", X = -120, Y = -60, W = 240,
-                Text = "a note", Color = "#ffd166",
+                Text = "a note", Color = "#ffd166", Weight = 3,
             });
 
             using var scene = new Scene(Scanner.Build(repo.Path))

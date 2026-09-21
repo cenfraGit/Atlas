@@ -907,6 +907,17 @@ public sealed class Scene : IDisposable
         return runs;
     }
 
+    /// <summary>where lines were taken out, each once, in order.
+    ///
+    /// Deliberately not <see cref="Runs"/>. A deletion has no line of its
+    /// own in the new file - it is recorded at the line it was taken from,
+    /// and several deletions in a row all land on the same number - so
+    /// merging nearby ones into a span says "these lines went" about lines
+    /// that are still there. Five scattered removals became one tall solid
+    /// rectangle painted over the code between them.</summary>
+    public static List<int> Marks(IEnumerable<int> lines) =>
+        lines.Distinct().Order().ToList();
+
     /// <summary>everything of a file's content went, so the whole card is
     /// the change. A file git actually deleted has no card to draw on - the
     /// scan is of what is there now - so this is the emptied case.</summary>
@@ -985,7 +996,7 @@ public sealed class Scene : IDisposable
             // removals last: they are points rather than spans, and a
             // deletion inside a block of additions has to stay visible
             Bands(change.AddedLines, AddCol, thin: false);
-            Bands(change.RemovedAt, DelCol, thin: true);
+            foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
         }
     }
 
@@ -1046,17 +1057,18 @@ public sealed class Scene : IDisposable
             canvas.DrawRect(0, y, gutter, h, fill);
         }
 
-        // a deletion is a point in the new file, not a span of it, so it
-        // stays a line - but a lit one, with its own mark in the gutter
-        foreach (var (a, b) in Runs(change.RemovedAt))
+        // one thin line per place something was taken out, lit so it can be
+        // seen, and never a block: the code between two removals is code
+        // that is still there and must stay readable
+        float thin = Math.Max(1f, Data.LineH * 0.35f);
+        foreach (var at in Marks(change.RemovedAt))
         {
-            float y = Data.HeaderH + a * Data.LineH;
-            float h = Math.Max(1.2f, (b - a) * Data.LineH);
-            glow.Color = DelCol.WithAlpha(90);
-            canvas.DrawRect(0, y - Data.LineH * 0.5f, f.W, h + Data.LineH, glow);
+            float y = Data.HeaderH + at * Data.LineH;
+            glow.Color = DelCol.WithAlpha(80);
+            canvas.DrawRect(0, y - Data.LineH * 0.5f, f.W, Data.LineH, glow);
             fill.Color = DelCol;
-            canvas.DrawRect(0, y - 0.6f, f.W, h, fill);
-            canvas.DrawRect(0, y - Data.LineH * 0.4f, gutter, h + Data.LineH * 0.8f, fill);
+            canvas.DrawRect(0, y - thin / 2, f.W, thin, fill);
+            canvas.DrawRect(0, y - Data.LineH * 0.4f, gutter, Data.LineH * 0.8f, fill);
         }
     }
 
@@ -1259,7 +1271,10 @@ public sealed class Scene : IDisposable
     /// zoom - which is the one width that cannot be part of a drawing,
     /// because it says nothing about the thing it outlines. The default is
     /// what a hairline looked like at the zoom a board is usually read at.</summary>
-    public const float DefaultBorder = 2f;
+    /// <summary>Lighter than it was. A border of 2 sat beside text of 18
+    /// and looked like a border; beside text of 6, which is what the
+    /// defaults are now, it looked like a frame round a stamp.</summary>
+    public const float DefaultBorder = 1.25f;
 
     public static float LineWidth(BoardItem it, float fallback = DefaultBorder) =>
         it.Weight > 0 ? it.Weight : fallback;
@@ -1859,7 +1874,9 @@ public sealed class Scene : IDisposable
 
     void DrawArrows(SKCanvas canvas, Board board)
     {
-        const float ArrowShaft = 2.5f;
+        // thinner for the same reason the borders are: the words on a board
+        // are the size of code now, and a shaft of 2.5 beside them is a pipe
+        const float ArrowShaft = 1.5f;
         using var line = new SKPaint { IsStroke = true, StrokeWidth = ArrowShaft, IsAntialias = true };
         foreach (var it in board.Items)
         {

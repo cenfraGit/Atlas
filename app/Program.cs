@@ -2446,7 +2446,13 @@ public sealed class SceneView : Control
             _drag = false;
             ApplyCursor();
             e.Pointer.Capture(null);
-            if (!moved) ShowContextMenu(e.GetPosition(this));
+            if (!moved) { ShowContextMenu(e.GetPosition(this)); return; }
+
+            // a secondary drag pans exactly as a primary one does, so letting
+            // go of it throws the canvas the same way. This used to return
+            // before the throw, which made the momentum feel like a property
+            // of the left button rather than of the gesture
+            ThrowPan();
             return;
         }
 

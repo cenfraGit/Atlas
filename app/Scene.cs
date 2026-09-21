@@ -988,6 +988,11 @@ public sealed class Scene : IDisposable
     /// one is a case in a switch rather than a new kind of thing.</summary>
     public static bool IsShape(string kind) => kind is "shape" or "ellipse" or "diamond";
 
+    /// <summary>kinds whose words are the user's, and so can be typed into
+    /// and set at a size. A file window has text too, but it is the file's
+    /// text and its size is the zoom's business.</summary>
+    public static bool HasText(string kind) => kind is "note" or "text" || IsShape(kind);
+
     /// <summary>what to paint a shape's interior with.
     ///
     /// No fill means no fill: the shape is an outline you can see through,
@@ -1052,7 +1057,7 @@ public sealed class Scene : IDisposable
     /// so a diamond's corners do not cut through the first word.</summary>
     void DrawShapeText(SKCanvas canvas, BoardItem it, SKRect box)
     {
-        if (string.IsNullOrWhiteSpace(it.Text)) return;
+        if (string.IsNullOrWhiteSpace(it.Text) || it.Id == EditingItem) return;
 
         float size = SizeOf(it), step = LineStep(size);
         // a diamond holds about half the words a rectangle of the same box
@@ -1112,6 +1117,7 @@ public sealed class Scene : IDisposable
     /// is a heading, and a heading with a panel behind it is a note.</summary>
     void DrawLabel(SKCanvas canvas, BoardItem it)
     {
+        if (it.Id == EditingItem) return;
         float size = SizeOf(it);
         float step = LineStep(size);
         var lines = Wrap(it.Text ?? "", it.W, size, out var paint);
@@ -1309,7 +1315,7 @@ public sealed class Scene : IDisposable
             }
             if (it.Kind == "note")
             {
-                var wrapped = WrapNote(it);
+                var wrapped = it.Id == EditingItem ? [] : WrapNote(it);
                 float h = ItemHeight(it);
                 float size = SizeOf(it), step = LineStep(size);
                 var accent = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
@@ -1582,6 +1588,11 @@ public sealed class Scene : IDisposable
         }
         return null;
     }
+
+    /// <summary>the item whose words are being typed into an editor laid
+    /// over it. Its own text is left undrawn while that is up, or the same
+    /// words appear twice, slightly out of register.</summary>
+    public string? EditingItem;
 
     /// <summary>the stroke being drawn right now, before it is committed.</summary>
     public BoardItem? StrokeDraft;

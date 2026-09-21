@@ -13,6 +13,21 @@ namespace Atlas.Tests;
 /// because it is an aside.</summary>
 public class TextOnBoardTests
 {
+    [Theory]
+    [InlineData("note")]
+    [InlineData("text")]
+    [InlineData("shape")]
+    [InlineData("ellipse")]
+    [InlineData("diamond")]
+    public void TheseAreTheThingsYouCanTypeInto(string kind) => Assert.True(Scene.HasText(kind));
+
+    [Theory]
+    [InlineData("file")]
+    [InlineData("image")]
+    [InlineData("arrow")]
+    [InlineData("stroke")]
+    public void TheseAreNot(string kind) => Assert.False(Scene.HasText(kind));
+
     [Fact]
     public void ALabelIsLargeAndANoteIsSmall() =>
         Assert.True(Scene.DefaultSize("text") > Scene.DefaultSize("note"));
@@ -190,6 +205,106 @@ public class TextOnBoardTests
             large.Size = 40;
 
             Assert.True(Ink(large) > Ink(small));
+        }
+
+        /// <summary>while an editor is laid over an item, the canvas leaves
+        /// that item's own words off. Both drawn at once is the same text
+        /// twice, a pixel or two out of register, which reads as a rendering
+        /// fault rather than as an editor.</summary>
+        [Theory]
+        [InlineData("shape")]
+        [InlineData("ellipse")]
+        [InlineData("diamond")]
+        [InlineData("note")]
+        [InlineData("text")]
+        public void TheWordsBeingTypedAreNotAlsoDrawnUnderneath(string kind)
+        {
+            using var repo = SampleRepo.Build();
+            var it = new BoardItem
+            {
+                Id = "e", Kind = kind, X = -140, Y = -80, W = 280, H = 160,
+                Color = "#5fd3f3", Fill = BoardItem.NoFill,
+                Text = "some words that are being typed",
+            };
+            var board = new Board { Id = "b", Name = "editing" };
+            board.Items.Add(it);
+
+            using var scene = new Scene(Scanner.Build(repo.Path))
+            {
+                ActiveBoard = board, CamX = 0, CamY = 0, CamS = 1f,
+            };
+
+            // counting lit pixels cannot see this: a note's panel already
+            // covers its own glyphs, so removing the words changes their
+            // colour and not whether anything is drawn there at all
+            var shown = Frame(scene);
+            scene.EditingItem = it.Id;
+            var hidden = Frame(scene);
+
+            int moved = 0;
+            for (int i = 0; i < shown.Length; i++) if (shown[i] != hidden[i]) moved++;
+
+            Assert.True(moved > 40,
+                $"{kind}: only {moved} pixels changed when the words were taken off");
+
+            scene.EditingItem = null;
+            scene.ActiveBoard = null;
+        }
+
+        static SKColor[] Frame(Scene scene)
+        {
+            var bmp = new SKBitmap(W, H, SKColorType.Rgba8888, SKAlphaType.Premul);
+            using (var canvas = new SKCanvas(bmp)) { scene.Draw(canvas, W, H); canvas.Flush(); }
+
+            var pixels = new SKColor[W * H];
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    pixels[y * W + x] = bmp.GetPixel(x, y);
+            bmp.Dispose();
+            return pixels;
+        }
+
+        /// <summary>and only that item's. Editing one box must not blank the
+        /// one beside it.</summary>
+        [Fact]
+        public void OnlyTheItemBeingEditedGoesQuiet()
+        {
+            using var repo = SampleRepo.Build();
+            var board = new Board { Id = "b", Name = "editing" };
+            board.Items.Add(new BoardItem
+            {
+                Id = "a", Kind = "shape", X = -180, Y = -80, W = 160, H = 100,
+                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "first",
+            });
+            board.Items.Add(new BoardItem
+            {
+                Id = "b2", Kind = "shape", X = 20, Y = -80, W = 160, H = 100,
+                Color = "#5fd3f3", Fill = BoardItem.NoFill, Text = "second",
+            });
+
+            using var scene = new Scene(Scanner.Build(repo.Path))
+            {
+                ActiveBoard = board, CamX = 0, CamY = 0, CamS = 1f,
+            };
+
+            var before = Frame(scene);
+            scene.EditingItem = "a";
+            var after = Frame(scene);
+
+            // the right hand box is untouched, pixel for pixel
+            for (int y = 140; y < 260; y++)
+                for (int x = 220; x < 380; x++)
+                    Assert.Equal(before[y * W + x], after[y * W + x]);
+
+            // and the left hand one is not, or the test proves nothing
+            int moved = 0;
+            for (int y = 140; y < 260; y++)
+                for (int x = 20; x < 180; x++)
+                    if (before[y * W + x] != after[y * W + x]) moved++;
+            Assert.True(moved > 40, $"only {moved} pixels changed in the box being edited");
+
+            scene.EditingItem = null;
+            scene.ActiveBoard = null;
         }
 
         /// <summary>the accent used to be a three unit bar down the left

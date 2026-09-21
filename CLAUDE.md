@@ -79,6 +79,17 @@ change freely.
       empty shape keeps its hitbox, so it works as a frame round other
       things; picking has always gone by the box and now there is a test
       saying it must.
+- [x] Typing into an item where it sits (`InlineEditor.cs`), on double
+      click or from the menu. A note used to be edited through the prompt at
+      the top of the window: you double-click something in the middle of the
+      canvas, look elsewhere to type, and look back to see what happened -
+      and on a diagram the thing you are naming is usually one of several
+      similar boxes, so the dialog takes away the context that tells them
+      apart. Enter commits, shift+Enter starts a line, Escape puts back what
+      was there, clicking away commits. `Scene.EditingItem` keeps the canvas
+      from drawing the same words underneath the box. A new note or label
+      opens straight into it, and a label left empty is dropped rather than
+      left on the board as an invisible thing to trip over.
 - [x] Words inside a shape, centred and wrapped, which is what most of a
       flowchart is. Writing one used to mean laying a separate label over a
       rectangle and moving the two together for ever afterwards.

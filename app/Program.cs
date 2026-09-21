@@ -90,6 +90,9 @@ public sealed class App : Application
             var eraserBar = new EraserBar();
             view.AttachEraserBar(eraserBar);
 
+            var editor = new InlineEditor();
+            view.AttachEditor(editor);
+
             var islands = new ModeIslands();
             islands.EditChanged += view.SetEditing;
             islands.ZoomChanged += view.SetWheelZoom;
@@ -111,6 +114,9 @@ public sealed class App : Application
             root.Children.Add(commits);
             root.Children.Add(reviews);
             root.Children.Add(prompt);
+            // over everything: it is inside an item, and an item is on the
+            // canvas under all of these
+            root.Children.Add(editor);
 
             view.BuildLayers();
 
@@ -330,6 +336,8 @@ public sealed class SceneView : Control
         if (_autoBench && _phase < 0 && !_benchDone && ++_warmFrames > 30) { _phase = 0; _phaseFrame = 0; }
         if (_phase >= 0) StepBench(w);
 
+        if (EditingItem() is { } typing) PlaceEditor(typing);
+
         context.Custom(new SceneOp(new Rect(0, 0, w, h), _scene, w, h));
         if (_scene.Samples.Count > 0)
         {
@@ -391,8 +399,9 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is not null)
         {
             var (bx, by) = WorldAt(e.GetPosition(this));
-            // a label and a note are both words you double click to change
-            if (_scene.ItemAt(bx, by) is { Kind: "note" or "text" } words) EditNote(words);
+            // anything with words in it, which now includes the shapes: a
+            // rectangle you double click is a rectangle you are naming
+            if (_scene.ItemAt(bx, by) is { } words && HasText(words)) BeginEdit(words);
             return;
         }
         if (_scene.Tier < 3 || !Editing) return;
@@ -524,7 +533,9 @@ public sealed class SceneView : Control
     /// and an armed tool is the last thing standing.</summary>
     public void BuildLayers()
     {
-        // innermost first: a menu opens over a panel, a prompt over the canvas
+        // innermost first: a menu opens over a panel, a prompt over the
+        // canvas, and an editor is inside the item itself
+        Layers.Add("editing", () => _editor is { Editing: true }, () => _editor!.Cancel());
         Layers.Add("menu", () => _menuOpen, CloseMenu);
         Layers.Add("prompt", () => Reveal.Showing(_prompt), () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
@@ -686,8 +697,8 @@ public sealed class SceneView : Control
             ContextActions.Item($"── {header} ──", () => { }, enabled: false),
         };
 
-        if (picked.Count == 1 && picked[0].Kind is "note" or "text")
-            items.Add(ContextActions.Item("Edit text...", () => EditNote(picked[0])));
+        if (picked.Count == 1 && HasText(picked[0]))
+            items.Add(ContextActions.Item("Edit text", () => BeginEdit(picked[0])));
         if (picked.Count == 1 && picked[0].Kind == "file")
             items.Add(ContextActions.Item("Change line range...", () => EditRange(picked[0])));
         if (picked.Count == 2)
@@ -1186,10 +1197,7 @@ public sealed class SceneView : Control
     static bool HasLineWidth(BoardItem it) =>
         Strokes.Is(it) || Scene.IsShape(it.Kind) || it.Kind is "arrow" or "note";
 
-    /// <summary>everything with words in it. A file window's text is the
-    /// file's, and its size is the zoom's business.</summary>
-    static bool HasText(BoardItem it) =>
-        it.Kind is "note" or "text" || Scene.IsShape(it.Kind);
+    static bool HasText(BoardItem it) => Scene.HasText(it.Kind);
 
     List<BoardItem> PickedLines() =>
         _scene.ActiveBoard is not { } b
@@ -1225,6 +1233,63 @@ public sealed class SceneView : Control
         _boardDirty = true;
         InvalidateVisual();
     }
+    InlineEditor? _editor;
+
+    public void AttachEditor(InlineEditor editor) => _editor = editor;
+
+    /// <summary>type into an item where it sits. Anything with words: a note,
+    /// a label, or a shape - a shape with no text yet is being given some,
+    /// which is how a box becomes a box that says "parse".</summary>
+    void BeginEdit(BoardItem it)
+    {
+        if (_editor is null || _scene.ActiveBoard is not { } board) return;
+        if (_scene.BoardReadOnly) { Toast("this view is read only"); return; }
+        if (!HasText(it)) return;
+
+        _scene.EditingItem = it.Id;
+        PlaceEditor(it);
+        _editor.Begin(it.Id, it.Text ?? "", text =>
+        {
+            _scene.EditingItem = null;
+            if (text != (it.Text ?? ""))
+            {
+                Remember();
+                it.Text = text;
+                _boardStore?.Save(board);
+                Saved(Named(it.Kind));
+            }
+            // an empty label is nothing at all - no panel, no border, no
+            // words - so it would be an invisible thing to trip over later
+            if (it.Kind == "text" && string.IsNullOrWhiteSpace(text))
+            {
+                board.Items.Remove(it);
+                _scene.Picked.Remove(it.Id);
+                _boardStore?.Save(board);
+            }
+            Focus();
+            InvalidateVisual();
+        });
+        InvalidateVisual();
+    }
+
+    /// <summary>put the editor over the item it is editing, in screen space.
+    /// Called every frame, because the canvas can pan and zoom underneath an
+    /// open editor and a box that stayed put would be editing one thing
+    /// while pointing at another.</summary>
+    void PlaceEditor(BoardItem it)
+    {
+        if (_editor is null) return;
+        float s = _scene.CamS;
+        double x = (it.X - _scene.CamX) * s + Bounds.Width / 2;
+        double y = (it.Y - _scene.CamY) * s + Bounds.Height / 2;
+        _editor.Place(x, y, it.W * s, _scene.ItemHeight(it) * s, Scene.SizeOf(it) * s);
+    }
+
+    BoardItem? EditingItem() =>
+        _scene.EditingItem is { } id && _scene.ActiveBoard is { } b
+            ? b.Items.FirstOrDefault(i => i.Id == id)
+            : null;
+
     BoardItem? _arrowEnd;
     int _arrowEndWhich;
     ContextMenu? _menu;
@@ -1986,24 +2051,23 @@ public sealed class SceneView : Control
     /// wrap to - and its height from the words themselves.</summary>
     void PlaceLabel(SKRect box)
     {
-        if (_scene.ActiveBoard is not { } board || _prompt is null) return;
+        if (_scene.ActiveBoard is not { } board) return;
 
-        _prompt.Ask("label text", "", text =>
+        Remember();
+        var item = new BoardItem
         {
-            Remember();
-            var item = new BoardItem
-            {
-                Id = BookmarkStore.NewId(), Kind = "text", Text = text,
-                X = box.Left, Y = box.Top, W = box.Width,
-                Size = Scene.LabelSize, Color = PenColor,
-            };
-            board.Items.Add(item);
-            _scene.Picked.Clear();
-            _scene.Picked.Add(item.Id);
-            _boardStore?.Save(board);
-            Saved($"label on  {board.Name}");
-            Focus();
-        });
+            Id = BookmarkStore.NewId(), Kind = "text", Text = "",
+            X = box.Left, Y = box.Top, W = box.Width, Color = PenColor,
+        };
+        board.Items.Add(item);
+        _scene.Picked.Clear();
+        _scene.Picked.Add(item.Id);
+        _boardStore?.Save(board);
+
+        // straight into typing, where the label is. Asking for the words in
+        // a dialog at the top of the window means drawing a label somewhere
+        // and then looking away from it to say what it is
+        BeginEdit(item);
     }
 
     void AddLabel() => AddShape("text");
@@ -2162,19 +2226,6 @@ public sealed class SceneView : Control
         Saved($"pasted {_clipboard.Count}");
     }
 
-    void EditNote(BoardItem note)
-    {
-        if (_prompt is null) return;
-        _prompt.Ask("edit the note", note.Text ?? "", text =>
-        {
-            Remember();
-            note.Text = text;
-            if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
-            Saved("note");
-            Focus();
-        });
-    }
-
     void EditRange(BoardItem window)
     {
         if (_prompt is null) return;
@@ -2229,24 +2280,23 @@ public sealed class SceneView : Control
 
     void AddNote()
     {
-        if (_scene.ActiveBoard is not { } board || _prompt is null) return;
-        _prompt.Ask("note text", "", text =>
+        if (_scene.ActiveBoard is not { } board) return;
+
+        Remember();
+        var item = new BoardItem
         {
-            Remember();
-            var item = new BoardItem
-            {
-                Id = BookmarkStore.NewId(), Kind = "note", Text = text,
-                W = 380,
-                // where the user is looking, not off beside everything else
-                X = _scene.CamX - 190,
-                Y = _scene.CamY - 40,
-            };
-            board.Items.Add(item);
-            _boardStore?.Save(board);
-            _boards?.Rebuild();
-            Focus();
-            InvalidateVisual();
-        });
+            Id = BookmarkStore.NewId(), Kind = "note", Text = "",
+            W = 380,
+            // where the user is looking, not off beside everything else
+            X = _scene.CamX - 190,
+            Y = _scene.CamY - 40,
+        };
+        board.Items.Add(item);
+        _scene.Picked.Clear();
+        _scene.Picked.Add(item.Id);
+        _boardStore?.Save(board);
+        _boards?.Rebuild();
+        BeginEdit(item);
     }
 
     public void FlyToBookmark(Bookmark b)

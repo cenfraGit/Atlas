@@ -110,6 +110,13 @@ change freely.
 
 ### Dialogs
 
+- [x] Panels arrive rather than appearing (`Reveal.cs`). Flipping
+      `IsVisible` puts a panel on screen between one frame and the next,
+      which reads as a jump cut. A side panel slides in from the edge it is
+      anchored to; the ones in the middle of the top drop a few pixels and
+      fade. **Open is a `Reveal.Showing` question now, not an `IsVisible`
+      one** - a panel on its way out is still visible and must not answer
+      Escape. Any new overlay calls `Reveal.Attach` in its constructor.
 - [x] `Layers` owns dismissal and the window sees Escape in the tunnel phase,
       so a dialog can no longer strand itself by losing focus. **Any new
       overlay must be registered in `BuildLayers` or it inherits the old

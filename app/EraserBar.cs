@@ -24,7 +24,7 @@ public sealed class EraserBar : Border
 
     public EraserBar()
     {
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -82,7 +82,7 @@ public sealed class EraserBar : Border
 
     public void Reflect(bool visible, float radius, bool split)
     {
-        IsVisible = visible;
+        Reveal.Set(this, visible);
         _size.Text = $"eraser {radius:0}   [ ]";
         Light(_whole, !split);
         Light(_split, split);

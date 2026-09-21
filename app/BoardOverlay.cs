@@ -39,7 +39,7 @@ public sealed class BoardOverlay : Border
     public BoardOverlay(BoardStore store)
     {
         _store = store;
-        IsVisible = false;
+        Reveal.Attach(this, Reveal.Edge.Left);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(0, 0, 1, 0);
@@ -112,10 +112,10 @@ public sealed class BoardOverlay : Border
     public void Show()
     {
         Rebuild();
-        IsVisible = true;
+        Reveal.Show(this);
     }
 
-    public void Close() => IsVisible = false;
+    public void Close() => Reveal.Hide(this);
 
     public void Rebuild()
     {

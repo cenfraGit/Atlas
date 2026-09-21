@@ -29,7 +29,7 @@ public sealed class CommitsPanel : Border
 
     public CommitsPanel()
     {
-        IsVisible = false;
+        Reveal.Attach(this, Reveal.Edge.Right);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1, 0, 0, 0);
@@ -76,10 +76,10 @@ public sealed class CommitsPanel : Border
         var rows = new List<string> { $"all {commits.Count} commit{(commits.Count == 1 ? "" : "s")}" };
         rows.AddRange(commits.Select((c, i) => $"{i + 1,2}. {c.Short}  {Trim(c.Subject, 30)}"));
         _list.ItemsSource = rows;
-        IsVisible = true;
+        Reveal.Show(this);
     }
 
-    public void Close() => IsVisible = false;
+    public void Close() => Reveal.Hide(this);
 
     /// <summary>reflect a change made with the bracket keys, without looping
     /// back into Picked.</summary>

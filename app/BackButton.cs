@@ -22,7 +22,7 @@ public sealed class BackButton : Border
 
     public BackButton()
     {
-        IsVisible = false;
+        Reveal.Attach(this, Reveal.Edge.Left);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -50,7 +50,7 @@ public sealed class BackButton : Border
     /// it is going back from.</summary>
     public void Reflect(bool onBoard, string? what = null)
     {
-        IsVisible = onBoard;
+        Reveal.Set(this, onBoard);
         _label.Text = what is null ? "<  map" : $"<  map     {what}";
     }
 }

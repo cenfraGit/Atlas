@@ -32,7 +32,7 @@ public sealed class AnnotationOverlay : Border
     {
         _store = store;
         _scene = scene;
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -121,7 +121,7 @@ public sealed class AnnotationOverlay : Border
     /// <summary>after an edit elsewhere, so the list is not showing old text.</summary>
     public void Refresh()
     {
-        if (!IsVisible) return;
+        if (!Reveal.Showing(this)) return;
         int at = _list.SelectedIndex;
         Rebuild();
         if (_rows.Count > 0) _list.SelectedIndex = Math.Clamp(at, 0, _rows.Count - 1);
@@ -131,11 +131,11 @@ public sealed class AnnotationOverlay : Border
     {
         _scene.EnsureAllAnchored();
         Rebuild();
-        IsVisible = true;
+        Reveal.Show(this);
         if (_rows.Count > 0) _list.SelectedIndex = 0;
     }
 
-    public void Close() => IsVisible = false;
+    public void Close() => Reveal.Hide(this);
 
     static int Severity(AnchorKind k) => k switch
     {

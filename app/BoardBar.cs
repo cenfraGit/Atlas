@@ -18,7 +18,7 @@ public sealed class BoardBar : Border
 
     public BoardBar()
     {
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -67,7 +67,7 @@ public sealed class BoardBar : Border
     /// stroke you did not mean to the next time you drag.</summary>
     public void Reflect(bool editing, bool snap, string? armed = null)
     {
-        IsVisible = editing;
+        Reveal.Set(this, editing);
         _snap.Foreground = snap ? Ui.Accent : Ui.Dim;
         foreach (var (kind, button) in _tools)
             button.Foreground = kind == armed ? Ui.Accent : Ui.Dim;

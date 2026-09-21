@@ -17,7 +17,7 @@ public sealed class ReviewOverlay : Border
 
     public ReviewOverlay()
     {
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -52,13 +52,13 @@ public sealed class ReviewOverlay : Border
             : $"{what}   -   on {branch}   -   enter: open   esc: close" +
               "\nthen  ]  and  [  step through its commits";
         if (targets.Count > 0) _list.SelectedIndex = 0;
-        IsVisible = true;
+        Reveal.Show(this);
     }
 
     static string Pad(string s, int width) =>
         s.Length <= width ? s.PadRight(width) : s[..(width - 1)] + "…";
 
-    public void Close() => IsVisible = false;
+    public void Close() => Reveal.Hide(this);
 
     public bool HandleKey(Key key)
     {

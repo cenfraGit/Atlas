@@ -27,7 +27,7 @@ public sealed class SearchOverlay : Border
     public SearchOverlay(Scene scene)
     {
         _scene = scene;
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = PanelBg;
         BorderBrush = Edge;
         BorderThickness = new Thickness(1);
@@ -66,7 +66,7 @@ public sealed class SearchOverlay : Border
 
     public void Open()
     {
-        IsVisible = true;
+        Reveal.Show(this);
         Requery();
         // the '/' that opened this panel is still in flight as text input; take
         // focus after it has been delivered, so it does not land in the box
@@ -76,7 +76,7 @@ public sealed class SearchOverlay : Border
 
     public void Close()
     {
-        IsVisible = false;
+        Reveal.Hide(this);
     }
 
     void Requery()

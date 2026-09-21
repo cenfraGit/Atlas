@@ -50,7 +50,7 @@ public sealed class App : Application
             var search = new SearchOverlay(scene);
             search.Chosen += view.OnFileChosen;
             view.OpenSearch = search.Open;
-            view.SearchOpen = () => search.IsVisible;
+            view.SearchOpen = () => Reveal.Showing(search);
             view.CloseSearch = search.Close;
 
             var store = BookmarkStore.Load(scene.Data.Root);
@@ -526,12 +526,12 @@ public sealed class SceneView : Control
     {
         // innermost first: a menu opens over a panel, a prompt over the canvas
         Layers.Add("menu", () => _menuOpen, CloseMenu);
-        Layers.Add("prompt", () => _prompt is { IsVisible: true }, () => { _prompt!.Close(); Focus(); });
+        Layers.Add("prompt", () => Reveal.Showing(_prompt), () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
-        Layers.Add("boards", () => _boards is { IsVisible: true }, () => _boards!.Close());
-        Layers.Add("bookmarks", () => _marks is { IsVisible: true }, () => _marks!.Close());
-        Layers.Add("annotations", () => _notes is { IsVisible: true }, () => _notes!.Close());
-        Layers.Add("reviews", () => _reviews is { IsVisible: true }, () => _reviews!.Close());
+        Layers.Add("boards", () => Reveal.Showing(_boards), () => _boards!.Close());
+        Layers.Add("bookmarks", () => Reveal.Showing(_marks), () => _marks!.Close());
+        Layers.Add("annotations", () => Reveal.Showing(_notes), () => _notes!.Close());
+        Layers.Add("reviews", () => Reveal.Showing(_reviews), () => _reviews!.Close());
         Layers.Add("tour", () => _tour is not null, EndTour);
         Layers.Add("tool", () => _armBrush || _armEraser || _armArrow || _armShape is not null, DisarmTools);
         Layers.Add("selection", HasSelection, ClearSelection);
@@ -2910,10 +2910,10 @@ public sealed class SceneView : Control
         if (key == Key.Escape) return;
 
         // panels have no focus of their own; the canvas drives them
-        if (_marks is { IsVisible: true } && _marks.HandleKey(key)) { InvalidateVisual(); return; }
-        if (_boards is { IsVisible: true } && _boards.HandleKey(key)) { InvalidateVisual(); return; }
-        if (_notes is { IsVisible: true } && _notes.HandleKey(key)) { InvalidateVisual(); return; }
-        if (_reviews is { IsVisible: true } && _reviews.HandleKey(key)) { InvalidateVisual(); return; }
+        if (Reveal.Showing(_marks) && _marks!.HandleKey(key)) { InvalidateVisual(); return; }
+        if (Reveal.Showing(_boards) && _boards!.HandleKey(key)) { InvalidateVisual(); return; }
+        if (Reveal.Showing(_notes) && _notes!.HandleKey(key)) { InvalidateVisual(); return; }
+        if (Reveal.Showing(_reviews) && _reviews!.HandleKey(key)) { InvalidateVisual(); return; }
 
         if (_scene.Review is not null)
         {

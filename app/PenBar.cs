@@ -28,7 +28,7 @@ public sealed class PenBar : Border
 
     public PenBar((string Name, string Hex)[] colours)
     {
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -76,7 +76,7 @@ public sealed class PenBar : Border
 
     public void Reflect(bool visible, float weight, string? colour)
     {
-        IsVisible = visible;
+        Reveal.Set(this, visible);
         _weight.Text = $"pen {weight:0.#}   [ ]";
         foreach (var (hex, chip) in _chips)
             chip.BorderBrush = string.Equals(hex, colour, StringComparison.OrdinalIgnoreCase)

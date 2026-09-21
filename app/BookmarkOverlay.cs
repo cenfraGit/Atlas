@@ -16,7 +16,7 @@ public sealed class PromptOverlay : Border
 
     public PromptOverlay()
     {
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -57,7 +57,7 @@ public sealed class PromptOverlay : Border
         _label.Text = label;
         _box.Text = initial;
         _done = done;
-        IsVisible = true;
+        Reveal.Show(this);
         // see SearchOverlay.Open: the hotkey's character is still in flight
         Dispatcher.UIThread.Post(() => { _box.SelectAll(); _box.Focus(); },
             DispatcherPriority.Background);
@@ -65,7 +65,7 @@ public sealed class PromptOverlay : Border
 
     public void Close()
     {
-        IsVisible = false;
+        Reveal.Hide(this);
         _done = null;
     }
 }
@@ -89,7 +89,7 @@ public sealed class BookmarkOverlay : Border
     {
         _store = store;
         _scene = scene;
-        IsVisible = false;
+        Reveal.Attach(this);
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1);
@@ -118,11 +118,11 @@ public sealed class BookmarkOverlay : Border
     public void Open()
     {
         Rebuild();
-        IsVisible = true;
+        Reveal.Show(this);
         if (_rows.Count > 0) _list.SelectedIndex = 0;
     }
 
-    public void Close() => IsVisible = false;
+    public void Close() => Reveal.Hide(this);
 
     void Rebuild()
     {

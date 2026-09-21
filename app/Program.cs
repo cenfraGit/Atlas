@@ -864,7 +864,7 @@ public sealed class SceneView : Control
     void AddFilesToBoard(Board board, List<int> files)
     {
         if (_boardStore is null) return;
-        float y = board.Items.Count == 0 ? 0 : board.Items.Max(i => i.Y + _scene.ItemHeight(i)) + 40;
+        float y = board.Items.Count == 0 ? 0 : board.Items.Max(i => i.Y + _scene.LastHeight(i)) + 40;
         foreach (var i in files)
         {
             var f = _scene.Data.Files[i];
@@ -2031,7 +2031,7 @@ public sealed class SceneView : Control
     {
         if (board.Items.Count == 0) { item.X = 0; item.Y = 0; return; }
         item.X = board.Items.Min(i => i.X);
-        item.Y = board.Items.Max(i => i.Y + _scene.ItemHeight(i)) + 40;
+        item.Y = board.Items.Max(i => i.Y + _scene.LastHeight(i)) + 40;
     }
 
     /// <summary>a picture on the board, from a file on disk.</summary>
@@ -2935,7 +2935,7 @@ public sealed class SceneView : Control
         if (_resizing is not null)
         {
             var (rx, ry) = WorldAt(p);
-            float ratio = _scene.ItemHeight(_resizing) / Math.Max(1, _resizing.W);
+            float ratio = _scene.LastHeight(_resizing) / Math.Max(1, _resizing.W);
 
             // the corner follows the pointer and the opposite one stays put
             _scene.Resize(_resizing, _resizeCorner, rx, ry);

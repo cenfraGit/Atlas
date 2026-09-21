@@ -162,4 +162,90 @@ public class SceneThreadingTests
             scene.ActiveBoard = null;
         }
     }
+
+    static (BoardItem Note, BoardItem Label) Wordy(Board board)
+    {
+        var note = new BoardItem
+        {
+            Id = "n", Kind = "note", X = 0, Y = 0, W = 300,
+            Text = "a note with enough words in it to wrap onto several lines",
+        };
+        var label = new BoardItem { Id = "t", Kind = "text", X = 0, Y = 400, W = 300, Text = "a heading" };
+        board.Items.Add(note);
+        board.Items.Add(label);
+        board.Items.Add(new BoardItem { Id = "a", Kind = "arrow", From = "n", To = "t" });
+        return (note, label);
+    }
+
+    /// <summary>picking, the band, the eraser, resizing, fitting and clamping
+    /// all run on the UI thread, and a note's height comes from measuring its
+    /// words. None of them may do the measuring themselves.</summary>
+    [Fact]
+    public void NothingOffTheDrawLoopMeasuresText()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var (note, _) = Wordy(board);
+            scene.Picked.Add("n");
+
+            Frame(scene);                 // the draw loop measures, and only it
+            scene.TextMeasures = 0;
+
+            scene.ItemAt(10, 10);
+            scene.ItemsIn(new SKRect(-500, -500, 500, 500)).ToList();
+            scene.ItemsNear(10, 10, 20);
+            scene.GripAt(300, 60);
+            scene.ArrowAt(150, 200);
+            scene.ArrowEndAt(0, 0);
+            scene.AnchorAt(150, 0);
+            scene.LineInWindowAt(10, 10);
+            scene.Resize(note, 0, 320, 200);
+            scene.FitBoard(W, H);
+            scene.ClampCamera(W, H);
+            scene.MinZoomFor(W, H);
+
+            Assert.Equal(0, scene.TextMeasures);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and what it reads back is the real height, not an estimate -
+    /// a cheap wrong answer would be worse than the crash it avoids.</summary>
+    [Fact]
+    public void TheHeightLeftBehindIsTheMeasuredOne()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var (note, label) = Wordy(board);
+            Frame(scene);
+
+            Assert.Equal(scene.ItemHeight(note), scene.LastHeight(note), 2);
+            Assert.Equal(scene.ItemHeight(label), scene.LastHeight(label), 2);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>an item made this frame has not been drawn yet, so there is
+    /// nothing left behind to read. It still has to answer with a height, or
+    /// a new note cannot be picked up until the frame after it appears.</summary>
+    [Fact]
+    public void AnItemThatHasNeverBeenDrawnStillHasAHeight()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var (note, label) = Wordy(board);
+            scene.TextMeasures = 0;
+
+            Assert.True(scene.LastHeight(note) > 0);
+            Assert.True(scene.LastHeight(label) > 0);
+            Assert.Equal(0, scene.TextMeasures);
+            scene.ActiveBoard = null;
+        }
+    }
 }

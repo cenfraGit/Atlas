@@ -1079,6 +1079,36 @@ public sealed class Scene : IDisposable
         return (from, to);
     }
 
+    /// <summary>how many times words have been measured with SkiaSharp.
+    ///
+    /// The tests watch this rather than watching a thread, because what goes
+    /// wrong when two threads measure at once is not an exception: the
+    /// process disappears. A counter says "nobody measured" in a way that can
+    /// be asserted on.</summary>
+    public int TextMeasures;
+
+    readonly Dictionary<string, float> _measured = [];
+
+    /// <summary>how tall an item was when it was last drawn, measuring
+    /// nothing to answer.
+    ///
+    /// Only a note and a label get their height from wrapping their words,
+    /// and wrapping measures text. The draw loop works that out every frame
+    /// anyway, so everything off the draw loop - picking, the rubberband,
+    /// resizing, fitting the view - reads what it left behind instead. See
+    /// the threading note in CLAUDE.md: the UI thread measuring while the
+    /// render thread draws takes the process down with nothing to catch.</summary>
+    public float LastHeight(BoardItem it)
+    {
+        if (it.Kind is not ("note" or "text")) return ItemHeight(it);
+        if (_measured.TryGetValue(it.Id, out var h)) return h;
+
+        // never drawn: one line's worth, the closest guess that measures
+        // nothing. The next frame replaces it with the truth
+        float one = LineStep(SizeOf(it)) + (it.Kind == "note" ? NotePad * 2 : 0);
+        return Math.Max(it.H, one);
+    }
+
     public float ItemHeight(BoardItem it)
     {
         if (it.Kind == "arrow") return 0;
@@ -1266,6 +1296,7 @@ public sealed class Scene : IDisposable
     List<string> Wrap(string text, float max, float size, out SKPaint paint)
     {
         var outLines = new List<string>();
+        TextMeasures++;
         paint = new SKPaint { Typeface = _mono, TextSize = size, IsAntialias = true };
 
         foreach (var para in text.Split(LF))
@@ -1296,7 +1327,7 @@ public sealed class Scene : IDisposable
             // edge still lands on the thing you were aiming at
             float pad = 3f / CamS;
             if (wx >= it.X - pad && wx <= it.X + it.W + pad &&
-                wy >= it.Y - pad && wy <= it.Y + ItemHeight(it) + pad) return it;
+                wy >= it.Y - pad && wy <= it.Y + LastHeight(it) + pad) return it;
         }
         return null;
     }
@@ -1307,7 +1338,7 @@ public sealed class Scene : IDisposable
         if (ActiveBoard is null) yield break;
         foreach (var it in ActiveBoard.Items)
         {
-            float h = ItemHeight(it);
+            float h = LastHeight(it);
             if (it.X < r.Right && it.X + it.W > r.Left && it.Y < r.Bottom && it.Y + h > r.Top)
                 yield return it;
         }
@@ -1403,8 +1434,10 @@ public sealed class Scene : IDisposable
         foreach (var it in board.Items)
         {
             if (it.Kind == "arrow" || Strokes.Is(it)) continue;   // drawn after, on top
-            // measured here, on the render thread, for the UI thread to read
-            if (it.Id == EditingItem) EditingHeight = ItemHeight(it);
+            // the one place a note or a label is measured. Everything that is
+            // not the draw loop reads the answer back with LastHeight
+            if (it.Kind is "note" or "text") _measured[it.Id] = ItemHeight(it);
+            if (it.Id == EditingItem) EditingHeight = LastHeight(it);
             if (IsShape(it.Kind))
             {
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
@@ -1437,7 +1470,7 @@ public sealed class Scene : IDisposable
             if (it.Kind == "note")
             {
                 var wrapped = it.Id == EditingItem ? [] : WrapNote(it);
-                float h = ItemHeight(it);
+                float h = LastHeight(it);
                 float size = SizeOf(it), step = LineStep(size);
                 var accent = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
                 noteEdge.Color = accent;
@@ -1557,7 +1590,7 @@ public sealed class Scene : IDisposable
 
     public SKPoint AnchorOf(BoardItem it, int side)
     {
-        float h = ItemHeight(it);
+        float h = LastHeight(it);
         float cx = it.X + it.W / 2, cy = it.Y + h / 2;
         return side switch
         {
@@ -1652,7 +1685,7 @@ public sealed class Scene : IDisposable
         return null;   // tied to something that is gone: the end falls loose
     }
 
-    SKPoint Centre(BoardItem it) => new(it.X + it.W / 2, it.Y + ItemHeight(it) / 2);
+    SKPoint Centre(BoardItem it) => new(it.X + it.W / 2, it.Y + LastHeight(it) / 2);
 
     void DrawArrows(SKCanvas canvas, Board board)
     {
@@ -1900,7 +1933,7 @@ public sealed class Scene : IDisposable
                 continue;
             }
 
-            float h = ItemHeight(it);
+            float h = LastHeight(it);
             if (it.X < box.Right && it.X + it.W > box.Left &&
                 it.Y < box.Bottom && it.Y + h > box.Top) hit.Add(it);
         }
@@ -2029,7 +2062,7 @@ public sealed class Scene : IDisposable
             int i = ResolveFile(it.File, it.Key);
             if (i < 0) continue;
             var f = Data.Files[i];
-            float h = ItemHeight(it);
+            float h = LastHeight(it);
             if (wx < it.X || wx > it.X + it.W || wy < it.Y || wy > it.Y + h) continue;
 
             var (from, to) = RangeOf(it, f);
@@ -2058,7 +2091,7 @@ public sealed class Scene : IDisposable
             var it = ActiveBoard.Items[i];
             if (!Picked.Contains(it.Id) || !Resizable(it)) continue;
 
-            float h = ItemHeight(it);
+            float h = LastHeight(it);
             for (int corner = 0; corner < 4; corner++)
             {
                 float gx = (corner & GripLeft) != 0 ? it.X : it.X + it.W;
@@ -2075,7 +2108,7 @@ public sealed class Scene : IDisposable
     /// means the item's origin moves, not only its size.</summary>
     public void Resize(BoardItem it, int corner, float wx, float wy, float min = 8f)
     {
-        float h = ItemHeight(it);
+        float h = LastHeight(it);
         float left = it.X, top = it.Y, right = it.X + it.W, bottom = it.Y + h;
 
         if ((corner & GripLeft) != 0) left = Math.Min(wx, right - min);
@@ -2178,7 +2211,7 @@ public sealed class Scene : IDisposable
         }
         float x0 = board.Items.Min(i => i.X), y0 = board.Items.Min(i => i.Y);
         float x1 = board.Items.Max(i => i.X + i.W);
-        float y1 = board.Items.Max(i => i.Y + ItemHeight(i));
+        float y1 = board.Items.Max(i => i.Y + LastHeight(i));
         CamX = (x0 + x1) / 2;
         CamY = (y0 + y1) / 2;
         CamS = Math.Min(vw / Math.Max(1, x1 - x0), vh / Math.Max(1, y1 - y0)) * 0.88f;
@@ -2207,7 +2240,7 @@ public sealed class Scene : IDisposable
             board.Items.Min(i => Math.Min(i.X, i.Kind == "arrow" ? i.X2 : i.X)),
             board.Items.Min(i => Math.Min(i.Y, i.Kind == "arrow" ? i.Y2 : i.Y)),
             board.Items.Max(i => Math.Max(i.X + i.W, i.Kind == "arrow" ? i.X2 : i.X)),
-            board.Items.Max(i => Math.Max(i.Y + ItemHeight(i), i.Kind == "arrow" ? i.Y2 : i.Y)));
+            board.Items.Max(i => Math.Max(i.Y + LastHeight(i), i.Kind == "arrow" ? i.Y2 : i.Y)));
     }
 
     const float EmptyBoard = 1200;

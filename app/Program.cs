@@ -628,8 +628,14 @@ public sealed class SceneView : Control
             items.Add(ContextActions.Item("Connect these", () => Connect(picked[0], picked[1])));
 
         // only what applies to everything picked
-        if (picked.Count > 0 && picked.All(i => i.Kind is "note" or "shape" or "arrow"))
-            items.Add(ContextActions.Submenu("Colour", Palette(picked)));
+        if (picked.Count > 0 &&
+            picked.All(i => i.Kind is "note" or "arrow" or "text" || Scene.IsShape(i.Kind) || Strokes.Is(i)))
+            items.Add(ContextActions.Submenu(
+                picked.All(i => Scene.IsShape(i.Kind)) ? "Border colour" : "Colour", Palette(picked)));
+
+        // a fill is a shape's own business; a note or an arrow has no inside
+        if (picked.Count > 0 && picked.All(i => Scene.IsShape(i.Kind)))
+            items.Add(ContextActions.Submenu("Fill", Fills(picked)));
         if (picked.Count > 0)
         {
             items.Add(ContextActions.Item("Bring to front", BringToFront));
@@ -1093,16 +1099,20 @@ public sealed class SceneView : Control
     void SetPenColour(string hex)
     {
         PenColor = hex;
-        ApplyToPickedStrokes(it => it.Color = hex);
+        // a swatch with a shape picked means its border, the same way it
+        // means a stroke's colour: one control, one meaning - "this colour"
+        ApplyToPicked(i => Strokes.Is(i) || Scene.IsShape(i.Kind), it => it.Color = hex);
         RefreshBoardBar();
     }
 
-    /// <summary>apply to every picked stroke, if any, and save. Nothing picked
-    /// means the change is only to the pen.</summary>
-    void ApplyToPickedStrokes(Action<BoardItem> change)
+    void ApplyToPickedStrokes(Action<BoardItem> change) => ApplyToPicked(Strokes.Is, change);
+
+    /// <summary>apply to everything picked that the tool means something for,
+    /// and save. Nothing picked means the change is only to the tool.</summary>
+    void ApplyToPicked(Func<BoardItem, bool> applies, Action<BoardItem> change)
     {
         if (_scene.ActiveBoard is not { } board) return;
-        var picked = board.Items.Where(i => Strokes.Is(i) && _scene.Picked.Contains(i.Id)).ToList();
+        var picked = board.Items.Where(i => applies(i) && _scene.Picked.Contains(i.Id)).ToList();
         if (picked.Count == 0) return;
 
         Remember();
@@ -1907,6 +1917,30 @@ public sealed class SceneView : Control
         ("amber", "#ffd166"), ("cyan", "#5fd3f3"), ("green", "#3fb96a"),
         ("red", "#d95c5c"), ("violet", "#b48ae8"), ("slate", "#8aa0b0"),
     ];
+
+    /// <summary>the fill choices: nothing, the border's own colour, or one of
+    /// its own. "No fill" comes first because it is the one people reach for
+    /// - a frame round a group of windows has to be see-through.</summary>
+    List<MenuItem> Fills(List<BoardItem> picked)
+    {
+        var items = new List<MenuItem>
+        {
+            ContextActions.Item("No fill", () => SetFill(picked, BoardItem.NoFill)),
+            ContextActions.Item("Match the border", () => SetFill(picked, null)),
+            ContextActions.Separator(),
+        };
+        items.AddRange(Colours.Select(c => ContextActions.Item(c.Name, () => SetFill(picked, c.Hex))));
+        return items;
+    }
+
+    void SetFill(List<BoardItem> picked, string? fill)
+    {
+        Remember();
+        foreach (var it in picked) it.Fill = fill;
+        if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
+        Saved(fill == BoardItem.NoFill ? "no fill" : "fill");
+        InvalidateVisual();
+    }
 
     List<MenuItem> Palette(List<BoardItem> picked) =>
         Colours.Select(c => ContextActions.Item(c.Name, () =>

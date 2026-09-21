@@ -72,11 +72,12 @@ change freely.
 - [x] Resize from any of the four corners. `GripAt` returns which one and
       `Scene.Resize` moves the two edges that corner owns, which for a top or
       left grip means the origin moves too.
-- [ ] Fill and border for the outlined shapes: border colour, fill colour, and
-      a transparent fill. **A transparent shape must keep its hitbox** - it
-      stays clickable and draggable through the middle, which is not what
-      "transparent" does by default in most editors and is what makes one
-      usable as a frame round other things.
+- [x] Fill and border. `BoardItem.Fill` is null for a wash of the border
+      colour, `"none"` for genuinely empty, or a colour of its own - one
+      field rather than a colour plus a flag that could disagree with it. An
+      empty shape keeps its hitbox, so it works as a frame round other
+      things; picking has always gone by the box and now there is a test
+      saying it must.
 - [x] Drag to place a shape, the way an arrow does. Arming shows a ghost and
       does nothing until you drag out the box; the button stays lit until the
       shape is drawn, and `Esc` cancels. Rectangles, ellipses, diamonds and
@@ -113,15 +114,15 @@ on the right line when something is inserted above it, survives a rename via
 the fingerprint, and reports drift or orphanhood when it cannot. That much is
 covered by `AnchorTests` and works.
 
-- [ ] Give an annotation a scope: global or local. Today every annotation is
-      global by construction - it belongs to the file, so it appears on the
-      map and on every board showing that file. Sometimes that is right and
-      sometimes a note is about what *this board* is explaining, and wants to
-      stay here. Wants a `scope` on `Annotation`, plus the board's id when it
-      is local, and filtering wherever annotations are drawn.
-- [ ] Set the scope when the annotation is made, and change it afterwards.
-- [ ] Make annotations selectable, and multi-selectable, so several can be
-      switched between global and local at once.
+- [x] Scope. `Annotation.Board` is the board it belongs to, or null for
+      everywhere - the id *is* the scope, rather than a flag beside one that
+      could disagree with it. `Scene.AnchorsFor` filters on the way out and
+      `AllAnchorsFor` does not, so changing a scope needs no re-anchoring and
+      the list can still show a note you cannot currently see.
+- [x] Set it when the note is made (a second menu entry, only on a board) and
+      change it afterwards (the menu, or the `L` panel).
+- [x] The `L` panel multi-selects, so a run of notes becomes a board's own in
+      one gesture. `K` keeps, `G` globalises.
 
 ### Review mode
 

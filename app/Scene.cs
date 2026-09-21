@@ -988,6 +988,22 @@ public sealed class Scene : IDisposable
     /// one is a case in a switch rather than a new kind of thing.</summary>
     public static bool IsShape(string kind) => kind is "shape" or "ellipse" or "diamond";
 
+    /// <summary>what to paint a shape's interior with.
+    ///
+    /// No fill means no fill: the shape is an outline you can see through,
+    /// which is what makes one usable as a frame drawn round other things.
+    /// It is still solid to the mouse - see ItemAt - because a frame you
+    /// cannot pick up is a frame you cannot move.
+    ///
+    /// A chosen colour is laid on at a low alpha rather than flat, so a
+    /// shape stays something you read *through* on a board full of code.</summary>
+    public static SKColor FillOf(BoardItem it, SKColor border)
+    {
+        if (it.Fill is null) return border.WithAlpha(16);
+        if (it.Fill == BoardItem.NoFill) return SKColors.Transparent;
+        return ParseColor(it.Fill, border).WithAlpha(52);
+    }
+
     /// <summary>"shape" is the rectangle, and stays that name because boards
     /// on disk already say it.</summary>
     static void DrawShape(SKCanvas canvas, string kind, SKRect box, SKPaint fill, SKPaint edge)
@@ -1198,7 +1214,7 @@ public sealed class Scene : IDisposable
             {
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
                 var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + ItemHeight(it));
-                shapeFill.Color = col.WithAlpha(16);
+                shapeFill.Color = FillOf(it, col);
                 shapeEdge.Color = col.WithAlpha(150);
                 DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
                 continue;

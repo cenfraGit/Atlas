@@ -336,6 +336,122 @@ public class ShapeTests
         }
     }
 
+    // --- fill and border --------------------------------------------------
+
+    static readonly SKColor Border = new(0x5f, 0xd3, 0xf3);
+
+    [Fact]
+    public void AShapeWithNoFillChoiceIsAWashOfItsBorder()
+    {
+        var it = Shape("shape");
+        var fill = Scene.FillOf(it, Border);
+
+        Assert.Equal(Border.Red, fill.Red);
+        Assert.Equal(Border.Green, fill.Green);
+        Assert.Equal(Border.Blue, fill.Blue);
+        Assert.True(fill.Alpha is > 0 and < 64, $"a wash, not a slab: alpha {fill.Alpha}");
+    }
+
+    [Fact]
+    public void NoFillIsGenuinelyTransparent()
+    {
+        var it = Shape("shape");
+        it.Fill = BoardItem.NoFill;
+
+        Assert.Equal(0, Scene.FillOf(it, Border).Alpha);
+    }
+
+    [Fact]
+    public void AChosenFillIsThatColour()
+    {
+        var it = Shape("shape");
+        it.Fill = "#d95c5c";
+
+        var fill = Scene.FillOf(it, Border);
+
+        Assert.Equal(0xd9, fill.Red);
+        Assert.Equal(0x5c, fill.Green);
+        Assert.Equal(0x5c, fill.Blue);
+        Assert.True(fill.Alpha > 0);
+    }
+
+    [Fact]
+    public void AFillStaysSomethingYouCanReadThrough()
+    {
+        var it = Shape("shape");
+        it.Fill = "#d95c5c";
+
+        // a board is full of code; a solid slab over it helps nobody
+        Assert.True(Scene.FillOf(it, Border).Alpha < 128);
+    }
+
+    [Fact]
+    public void AnUnparseableFillFallsBackToTheBorderRatherThanVanishing()
+    {
+        var it = Shape("shape");
+        it.Fill = "not a colour";
+
+        var fill = Scene.FillOf(it, Border);
+        Assert.Equal(Border.Red, fill.Red);
+        Assert.True(fill.Alpha > 0);
+    }
+
+    [Theory]
+    [InlineData("shape")]
+    [InlineData("ellipse")]
+    [InlineData("diamond")]
+    public void ATransparentShapeIsStillSolidToTheMouse(string kind)
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape(kind, 300, 200);
+            it.Fill = BoardItem.NoFill;
+            board.Items.Add(it);
+
+            // the whole point of an empty shape is a frame drawn round other
+            // things, and a frame you cannot pick up is a frame you cannot move
+            Assert.Equal(it.Id, scene.ItemAt(150, 100)?.Id);
+            Assert.Equal([it.Id], scene.ItemsIn(new SKRect(-10, -10, 400, 300)).Select(i => i.Id));
+
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void ATransparentShapeStillResizesAndErases()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 300, 200);
+            it.Fill = BoardItem.NoFill;
+            board.Items.Add(it);
+            scene.Picked.Add(it.Id);
+
+            Assert.NotNull(scene.GripAt(300, 200));
+            Assert.Contains(scene.ItemsNear(150, 100, radius: 5), i => i.Id == it.Id);
+
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void FillAndBorderAreSetSeparately()
+    {
+        var it = Shape("shape");
+        it.Color = "#ffd166";     // border
+        it.Fill = "#3fb96a";      // inside
+
+        var border = Scene.ParseColor(it.Color, SKColors.White);
+        var fill = Scene.FillOf(it, border);
+
+        Assert.Equal(0xff, border.Red);
+        Assert.Equal(0x3f, fill.Red);
+    }
+
     // --- storage ----------------------------------------------------------
 
     [Theory]
@@ -357,6 +473,29 @@ public class ShapeTests
         Assert.Equal(kind, reread.Kind);
         Assert.Equal("#b48ae8", reread.Color);
         Assert.Equal(120, reread.H);
+    }
+
+    [Fact]
+    public void AFillRoundTrips()
+    {
+        using var dir = new TempDir();
+        var store = BoardStore.Load(dir.Path);
+        var board = store.Create("shapes");
+
+        var empty = Shape("shape");
+        empty.Id = "empty";
+        empty.Fill = BoardItem.NoFill;
+        var filled = Shape("ellipse");
+        filled.Id = "filled";
+        filled.Fill = "#3fb96a";
+        board.Items.Add(empty);
+        board.Items.Add(filled);
+        store.Save(board);
+
+        var reread = Assert.Single(BoardStore.Load(dir.Path).Boards).Items;
+
+        Assert.Equal(BoardItem.NoFill, reread.Single(i => i.Id == "empty").Fill);
+        Assert.Equal("#3fb96a", reread.Single(i => i.Id == "filled").Fill);
     }
 
     [Fact]

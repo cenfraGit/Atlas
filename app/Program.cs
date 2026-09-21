@@ -2942,7 +2942,12 @@ public sealed class SceneView : Control
                 return;
             }
 
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            // ctrl as well as shift. The map accepted both and a board only
+            // shift, so ctrl+click on a board threw the selection away and
+            // started a new one - for every kind of item, not just the ones
+            // it was noticed on
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) ||
+                e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
                 if (!_scene.Picked.Add(hit.Id)) _scene.Picked.Remove(hit.Id);
             }

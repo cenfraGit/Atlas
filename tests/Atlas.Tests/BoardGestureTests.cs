@@ -56,6 +56,122 @@ public class BoardGestureTests
         window.MouseUp(at, MouseButton.Left);
     }
 
+    static void ClickWith(Window window, Avalonia.Point at, RawInputModifiers mods)
+    {
+        window.MouseDown(at, MouseButton.Left, mods);
+        window.MouseUp(at, MouseButton.Left, mods);
+    }
+
+    /// <summary>a second item to add to a selection, well clear of the note
+    /// the fixture already has.</summary>
+    static BoardItem Second(Board board)
+    {
+        var it = new BoardItem
+        {
+            Id = "n2", Kind = "note", X = 60, Y = -60, W = 120, H = 120, Text = "another",
+        };
+        board.Items.Add(it);
+        return it;
+    }
+
+    /// <summary>ctrl+click adds to the selection, the same as shift.
+    ///
+    /// The map accepted both and a board only shift, so ctrl+click on a
+    /// board threw the selection away and started a new one - for every
+    /// kind of item, whatever it was noticed on.</summary>
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CtrlAndShiftBothAddToTheSelection(bool ctrl)
+    {
+        var (_, window, board, note, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Second(board);
+            var mods = ctrl ? RawInputModifiers.Control : RawInputModifiers.Shift;
+
+            Click(window, Centre);                              // the first note
+            Assert.Equal([note.Id], scene.Picked);
+
+            ClickWith(window, new Avalonia.Point(W / 2 + 120, H / 2), mods);
+
+            Assert.Equal(2, scene.Picked.Count);
+            Assert.Contains("n2", scene.Picked);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and clicking a picked one again with the modifier takes it
+    /// out, which is what makes it a toggle rather than an add.</summary>
+    [AvaloniaFact]
+    public void CtrlClickingAPickedItemDropsIt()
+    {
+        var (_, window, board, note, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Second(board);
+            Click(window, Centre);
+            ClickWith(window, new Avalonia.Point(W / 2 + 120, H / 2), RawInputModifiers.Control);
+            Assert.Equal(2, scene.Picked.Count);
+
+            ClickWith(window, Centre, RawInputModifiers.Control);
+
+            Assert.Equal(["n2"], scene.Picked);
+            Assert.DoesNotContain(note.Id, scene.Picked);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>without a modifier, clicking something that is not picked
+    /// replaces the selection - or there would be no way back to one.
+    ///
+    /// Clicking one that *is* picked deliberately leaves the selection
+    /// alone: that is how a group of things is dragged by grabbing one of
+    /// them.</summary>
+    [AvaloniaFact]
+    public void APlainClickOnSomethingElseReplacesTheSelection()
+    {
+        var (_, window, board, note, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Second(board);
+            board.Items.Add(new BoardItem
+            {
+                Id = "n3", Kind = "note", X = -260, Y = -60, W = 120, H = 120, Text = "third",
+            });
+
+            Click(window, Centre);
+            ClickWith(window, new Avalonia.Point(W / 2 + 120, H / 2), RawInputModifiers.Control);
+            Assert.Equal(2, scene.Picked.Count);
+
+            Click(window, new Avalonia.Point(W / 2 - 200, H / 2));
+
+            Assert.Equal(["n3"], scene.Picked);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [AvaloniaFact]
+    public void APlainClickOnOneOfManyKeepsThemAllForDragging()
+    {
+        var (_, window, board, note, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Second(board);
+            Click(window, Centre);
+            ClickWith(window, new Avalonia.Point(W / 2 + 120, H / 2), RawInputModifiers.Control);
+
+            Click(window, Centre);
+
+            Assert.Equal(2, scene.Picked.Count);
+            scene.ActiveBoard = null;
+        }
+    }
+
     static void Drag(Window window, Avalonia.Point from, Avalonia.Point to)
     {
         window.MouseDown(from, MouseButton.Left);

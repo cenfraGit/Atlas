@@ -534,4 +534,78 @@ public class ConnectorTests
         Assert.Equal(2, f.Scene.Remove(f.Board, [box, arrow]));
         Assert.Empty(f.Board.Items);
     }
+
+    // --- how much room an arrow takes up ----------------------------------
+
+    /// <summary>an arrow's W is whatever the default was when it was made and
+    /// its H is nothing, so anything reading its stored box reads six hundred
+    /// units of empty canvas beside the tail.</summary>
+    [Fact]
+    public void AnArrowIsAsBigAsTheLineItDraws()
+    {
+        using var f = new Fixture();
+        var arrow = Arrow(x: 0, y: 0, x2: -200, y2: -300);
+        f.Board.Items.Add(arrow);
+
+        var box = f.Scene.BoundsOf(arrow);
+
+        Assert.Equal(new SKRect(-200, -300, 0, 0), box);
+    }
+
+    [Fact]
+    public void ABandOverAnArrowTakesIt()
+    {
+        using var f = new Fixture();
+        var arrow = Arrow(x: 0, y: 0, x2: 0, y2: -400);      // straight up
+        f.Board.Items.Add(arrow);
+
+        Assert.Contains(arrow, f.Scene.ItemsIn(new SKRect(-50, -450, 50, -350)));
+    }
+
+    /// <summary>and a band well clear of it does not, however far the
+    /// phantom box used to reach.</summary>
+    [Fact]
+    public void ABandBesideAnArrowLeavesIt()
+    {
+        using var f = new Fixture();
+        var arrow = Arrow(x: 0, y: 0, x2: 0, y2: -400);
+        f.Board.Items.Add(arrow);
+
+        Assert.DoesNotContain(arrow, f.Scene.ItemsIn(new SKRect(300, -50, 500, 50)));
+    }
+
+    /// <summary>fitting the board frames the line, not the phantom. An arrow
+    /// that goes up and to the left used to be fitted entirely off screen.</summary>
+    [Fact]
+    public void FittingTheBoardFramesBothEndsOfAnArrow()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Arrow(x: 0, y: 0, x2: -400, y2: -200));
+
+        f.Scene.FitBoard(800, 600);
+
+        Assert.Equal(-200, f.Scene.CamX, 1);
+        Assert.Equal(-100, f.Scene.CamY, 1);
+    }
+
+    /// <summary>a tied end counts where it is drawn, which is the only way
+    /// fitting a flowchart frames the flowchart.</summary>
+    [Fact]
+    public void TheBoundsOfATiedArrowFollowTheBox()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        var arrow = Arrow(from: "b1", x: 0, y: 0, x2: 400, y2: 0, fromSide: Scene.Right);
+        f.Board.Items.Add(box);
+        f.Board.Items.Add(arrow);
+
+        box.Y = 600;
+
+        // the tied end is now the lowest point on the line, and the box has
+        // to reach it. It used to stop at the stale Y the arrow was made with
+        var (a, b) = f.Scene.ArrowEnds(arrow);
+        var bounds = f.Scene.BoundsOf(arrow);
+        Assert.Equal(Math.Max(a.Y, b.Y), bounds.Bottom, 1);
+        Assert.Equal(Math.Min(a.Y, b.Y), bounds.Top, 1);
+    }
 }

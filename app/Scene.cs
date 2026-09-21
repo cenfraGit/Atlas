@@ -1361,14 +1361,35 @@ public sealed class Scene : IDisposable
         return null;
     }
 
+    /// <summary>the box an item takes up.
+    ///
+    /// An arrow is the exception that has to be asked for specially: its W is
+    /// whatever the default was when it was made and its H is nothing, so its
+    /// stored box is a six hundred unit strip of empty canvas beside the tail.
+    /// Where an arrow is, is its two ends - and for a tied end, where that end
+    /// is now. Fitting the view framed the phantom and cut off any arrow that
+    /// went up or to the left; the rubberband swept the phantom too.</summary>
+    public SKRect BoundsOf(BoardItem it)
+    {
+        if (it.Kind == "arrow")
+        {
+            var (a, b) = ArrowEnds(it);
+            return new SKRect(
+                Math.Min(a.X, b.X), Math.Min(a.Y, b.Y),
+                Math.Max(a.X, b.X), Math.Max(a.Y, b.Y));
+        }
+        return new SKRect(it.X, it.Y, it.X + it.W, it.Y + LastHeight(it));
+    }
+
     /// <summary>every item the rubberband touches.</summary>
     public IEnumerable<BoardItem> ItemsIn(SKRect r)
     {
         if (ActiveBoard is null) yield break;
         foreach (var it in ActiveBoard.Items)
         {
-            float h = LastHeight(it);
-            if (it.X < r.Right && it.X + it.W > r.Left && it.Y < r.Bottom && it.Y + h > r.Top)
+            var box = BoundsOf(it);
+            if (box.Left < r.Right && box.Right > r.Left &&
+                box.Top < r.Bottom && box.Bottom > r.Top)
                 yield return it;
         }
     }
@@ -2238,9 +2259,9 @@ public sealed class Scene : IDisposable
             CamX = 0; CamY = 0; CamS = 1;
             return;
         }
-        float x0 = board.Items.Min(i => i.X), y0 = board.Items.Min(i => i.Y);
-        float x1 = board.Items.Max(i => i.X + i.W);
-        float y1 = board.Items.Max(i => i.Y + LastHeight(i));
+        var boxes = board.Items.Select(BoundsOf).ToList();
+        float x0 = boxes.Min(b => b.Left), y0 = boxes.Min(b => b.Top);
+        float x1 = boxes.Max(b => b.Right), y1 = boxes.Max(b => b.Bottom);
         CamX = (x0 + x1) / 2;
         CamY = (y0 + y1) / 2;
         CamS = Math.Min(vw / Math.Max(1, x1 - x0), vh / Math.Max(1, y1 - y0)) * 0.88f;
@@ -2265,11 +2286,10 @@ public sealed class Scene : IDisposable
 
         if (board.Items.Count == 0) return new SKRect(-EmptyBoard, -EmptyBoard, EmptyBoard, EmptyBoard);
 
+        var boxes = board.Items.Select(BoundsOf).ToList();
         return new SKRect(
-            board.Items.Min(i => Math.Min(i.X, i.Kind == "arrow" ? i.X2 : i.X)),
-            board.Items.Min(i => Math.Min(i.Y, i.Kind == "arrow" ? i.Y2 : i.Y)),
-            board.Items.Max(i => Math.Max(i.X + i.W, i.Kind == "arrow" ? i.X2 : i.X)),
-            board.Items.Max(i => Math.Max(i.Y + LastHeight(i), i.Kind == "arrow" ? i.Y2 : i.Y)));
+            boxes.Min(b => b.Left), boxes.Min(b => b.Top),
+            boxes.Max(b => b.Right), boxes.Max(b => b.Bottom));
     }
 
     const float EmptyBoard = 1200;

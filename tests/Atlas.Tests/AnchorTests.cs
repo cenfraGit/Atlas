@@ -5,7 +5,9 @@ namespace Atlas.Tests;
 /// that ladder gets its own test so a regression says which one broke.</summary>
 public class AnchorTests
 {
-    const string Source = """
+    // LF whatever git checked out with: the tests below cut whole lines out
+    // of this with a \n, and on a CRLF checkout those match nothing
+    static readonly string Source = Lf("""
         namespace Demo.App;
 
         public class Startup
@@ -31,7 +33,7 @@ public class AnchorTests
 
             void Run() { }
         }
-        """;
+        """);
 
     static string Lf(string s) => s.Replace("\r\n", "\n");
     static string[] Lines(string s) => Lf(s).Split('\n');

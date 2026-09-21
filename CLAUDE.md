@@ -331,6 +331,13 @@ console. `Crash.cs` logs to `%LOCALAPPDATA%/Atlas/crash.log`, reports into the
 window, and marks UI-thread exceptions handled so a bug in one event handler
 does not throw away the board someone is working on.
 
+**A checkout may be CRLF.** This machine has `core.autocrlf=true`, another
+may not, so a raw string literal in a test is whatever git wrote. A test that
+cuts lines out of one with `
+` matches nothing on a CRLF checkout and fails
+there and nowhere else. Normalise the literal once (`AnchorTests.Source`)
+rather than assuming an ending.
+
 **Redraws are driven by input, not a loop.** Anything that finishes off-frame
 - a file load, a partially built view - must call `Scene.RequestRedraw`.
 Setting a flag does not work: nothing watches one between frames.

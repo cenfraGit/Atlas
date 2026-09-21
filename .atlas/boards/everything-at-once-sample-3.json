@@ -3,7 +3,7 @@
   "name": "Everything at once",
   "items": [
     {
-      "id": "e528f8f2",
+      "id": "sample-3-0",
       "kind": "text",
       "line": 0,
       "endLine": -1,
@@ -21,7 +21,7 @@
       "size": 44
     },
     {
-      "id": "b500933e",
+      "id": "sample-3-1",
       "kind": "shape",
       "line": 0,
       "endLine": -1,
@@ -38,7 +38,7 @@
       "size": 0
     },
     {
-      "id": "bd7c15ea",
+      "id": "sample-3-2",
       "kind": "ellipse",
       "line": 0,
       "endLine": -1,
@@ -55,7 +55,7 @@
       "size": 0
     },
     {
-      "id": "5cd279ed",
+      "id": "sample-3-3",
       "kind": "diamond",
       "line": 0,
       "endLine": -1,
@@ -73,7 +73,7 @@
       "size": 0
     },
     {
-      "id": "9688310a",
+      "id": "sample-3-4",
       "kind": "shape",
       "line": 0,
       "endLine": -1,
@@ -91,7 +91,7 @@
       "size": 0
     },
     {
-      "id": "759b782e",
+      "id": "sample-3-5",
       "kind": "arrow",
       "line": 0,
       "endLine": -1,
@@ -102,15 +102,15 @@
       "color": "#ffd166",
       "x2": 620,
       "y2": 120,
-      "from": "b500933e",
-      "to": "bd7c15ea",
+      "from": "sample-3-1",
+      "to": "sample-3-2",
       "fromSide": 1,
       "toSide": 3,
       "weight": 0,
       "size": 0
     },
     {
-      "id": "7d60cca6",
+      "id": "sample-3-6",
       "kind": "arrow",
       "line": 0,
       "endLine": -1,
@@ -121,14 +121,14 @@
       "color": "#d95c5c",
       "x2": 180,
       "y2": 470,
-      "from": "5cd279ed",
+      "from": "sample-3-3",
       "fromSide": 2,
       "toSide": -1,
       "weight": 0,
       "size": 0
     },
     {
-      "id": "d91295e5",
+      "id": "sample-3-7",
       "kind": "stroke",
       "line": 0,
       "endLine": -1,
@@ -229,7 +229,7 @@
       "size": 0
     },
     {
-      "id": "8b719a55",
+      "id": "sample-3-8",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -246,7 +246,7 @@
       "size": 0
     },
     {
-      "id": "3273cc66",
+      "id": "sample-3-9",
       "kind": "file",
       "file": "app/Program.cs",
       "line": 0,

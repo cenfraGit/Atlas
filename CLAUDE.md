@@ -165,6 +165,15 @@ covered by `AnchorTests` and works.
 - [x] A third sample board, "Everything at once": every kind of item,
       overlapping, an empty frame over the lot, connectors with one end
       loose. What breaks in edit mode breaks on a board like that.
+- [x] Sample bookmarks, and a tour through them. A tour is the reason
+      bookmarks are worth having and there was no way to see one without
+      recording it by hand first. Both kinds are represented: six anchored
+      to declarations, and one free camera position.
+- [x] `--samples` is deterministic. Every id is derived from a name rather
+      than generated, and a board's file is named after the id it ends up
+      with rather than the random one `Create` handed out - which is why
+      regenerating used to rename all three boards and how sample boards
+      got deleted from the repo once already.
 - [x] Sample annotations span the declaration Roslyn found, and point at
       methods rather than classes - a note is tinted across what it covers,
       and a nine hundred line class is not a thing a sentence is about.

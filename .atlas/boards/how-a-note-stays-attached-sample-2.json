@@ -1,13 +1,13 @@
 {
-  "id": "sample-1",
-  "name": "How a frame is drawn",
+  "id": "sample-2",
+  "name": "How a note stays attached",
   "items": [
     {
-      "id": "6b91095d",
+      "id": "sample-2-0",
       "kind": "file",
-      "file": "app/Scanner.cs",
-      "line": 7,
-      "endLine": 41,
+      "file": "app/Annotations.cs",
+      "line": 122,
+      "endLine": 156,
       "x": 0,
       "y": 0,
       "w": 620,
@@ -20,11 +20,11 @@
       "size": 0
     },
     {
-      "id": "c2dda74b",
+      "id": "sample-2-1",
       "kind": "note",
       "line": 0,
       "endLine": -1,
-      "text": "First the repo is read and laid out. Once only, cached to data/scan.json.",
+      "text": "A note records the symbol it was written on, plus the lines around it.",
       "x": 900,
       "y": 0,
       "w": 380,
@@ -37,11 +37,11 @@
       "size": 0
     },
     {
-      "id": "3151419c",
+      "id": "sample-2-2",
       "kind": "file",
-      "file": "app/Scene.cs",
-      "line": 66,
-      "endLine": 100,
+      "file": "app/Symbols.cs",
+      "line": 19,
+      "endLine": 53,
       "x": 0,
       "y": 345.25,
       "w": 620,
@@ -54,11 +54,11 @@
       "size": 0
     },
     {
-      "id": "13cfd093",
+      "id": "sample-2-3",
       "kind": "note",
       "line": 0,
       "endLine": -1,
-      "text": "Then the camera decides the tier, and each tier draws a different thing.",
+      "text": "Symbols come from Roslyn, parsing only: no build, no project references.",
       "x": 900,
       "y": 345.25,
       "w": 380,
@@ -71,11 +71,11 @@
       "size": 0
     },
     {
-      "id": "78383105",
+      "id": "sample-2-4",
       "kind": "file",
-      "file": "app/Highlighter.cs",
-      "line": 14,
-      "endLine": 48,
+      "file": "app/FileKeys.cs",
+      "line": 8,
+      "endLine": 39,
       "x": 0,
       "y": 690.5,
       "w": 620,
@@ -88,11 +88,11 @@
       "size": 0
     },
     {
-      "id": "8f86c0ff",
+      "id": "sample-2-5",
       "kind": "note",
       "line": 0,
       "endLine": -1,
-      "text": "Syntax colours come from TextMate grammars, built once per file.",
+      "text": "And the file itself is fingerprinted, so a rename does not orphan anything.",
       "x": 900,
       "y": 690.5,
       "w": 380,

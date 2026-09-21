@@ -36,6 +36,29 @@ public static class Samples
             "right, so everything that works on a stroke goes on working on them."),
     ];
 
+    /// <summary>places worth being able to get back to, as a tour in the
+    /// order they are listed: the shape of the app, roughly in the order a
+    /// frame is built.
+    ///
+    /// Regions rather than whole files, because a bookmark that frames a
+    /// declaration lands on the thing it is about, while one that frames a
+    /// file lands on whichever part of it happens to be at the top.</summary>
+    static readonly (string Suffix, string? Symbol, string Name, string Note)[] Marks =
+    [
+        ("Scanner.cs", "Build", "the scan",
+            "Everything starts here: the repo is read and laid out once."),
+        ("Scene.cs", "TierFor", "the four tiers",
+            "What the zoom decides you are looking at."),
+        ("Scene.cs", "DrawCode", "real text",
+            "The innermost tier, where a card becomes source."),
+        ("Highlighter.cs", "Tokenise", "the one lock",
+            "TextMate is not thread safe, and finding that out cost a stack overflow."),
+        ("Annotations.cs", "Resolve", "the anchor ladder",
+            "Symbol, then fingerprint, then the stored line."),
+        ("Strokes.cs", "ScaleInto", "ink that resizes",
+            "A stroke is a box like everything else, as far as the board knows."),
+    ];
+
     static readonly (string Id, string Name, (string Suffix, string? Symbol, string Note)[] Parts)[] Boards =
     [
         ("sample-1", "How a frame is drawn",
@@ -75,7 +98,77 @@ public static class Samples
             Console.WriteLine("  board: " + MakeBoard(scene, boards, id, name, parts));
         Console.WriteLine("  board: " + MakeMessyBoard(scene, boards));
         Console.WriteLine($"{made} annotations");
+        Console.WriteLine("  " + MakeBookmarks(scene, repo));
     }
+
+    /// <summary>bookmarks for the places in <see cref="Marks"/>, and a tour
+    /// that walks them in order.
+    ///
+    /// A tour is the reason bookmarks are worth having and there was no way
+    /// to see one without recording it by hand first, which is a lot to ask
+    /// of someone who has just opened the app.</summary>
+    static string MakeBookmarks(Scene scene, string repo)
+    {
+        var store = BookmarkStore.Load(repo);
+        store.Bookmarks.RemoveAll(b => b.Id.StartsWith("sample"));
+        store.Tours.RemoveAll(t => t.Id.StartsWith("sample"));
+
+        var stops = new List<string>();
+        foreach (var (suffix, symbol, name, note) in Marks)
+        {
+            var f = scene.Data.Files.FirstOrDefault(
+                x => x.P.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+            if (f is null) { Console.WriteLine($"  skip bookmark: no {suffix}"); continue; }
+
+            var full = Path.Combine(scene.Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
+            var (from, to) = SpanOf(full, symbol, f.N);
+
+            var b = new Bookmark
+            {
+                // stable, so regenerating rewrites the same bookmarks rather
+                // than filling the file with fresh copies of the same places
+                Id = IdFor(name),
+                Name = name, Note = note,
+                File = f.P, Line = from, EndLine = to,
+            };
+            store.Bookmarks.Add(b);
+            stops.Add(b.Id);
+        }
+
+        // one free camera position as well, so both kinds are represented: a
+        // bookmark does not have to be a place in a file
+        var bounds = scene.ContentBounds();
+        if (bounds.Width > 0)
+        {
+            var wide = new Bookmark
+            {
+                Id = IdFor("the whole repo"),
+                Name = "the whole repo",
+                Note = "Not a place in a file - just a view. F does this too.",
+                File = null, Line = -1, EndLine = -1,
+                X = bounds.MidX, Y = bounds.MidY,
+                // a guess at a window, since there is not one to measure here
+                S = Math.Clamp(1500f * 0.9f / bounds.Width, 0.01f, 1f),
+            };
+            store.Bookmarks.Add(wide);
+            stops.Add(wide.Id);
+        }
+
+        if (stops.Count > 0)
+            store.Tours.Add(new Tour
+            {
+                Id = "sample-tour", Name = "How a frame is built", Stops = stops,
+            });
+
+        store.Save();
+        return $"{stops.Count} bookmarks and a tour";
+    }
+
+    /// <summary>a stable id from a name. Everything a sample writes is
+    /// derived rather than generated, so `--samples` run twice leaves the
+    /// files byte for byte the same and git has nothing to report.</summary>
+    static string IdFor(string name) =>
+        "sample-" + new string(name.Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
 
     static int Annotate(Scene scene, AnnotationStore notes, string repo, string suffix, string? symbol, string text)
     {
@@ -88,7 +181,7 @@ public static class Samples
 
         var (line, end) = SpanOf(full, symbol, lines.Length);
         var a = Anchors.Create(f.P, full, lines, line, end, text);
-        a.Id = "sample-" + Guid.NewGuid().ToString("n")[..6];
+        a.Id = IdFor(suffix + "-" + (symbol ?? "top"));
         notes.Annotations.Add(a);
         Console.WriteLine($"  annotated {f.P}:{line + 1}  -> {a.Symbol ?? "(no symbol)"}");
         return 1;
@@ -155,9 +248,9 @@ public static class Samples
     static string MakeBoard(Scene scene, BoardStore boards, string id, string name,
         (string Suffix, string? Symbol, string Note)[] parts)
     {
-        var board = boards.Create(name);
-        board.Id = id;
+        var board = boards.Create(name, id);
         float y = 0;
+        int n = 0;
 
         foreach (var (suffix, symbol, note) in parts)
         {
@@ -170,12 +263,12 @@ public static class Samples
 
             board.Items.Add(new BoardItem
             {
-                Id = BookmarkStore.NewId(), Kind = "file", File = f.P,
+                Id = $"{id}-{n++}", Kind = "file", File = f.P,
                 Line = start, EndLine = end, X = 0, Y = y, W = 620,
             });
             board.Items.Add(new BoardItem
             {
-                Id = BookmarkStore.NewId(), Kind = "note", Text = note,
+                Id = $"{id}-{n++}", Kind = "note", Text = note,
                 // clear of the annotation callouts, which sit just right
                 // of the window
                 X = 900, Y = y, W = 380,
@@ -197,11 +290,15 @@ public static class Samples
     /// a connector left pointing at nothing.</summary>
     static string MakeMessyBoard(Scene scene, BoardStore boards)
     {
-        var board = boards.Create("Everything at once");
-        board.Id = "sample-3";
+        var board = boards.Create("Everything at once", "sample-3");
 
         void Add(BoardItem it) => board.Items.Add(it);
-        string Id() => BookmarkStore.NewId();
+
+        // counted rather than random: the whole point of a sample is that
+        // regenerating it rewrites the same file, and an id nothing else
+        // refers to is still a line of the diff
+        int n = 0;
+        string Id() => $"sample-3-{n++}";
 
         Add(new BoardItem
         {

@@ -139,9 +139,17 @@ public sealed class BoardStore
         return store;
     }
 
-    public Board Create(string name)
+    public Board Create(string name) => Create(name, BookmarkStore.NewId());
+
+    /// <summary>create with an id of your own, for the sample boards, whose
+    /// ids are fixed so that regenerating them rewrites the same files.
+    ///
+    /// Setting Id after Create left the path built from the random id the
+    /// board no longer had, so every regeneration renamed all three files
+    /// and git saw a pile of deletions next to a pile of additions.</summary>
+    public Board Create(string name, string id)
     {
-        var b = new Board { Id = BookmarkStore.NewId(), Name = name };
+        var b = new Board { Id = id, Name = name };
         b.Path = System.IO.Path.Combine(Dir, FileNameFor(name, b.Id));
         Boards.Add(b);
         Save(b);

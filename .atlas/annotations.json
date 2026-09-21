@@ -1,7 +1,7 @@
 {
   "annotations": [
     {
-      "id": "sample-265f0e",
+      "id": "sample-Scene-cs-TierFor",
       "text": "What you see changes with the zoom rather than just getting bigger. Four tiers: folders, then cards, then a coloured bar per line, then real text.",
       "file": "app/Scene.cs",
       "key": "312478C6364C",
@@ -12,7 +12,7 @@
       "context": "A4B1ADE4FA28"
     },
     {
-      "id": "sample-2dceef",
+      "id": "sample-Scanner-cs-Classify",
       "text": "Every line is sorted into a kind once, at scan time, so drawing the bars tier is a lookup rather than a parse. Layout lives here too, not in the view.",
       "file": "app/Scanner.cs",
       "key": "8F668565D516",
@@ -23,7 +23,7 @@
       "context": "CD948470E721"
     },
     {
-      "id": "sample-040d2e",
+      "id": "sample-Annotations-cs-Resolve",
       "text": "Symbol first, then the context fingerprint, then the stored line. That ladder is what keeps a note attached while the code moves underneath it.",
       "file": "app/Annotations.cs",
       "key": "C96136700B0F",
@@ -34,7 +34,7 @@
       "context": "FD1E063EEF2D"
     },
     {
-      "id": "sample-0b4bc9",
+      "id": "sample-FileKeys-cs-Of",
       "text": "A hash of the first forty meaningful lines with the whitespace taken out, so a reference finds its file again after a rename, and reindenting changes nothing.",
       "file": "app/FileKeys.cs",
       "key": "D934846FAA6B",
@@ -45,7 +45,7 @@
       "context": "0629DD0EBB88"
     },
     {
-      "id": "sample-6aa5d9",
+      "id": "sample-Images-cs-Prune",
       "text": "Images nothing points at are deleted - but only once the undo history that could bring one back has been dropped.",
       "file": "app/Images.cs",
       "key": "2D88C74D1232",
@@ -56,7 +56,7 @@
       "context": "E108A2701C78"
     },
     {
-      "id": "sample-c85c43",
+      "id": "sample-Strokes-cs-Erase",
       "text": "Rubbing a hole in a stroke leaves the surviving pieces as strokes in their own right, so everything that works on a stroke goes on working on them.",
       "file": "app/Strokes.cs",
       "key": "D48386DE837B",

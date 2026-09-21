@@ -68,6 +68,25 @@ public sealed class CommitsPanel : Border
         return c;
     }
 
+    /// <summary>up before the work starts, saying what it is doing.
+    ///
+    /// Reading a commit's whole tree takes a noticeable moment, and the
+    /// panel used to appear only once that was done - so the side of the
+    /// screen it lives on sat empty and the app looked wedged.</summary>
+    public void Loading(string label)
+    {
+        _title.Text = label;
+        _summary.Text = "reading the tree at this commit...";
+        _note.Text = "";
+        _detail.Text = "";
+        _commits = [];
+        _list.ItemsSource = new List<string>();
+        Reveal.Show(this);
+    }
+
+    /// <summary>show it again with what it already has, for the toggle.</summary>
+    public void Reopen() => Reveal.Show(this);
+
     public void Show(string label, List<CommitInfo> commits)
     {
         _title.Text = label;

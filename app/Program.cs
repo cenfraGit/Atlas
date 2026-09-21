@@ -1621,6 +1621,7 @@ public sealed class SceneView : Control
         {
             items.Add(("previous commit", "[", () => { StepCommit(-1); RebuildChangeBoard(); }));
             items.Add(("next commit", "]", () => { StepCommit(1); RebuildChangeBoard(); }));
+            items.Add(("commits", "H", ToggleCommits));
             items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
             items.Add(("back to the map", "C", LeaveBoard));
         }
@@ -1639,6 +1640,7 @@ public sealed class SceneView : Control
         {
             items.Add(("previous commit", "[", () => StepCommit(-1)));
             items.Add(("next commit", "]", () => StepCommit(1)));
+            items.Add(("commits", "H", ToggleCommits));
             items.Add(("changed code", "C", ToggleChangeBoard));
             items.Add(("leave review", "esc", LeaveReview));
         }
@@ -1690,7 +1692,34 @@ public sealed class SceneView : Control
         _caption = "";
     }
 
+    int _opening;
+
+    /// <summary>open a branch or a pull request for review.
+    ///
+    /// The reading is all synchronous - libgit2's repository handle is not
+    /// thread safe, and the bracket keys reach for the same handle - so the
+    /// window does stop for a moment on a large tree. What it must not do
+    /// is stop while showing nothing, which is what it did: the caption was
+    /// set and then the work ran before any frame could be painted. The
+    /// panel goes up first and a frame is allowed through, then the work.</summary>
     void OpenTarget(ReviewTarget target)
+    {
+        if (_git is null) return;
+
+        int turn = ++_opening;
+        _commitsPanel?.Loading(target.Label);
+        _caption = $"{target.Label}   -   reading the tree at this commit...";
+        InvalidateVisual();
+
+        // after a frame, so the panel and the caption are actually on screen
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (turn != _opening || _git is null) return;   // superseded
+            LoadTarget(target);
+        }, DispatcherPriority.Background);
+    }
+
+    void LoadTarget(ReviewTarget target)
     {
         if (_git is null) return;
         _target = target;
@@ -1700,9 +1729,7 @@ public sealed class SceneView : Control
         // draw the repo as it was at the branch head. without this a branch
         // older than a restructure changes paths that no longer exist, and
         // lights up nothing at all
-        _caption = $"{target.Label}   -   reading the tree at this commit...";
-        InvalidateVisual();
-
+        //
         // the same rule the working tree is filtered by, toggle included
         var snapshot = _git.Snapshot(target.HeadSha, path => Scanner.Wanted(path, _scanOptions));
         if (snapshot is not null && snapshot.Count > 0)
@@ -1713,6 +1740,17 @@ public sealed class SceneView : Control
 
         _commitsPanel?.Show(target.Label, _prCommits);
         ShowChanges(_git.Whole(target));
+    }
+
+    /// <summary>show or hide the commit list. It is a full height strip down
+    /// one side, which is worth it while you are stepping through commits
+    /// and in the way when you want to see what is under it.</summary>
+    void ToggleCommits()
+    {
+        if (_commitsPanel is not { } panel || _scene.Review is null) return;
+        if (Reveal.Showing(panel)) { panel.Close(); Toast("commits hidden - H"); }
+        else panel.Reopen();
+        InvalidateVisual();
     }
 
     /// <summary>-1 shows the whole pull request, 0..n a single commit.</summary>
@@ -3312,6 +3350,7 @@ public sealed class SceneView : Control
                 // Not while a tour is running: those are its arrows
                 case Key.Down when _tour is null: StepCommit(1); return;
                 case Key.Up when _tour is null: StepCommit(-1); return;
+                case Key.H: ToggleCommits(); return;
             }
         }
 
@@ -3326,6 +3365,7 @@ public sealed class SceneView : Control
                 case Key.C: LeaveBoard(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
+                case Key.H: ToggleCommits(); return;
                 case Key.B: _marks?.Open(); InvalidateVisual(); return;
                 case Key.OemQuestion: OpenSearch?.Invoke(); return;
                 default: return;

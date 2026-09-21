@@ -120,6 +120,19 @@ change freely.
       way an explicit invalidation can. `Scene.StrokeRebuilds` counts
       re-recordings, which is what the tests assert on rather than a clock.
 
+### Presentation boards
+
+Not started, and not next. A board that is a sequence rather than a
+surface: slides you step through with the arrow keys, for walking someone
+through how a change was made or how a part of the system works. Each
+slide is a camera position and a set of items, so much of it already
+exists - `Tour` steps between bookmarks and `Flight` does the movement
+between them. The open questions are whether a slide is a board, a group
+of boards, or a saved view of one board, and what a slide does that a
+tour stop does not.
+
+- [ ] Presentation boards: slides, stepped with the arrows.
+
 ### Canvas and interaction
 
 - [x] Smooth scrolling (`Glide.cs`). The wheel moves a target and the camera

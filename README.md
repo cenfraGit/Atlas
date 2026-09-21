@@ -94,9 +94,16 @@ looking at to the board you last had open. `O` lists your boards: select one
 and click *open*.
 
 **Work on a board.** Press `E` for edit mode. Drag windows and notes around,
-drag an empty patch to sweep up several at once, and resize from the bottom
-right corner. `N` adds a note, `1` `2` `3` a rectangle, an ellipse or a
-diamond, `4` a label, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
+drag an empty patch to sweep up several at once, and resize from any corner -
+the one you hold follows the pointer and the opposite one stays put.
+
+`1` `2` `3` arm a rectangle, an ellipse or a diamond and `4` a label; none of
+them appear until you drag out the box you want, because the size and the
+place are the two things about a shape that are yours. The button stays lit
+while the tool is armed, and `Esc` backs out. Nothing clamps a shape's
+height, so a long thin divider is as available as a square.
+
+`N` adds a note, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
 snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
 Hold space to pan without leaving edit mode. The `<` button top left goes
 back to the map, and the camera returns exactly where you left it.

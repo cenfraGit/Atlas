@@ -75,6 +75,155 @@ public class ShapeTests
     }
 
     [Theory]
+    [InlineData("shape", 3)]
+    [InlineData("shape", 12)]
+    [InlineData("ellipse", 8)]
+    [InlineData("diamond", 20)]
+    public void AShapeCanBeAsShortAsYouLike(string kind, float h)
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            // there used to be a floor of 40, so a long thin rectangle - a
+            // divider, an underline - could not be made at all
+            Assert.Equal(h, scene.ItemHeight(Shape(kind, w: 600, h: h)));
+            scene.ActiveBoard = null;
+        }
+    }
+
+    // --- resizing from any corner ----------------------------------------
+
+    [Fact]
+    public void DraggingTheBottomRightGripMovesThatCornerOnly()
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 200, 120);
+            scene.Resize(it, corner: 0, wx: 300, wy: 200);
+
+            Assert.Equal(0, it.X);            // the far corner stays put
+            Assert.Equal(0, it.Y);
+            Assert.Equal(300, it.W);
+            Assert.Equal(200, it.H);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void DraggingATopLeftGripMovesTheOriginToo()
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 200, 120);      // 0,0 to 200,120
+            scene.Resize(it, Scene.GripLeft | Scene.GripTop, wx: 50, wy: 30);
+
+            // the corner you are holding goes to the pointer...
+            Assert.Equal(50, it.X);
+            Assert.Equal(30, it.Y);
+            // ...and the one across from it does not move
+            Assert.Equal(200, it.X + it.W);
+            Assert.Equal(120, it.Y + it.H);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(Scene.GripLeft)]
+    [InlineData(Scene.GripTop)]
+    [InlineData(Scene.GripLeft | Scene.GripTop)]
+    public void TheOppositeCornerNeverMoves(int corner)
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 200, 120);
+            float fixedX = (corner & Scene.GripLeft) != 0 ? it.X + it.W : it.X;
+            float fixedY = (corner & Scene.GripTop) != 0 ? it.Y + it.H : it.Y;
+
+            scene.Resize(it, corner, wx: 77, wy: 44);
+
+            Assert.Equal(fixedX, (corner & Scene.GripLeft) != 0 ? it.X + it.W : it.X, 2);
+            Assert.Equal(fixedY, (corner & Scene.GripTop) != 0 ? it.Y + it.H : it.Y, 2);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void ABoxDraggedInsideOutStopsAtAMinimumRatherThanInverting()
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 200, 120);
+            // drag the bottom right corner way past the top left
+            scene.Resize(it, corner: 0, wx: -500, wy: -500);
+
+            Assert.True(it.W > 0, $"width inverted to {it.W}");
+            Assert.True(it.H > 0, $"height inverted to {it.H}");
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void AGripIsFoundAtEachOfTheFourCorners()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Shape("shape", 200, 120);
+            board.Items.Add(it);
+            scene.Picked.Add(it.Id);
+
+            Assert.Equal(0, scene.GripAt(200, 120)!.Value.Corner);
+            Assert.Equal(Scene.GripLeft, scene.GripAt(0, 120)!.Value.Corner);
+            Assert.Equal(Scene.GripTop, scene.GripAt(200, 0)!.Value.Corner);
+            Assert.Equal(Scene.GripLeft | Scene.GripTop, scene.GripAt(0, 0)!.Value.Corner);
+
+            Assert.Null(scene.GripAt(100, 60));     // the middle is not a grip
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void AnUnpickedItemOffersNoGrips()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            board.Items.Add(Shape("shape", 200, 120));
+
+            Assert.Null(scene.GripAt(200, 120));
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Fact]
+    public void ALabelIsResizedInWidthOnlyBecauseItsHeightIsItsWords()
+    {
+        var (scene, _, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = new BoardItem { Id = "t", Kind = "text", X = 0, Y = 0, W = 400, Text = "hello", Size = 20 };
+            scene.Resize(it, corner: 0, wx: 700, wy: 900);
+
+            Assert.Equal(700, it.W);
+            Assert.Equal(0, it.H);      // untouched; the words decide
+            scene.ActiveBoard = null;
+        }
+    }
+
+    [Theory]
     [InlineData("shape")]
     [InlineData("ellipse")]
     [InlineData("diamond")]

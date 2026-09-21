@@ -67,23 +67,20 @@ change freely.
       Ends land on one of **four anchors** - top, right, bottom, left - and
       nowhere else. An endpoint free to sit anywhere on an edge slides about
       as either box moves, which is what made the first attempt unreadable.
-- [ ] **Shapes have a minimum and a default height.** `Scene.ItemHeight`
-      clamps a shape to at least 40 and substitutes 240 when `H` is 0, so a
-      deliberately short rectangle cannot be made. A shape's height is the
-      user's business; the clamp only ever gets in the way.
-- [ ] Resize from any corner, not only the bottom right. `GripAt` offers one
-      grip; it wants four, and dragging a top or left one has to move the
-      item's origin as well as its size.
+- [x] Shapes are exactly as tall as they were made - the floor of 40 and the
+      default of 240 are gone, so a long thin divider is possible.
+- [x] Resize from any of the four corners. `GripAt` returns which one and
+      `Scene.Resize` moves the two edges that corner owns, which for a top or
+      left grip means the origin moves too.
 - [ ] Fill and border for the outlined shapes: border colour, fill colour, and
       a transparent fill. **A transparent shape must keep its hitbox** - it
       stays clickable and draggable through the middle, which is not what
       "transparent" does by default in most editors and is what makes one
       usable as a frame round other things.
-- [ ] Drag to place a shape, the way an arrow already works: arming the tool
-      should do nothing until you drag out the box. Today pressing the tool
-      drops a shape in the middle of the view. The tool button stays lit until
-      the shape is drawn, so the mode is visible, and `Esc` cancels it. Applies
-      to every element, existing and future.
+- [x] Drag to place a shape, the way an arrow does. Arming shows a ghost and
+      does nothing until you drag out the box; the button stays lit until the
+      shape is drawn, and `Esc` cancels. Rectangles, ellipses, diamonds and
+      labels; a note (`N`) still lands in the middle of the view.
 - [ ] Replay strokes from an `SKPicture` once boards hold hundreds of them.
       Boards redraw every item every frame, which is fine at tens and not at
       thousands; the map already solved this.

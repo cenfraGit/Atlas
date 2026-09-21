@@ -486,7 +486,7 @@ public sealed class SceneView : Control
         Layers.Add("annotations", () => _notes is { IsVisible: true }, () => _notes!.Close());
         Layers.Add("reviews", () => _reviews is { IsVisible: true }, () => _reviews!.Close());
         Layers.Add("tour", () => _tour is not null, EndTour);
-        Layers.Add("tool", () => _armBrush || _armEraser || _armArrow, DisarmTools);
+        Layers.Add("tool", () => _armBrush || _armEraser || _armArrow || _armShape is not null, DisarmTools);
         Layers.Add("selection", HasSelection, ClearSelection);
         Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
     }
@@ -508,9 +508,11 @@ public sealed class SceneView : Control
     void DisarmTools()
     {
         _armBrush = _armEraser = _armArrow = false;
+        _armShape = null;
         _scene.ShowAnchors = false;
         _scene.StrokeDraft = null;
         _scene.ArrowDraft = null;
+        _scene.ShapeDraft = null;
         RefreshBoardBar();
         ApplyCursor();
         InvalidateVisual();
@@ -860,7 +862,8 @@ public sealed class SceneView : Control
     {
         bool panning = _spaceDown || !Editing;
 
-        Cursor = _armBrush || _armEraser ? new Cursor(StandardCursorType.Cross)
+        Cursor = _armBrush || _armEraser || _armShape is not null || _armArrow
+                ? new Cursor(StandardCursorType.Cross)
             : panning ? (_drag ? Cursors.Closed : Cursors.Open)
             : new Cursor(StandardCursorType.DragMove);
     }
@@ -967,6 +970,7 @@ public sealed class SceneView : Control
     (float X, float Y, float S)? _mapCam;
     BoardItem? _dragItem;
     BoardItem? _resizing;
+    int _resizeCorner;
     bool _spaceDown;
     bool _band;
     readonly List<string> _bandBase = [];
@@ -994,6 +998,7 @@ public sealed class SceneView : Control
         _armArrow = false;
         _armBrush = false;
         _armEraser = false;
+        _armShape = null;
         _scene.Picked.Clear();
         _scene.PickedFiles.Clear();
         _scene.Selection = null;
@@ -1015,6 +1020,7 @@ public sealed class SceneView : Control
     bool _secondary;
     bool _armArrow;
     bool _armBrush, _armEraser, _erasing;
+    SkiaSharp.SKPoint _shapeFrom;
 
     /// <summary>what the brush draws with. Null is the default ink.</summary>
     public string? PenColor;
@@ -1133,7 +1139,7 @@ public sealed class SceneView : Control
     {
         bool editing = _scene.ActiveBoard is not null && Editing;
         _boardBar?.Reflect(editing, SnapToGrid,
-            _armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null);
+            _armShape ?? (_armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null));
         _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
         // each tool shows its own settings, and only while it is armed
         _penBar?.Reflect(editing && _armBrush, PenWeight, PenColor);
@@ -1764,18 +1770,40 @@ public sealed class SceneView : Control
     /// <summary>a plain rectangle to group or point at things on a board.</summary>
     void AddShape() => AddShape("shape");
 
-    /// <summary>drop a shape in the middle of the view. All four are the same
-    /// box with a different outline, so one method makes all of them.</summary>
+    /// <summary>the shape the next drag will draw, or null.</summary>
+    string? _armShape;
+
+    /// <summary>arm a shape tool. It used to drop a 520x240 box in the middle
+    /// of the view, which is Atlas choosing the size and the place - the two
+    /// things about a shape that are actually yours. Like the arrow, arming
+    /// does nothing until you drag out the box you want.</summary>
     void AddShape(string kind)
     {
-        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly) return;
-        Remember();
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
+        if (!Editing) SetEditing(true);
 
+        _armBrush = _armEraser = _armArrow = false;
+        _armShape = _armShape == kind ? null : kind;   // pressing it again backs out
+        _scene.Picked.Clear();
+        RefreshBoardBar();
+        ApplyCursor();
+        Toast(_armShape is null ? "cancelled" : $"drag out the {Named(kind)}");
+    }
+
+    /// <summary>place what was dragged out. A drag too small to be deliberate
+    /// is a click, and a click is not a shape.</summary>
+    void PlaceShape(SKRect box, string kind)
+    {
+        if (_scene.ActiveBoard is not { } board) return;
+        if (box.Width < 6 || (kind != "text" && box.Height < 4)) return;
+
+        if (kind == "text") { PlaceLabel(box); return; }
+
+        Remember();
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = kind, W = 520, Text = "",
-            X = _scene.CamX - 260, Y = _scene.CamY - 120,
-            Color = PenColor,
+            Id = BookmarkStore.NewId(), Kind = kind, Text = "", Color = PenColor,
+            X = box.Left, Y = box.Top, W = box.Width, H = box.Height,
         };
         board.Items.Add(item);
         _scene.Picked.Clear();
@@ -1784,12 +1812,11 @@ public sealed class SceneView : Control
         Saved($"{Named(kind)} on  {board.Name}");
     }
 
-    /// <summary>a label is the one shape that is nothing without its words, so
-    /// it asks for them rather than arriving empty and inviting a double
-    /// click nobody knows to make.</summary>
-    void AddLabel()
+    /// <summary>a label takes its width from the drag - that is what its words
+    /// wrap to - and its height from the words themselves.</summary>
+    void PlaceLabel(SKRect box)
     {
-        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly || _prompt is null) return;
+        if (_scene.ActiveBoard is not { } board || _prompt is null) return;
 
         _prompt.Ask("label text", "", text =>
         {
@@ -1797,7 +1824,7 @@ public sealed class SceneView : Control
             var item = new BoardItem
             {
                 Id = BookmarkStore.NewId(), Kind = "text", Text = text,
-                W = 760, X = _scene.CamX - 380, Y = _scene.CamY - 40,
+                X = box.Left, Y = box.Top, W = box.Width,
                 Size = Scene.LabelSize, Color = PenColor,
             };
             board.Items.Add(item);
@@ -1808,6 +1835,8 @@ public sealed class SceneView : Control
             Focus();
         });
     }
+
+    void AddLabel() => AddShape("text");
 
     static string Named(string kind) => kind switch
     {
@@ -2146,6 +2175,15 @@ public sealed class SceneView : Control
         {
             var (wx, wy) = WorldAt(e.GetPosition(this));
 
+            if (_armShape is not null)
+            {
+                _scene.ShapeDraft = (_armShape, new SkiaSharp.SKRect(wx, wy, wx, wy));
+                _shapeFrom = new SkiaSharp.SKPoint(wx, wy);
+                _drag = true;
+                _last = e.GetPosition(this);
+                return;
+            }
+
             if (_armBrush)
             {
                 _scene.StrokeDraft = new BoardItem
@@ -2187,8 +2225,15 @@ public sealed class SceneView : Control
                 return;
             }
 
-            _resizing = _scene.GripAt(wx, wy);
-            if (_resizing is not null) { Remember(); _drag = true; _last = e.GetPosition(this); return; }
+            if (_scene.GripAt(wx, wy) is { } grip)
+            {
+                Remember();
+                _resizing = grip.Item;
+                _resizeCorner = grip.Corner;
+                _drag = true;
+                _last = e.GetPosition(this);
+                return;
+            }
 
             var hit = _scene.ItemAt(wx, wy) ?? _scene.ArrowAt(wx, wy) ?? _scene.StrokeAt(wx, wy);
             if (hit is null)
@@ -2254,6 +2299,22 @@ public sealed class SceneView : Control
 
         _erasing = false;
         _scene.ShowAnchors = false;
+
+        if (_scene.ShapeDraft is { } placed)
+        {
+            _scene.ShapeDraft = null;
+            // one shape per arming, like the arrow: a tool still live after it
+            // is done catches the next drag you meant for something else
+            _armShape = null;
+            RefreshBoardBar();
+            ApplyCursor();
+            PlaceShape(placed.Box, placed.Kind);
+
+            _drag = false;
+            e.Pointer.Capture(null);
+            InvalidateVisual();
+            return;
+        }
 
         if (_scene.StrokeDraft is { } drawn)
         {
@@ -2394,6 +2455,18 @@ public sealed class SceneView : Control
         if (!_drag) return;
         _dragDist += Math.Abs(p.X - _last.X) + Math.Abs(p.Y - _last.Y);
 
+        if (_scene.ShapeDraft is { } shaping)
+        {
+            var (sx2, sy2) = WorldAt(p);
+            // normalised, so dragging up and left works as well as down right
+            _scene.ShapeDraft = (shaping.Kind, new SkiaSharp.SKRect(
+                Math.Min(_shapeFrom.X, sx2), Math.Min(_shapeFrom.Y, sy2),
+                Math.Max(_shapeFrom.X, sx2), Math.Max(_shapeFrom.Y, sy2)));
+            _last = p;
+            InvalidateVisual();
+            return;
+        }
+
         if (_scene.StrokeDraft is { } pen)
         {
             var (sx, sy) = WorldAt(p);
@@ -2452,12 +2525,12 @@ public sealed class SceneView : Control
 
         if (_resizing is not null)
         {
+            var (rx, ry) = WorldAt(p);
             float ratio = _scene.ItemHeight(_resizing) / Math.Max(1, _resizing.W);
-            // the box changes; the font stays where it is
-            _resizing.W = Math.Max(120, _resizing.W + (float)(p.X - _last.X) / _scene.CamS);
-            _resizing.H = _resizing.Kind == "image"
-                ? _resizing.W * ratio                  // an image keeps its shape
-                : Math.Max(40, _scene.ItemHeight(_resizing) + (float)(p.Y - _last.Y) / _scene.CamS);
+
+            // the corner follows the pointer and the opposite one stays put
+            _scene.Resize(_resizing, _resizeCorner, rx, ry);
+            if (_resizing.Kind == "image") _resizing.H = _resizing.W * ratio;   // keeps its shape
             _boardDirty = true;
         }
         else if (_band)

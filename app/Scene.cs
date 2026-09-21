@@ -943,7 +943,11 @@ public sealed class Scene : IDisposable
         // a stroke's box is its ink's bounds, kept in step by Strokes.Reframe
         if (Strokes.Is(it)) return it.H;
         if (it.Kind == "text") return LabelHeight(it);
-        if (IsShape(it.Kind)) return Math.Max(40, it.H > 0 ? it.H : 240);
+        // a shape is exactly as tall as it was made. There used to be a floor
+        // of 40 and a default of 240, which between them made a deliberately
+        // short rectangle impossible - a shape's proportions are the user's
+        // business and the clamp only ever got in the way
+        if (IsShape(it.Kind)) return it.H > 0 ? it.H : 40;
         if (it.Kind == "image") return Math.Max(20, it.H > 0 ? it.H : it.W * 0.6f);
         if (it.Kind == "note")
             return Math.Max(it.H > 0 ? it.H : 0,
@@ -1260,6 +1264,7 @@ public sealed class Scene : IDisposable
         }
 
         DrawStrokes(canvas, board);
+        DrawShapeDraft(canvas);
         DrawAnchors(canvas, board);
         DrawArrows(canvas, board);
         DrawPickedItems(canvas, board);
@@ -1462,6 +1467,32 @@ public sealed class Scene : IDisposable
     /// <summary>the stroke being drawn right now, before it is committed.</summary>
     public BoardItem? StrokeDraft;
 
+    /// <summary>the shape being dragged out, before it is placed.</summary>
+    public (string Kind, SKRect Box)? ShapeDraft;
+
+    void DrawShapeDraft(SKCanvas canvas)
+    {
+        if (ShapeDraft is not { } draft) return;
+
+        var col = ParseColor(null, new SKColor(0x5f, 0xd3, 0xf3));
+        using var fill = new SKPaint { Color = col.WithAlpha(16), IsAntialias = true };
+        using var edge = new SKPaint
+        {
+            Color = col.WithAlpha(200), IsStroke = true,
+            StrokeWidth = 1.5f / CamS, IsAntialias = true,
+            PathEffect = SKPathEffect.CreateDash([6f / CamS, 5f / CamS], 0),
+        };
+
+        if (draft.Kind == "text")
+        {
+            // a label has no height of its own until it has words, so the
+            // draft shows the width it will wrap to and nothing more
+            canvas.DrawLine(draft.Box.Left, draft.Box.Top, draft.Box.Right, draft.Box.Top, edge);
+            return;
+        }
+        DrawShape(canvas, draft.Kind, draft.Box, fill, edge);
+    }
+
     void DrawStrokes(SKCanvas canvas, Board board)
     {
         using var pen = new SKPaint
@@ -1584,10 +1615,17 @@ public sealed class Scene : IDisposable
             if (!Picked.Contains(it.Id) || it.Kind == "arrow") continue;
             float h = ItemHeight(it);
             canvas.DrawRect(it.X - 3 * sc, it.Y - 3 * sc, it.W + 6 * sc, h + 6 * sc, edge);
-            // the grip resizes the box and leaves the font alone. a file window
-            // has no grip: its size comes from the range of lines it shows
-            if (Resizable(it))
-                canvas.DrawRect(it.X + it.W - 5 * sc, it.Y + h - 5 * sc, 10 * sc, 10 * sc, grip);
+            // a grip on each corner, so a box can be pulled from whichever
+            // side is nearest rather than only from the bottom right. They
+            // resize the box and leave the font alone; a file window has none,
+            // because its size comes from the range of lines it shows
+            if (!Resizable(it)) continue;
+            for (int corner = 0; corner < 4; corner++)
+            {
+                float gx = (corner & GripLeft) != 0 ? it.X : it.X + it.W;
+                float gy = (corner & GripTop) != 0 ? it.Y : it.Y + h;
+                canvas.DrawRect(gx - 5 * sc, gy - 5 * sc, 10 * sc, 10 * sc, grip);
+            }
         }
     }
 
@@ -1670,19 +1708,51 @@ public sealed class Scene : IDisposable
         it.Kind is "note" or "image" or "text" || IsShape(it.Kind);
 
     /// <summary>the resize grip of a picked item, if the point is on one.</summary>
-    public BoardItem? GripAt(float wx, float wy)
+    /// <summary>which corner: bit 1 is the left edge, bit 2 the top. So 0 is
+    /// bottom right, 1 bottom left, 2 top right, 3 top left.</summary>
+    public const int GripLeft = 1, GripTop = 2;
+
+    public (BoardItem Item, int Corner)? GripAt(float wx, float wy)
     {
         if (ActiveBoard is null) return null;
         float sc = 1f / CamS;
+
         for (int i = ActiveBoard.Items.Count - 1; i >= 0; i--)
         {
             var it = ActiveBoard.Items[i];
             if (!Picked.Contains(it.Id) || !Resizable(it)) continue;
+
             float h = ItemHeight(it);
-            if (wx >= it.X + it.W - 9 * sc && wx <= it.X + it.W + 5 * sc &&
-                wy >= it.Y + h - 9 * sc && wy <= it.Y + h + 5 * sc) return it;
+            for (int corner = 0; corner < 4; corner++)
+            {
+                float gx = (corner & GripLeft) != 0 ? it.X : it.X + it.W;
+                float gy = (corner & GripTop) != 0 ? it.Y : it.Y + h;
+                if (Math.Abs(wx - gx) <= 7 * sc && Math.Abs(wy - gy) <= 7 * sc)
+                    return (it, corner);
+            }
         }
         return null;
+    }
+
+    /// <summary>drag a corner. The two edges that corner owns move to the
+    /// pointer and the opposite two stay put - which for a top or left grip
+    /// means the item's origin moves, not only its size.</summary>
+    public void Resize(BoardItem it, int corner, float wx, float wy, float min = 8f)
+    {
+        float h = ItemHeight(it);
+        float left = it.X, top = it.Y, right = it.X + it.W, bottom = it.Y + h;
+
+        if ((corner & GripLeft) != 0) left = Math.Min(wx, right - min);
+        else right = Math.Max(wx, left + min);
+
+        if ((corner & GripTop) != 0) top = Math.Min(wy, bottom - min);
+        else bottom = Math.Max(wy, top + min);
+
+        it.X = left;
+        it.Y = top;
+        it.W = right - left;
+        // a label's height is its words, so only its width is dragged
+        if (it.Kind != "text") it.H = bottom - top;
     }
 
     /// <summary>annotation tint inside a board's file window, in card space.</summary>

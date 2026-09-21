@@ -272,10 +272,129 @@ public class StrokeTests
         }
     }
 
+    // a stroke resizes now, by scaling every point - see AStrokeIsResizableNow
+
+    // --- resizing ---------------------------------------------------------
+
     [Fact]
-    public void AStrokeIsNotResizable() =>
-        // resizing would have to scale every point; the grip would lie
-        Assert.False(Scene.Resizable(new BoardItem { Kind = "stroke" }));
+    public void AStrokeIsResizableNow()
+    {
+        // it was not, because a stroke has no box to stretch - its bounds are
+        // wherever the ink is, so resizing means moving every sample
+        Assert.True(Scene.Resizable(new BoardItem { Kind = "stroke" }));
+    }
+
+    [Fact]
+    public void ScalingPutsTheInkInTheNewBox()
+    {
+        var it = Stroke((0, 0), (100, 0), (100, 50));
+        Strokes.ScaleInto(it, new SKRect(200, 300, 600, 500));
+
+        Assert.InRange(it.X, 195, 205);
+        Assert.InRange(it.Y, 295, 305);
+        Assert.InRange(it.X + it.W, 595, 605);
+        Assert.InRange(it.Y + it.H, 495, 505);
+    }
+
+    [Fact]
+    public void ScalingKeepsTheShape()
+    {
+        var it = Stroke((0, 0), (50, 100), (100, 0));
+        Strokes.ScaleInto(it, new SKRect(0, 0, 200, 200));   // twice as wide, twice as tall
+
+        // the middle sample was halfway across and at the bottom; it still is
+        var mid = Strokes.PointAt(it, 1);
+        Assert.Equal((it.X + it.X + it.W) / 2, mid.X, 1);
+        Assert.InRange(mid.Y, it.Y + it.H * 0.8f, it.Y + it.H);
+    }
+
+    [Fact]
+    public void EveryPointEndsUpInsideTheNewBounds()
+    {
+        var it = Stroke((0, 0), (30, 90), (70, 20), (100, 60));
+        Strokes.ScaleInto(it, new SKRect(-400, -200, -100, 100));
+
+        for (int i = 0; i < Strokes.CountOf(it); i++)
+        {
+            var p = Strokes.PointAt(it, i);
+            Assert.InRange(p.X, it.X, it.X + it.W);
+            Assert.InRange(p.Y, it.Y, it.Y + it.H);
+        }
+    }
+
+    [Fact]
+    public void ScalingUpThickensThePenSoItDoesNotBecomeAHairline()
+    {
+        var it = Stroke((0, 0), (100, 100));
+        it.Weight = 4;
+        Strokes.Reframe(it);
+
+        Strokes.ScaleInto(it, new SKRect(0, 0, 400, 400));
+
+        Assert.True(it.Weight > 4, $"pen stayed at {it.Weight}");
+    }
+
+    [Fact]
+    public void ThePenNeverGoesToNothingOrRunsAway()
+    {
+        var it = Stroke((0, 0), (100, 100));
+        Strokes.ScaleInto(it, new SKRect(0, 0, 0.5f, 0.5f));
+        Assert.True(it.Weight > 0, "the pen vanished");
+
+        var big = Stroke((0, 0), (1, 1));
+        Strokes.ScaleInto(big, new SKRect(0, 0, 5000, 5000));
+        Assert.True(big.Weight < 100, $"the pen ran away to {big.Weight}");
+    }
+
+    [Fact]
+    public void RepeatedResizesCompose()
+    {
+        var it = Stroke((0, 0), (100, 0), (100, 100));
+        Strokes.ScaleInto(it, new SKRect(0, 0, 200, 200));
+        Strokes.ScaleInto(it, new SKRect(0, 0, 50, 50));
+
+        // mapping from the current bounds rather than a remembered original
+        Assert.InRange(it.W, 45, 55);
+        Assert.InRange(it.H, 45, 55);
+    }
+
+    [Fact]
+    public void SquashingFlatDoesNotInvertOrVanish()
+    {
+        var it = Stroke((0, 0), (100, 100));
+        Strokes.ScaleInto(it, new SKRect(0, 0, 100, 0));
+
+        Assert.True(it.H > 0, $"height collapsed to {it.H}");
+        Assert.Equal(2, Strokes.CountOf(it));
+    }
+
+    [Fact]
+    public void ScalingAnEmptyStrokeIsHarmless()
+    {
+        var it = new BoardItem { Kind = "stroke" };
+        Strokes.ScaleInto(it, new SKRect(0, 0, 100, 100));
+        Assert.Equal(0, Strokes.CountOf(it));
+    }
+
+    [Fact]
+    public void AGripDragResizesAStrokeThroughTheSamePath()
+    {
+        var (scene, board, repo) = Boarded();
+        using (repo)
+        using (scene)
+        {
+            var it = Stroke((0, 0), (100, 0), (100, 100));
+            board.Items.Add(it);
+            scene.Picked.Add(it.Id);
+
+            // the bottom right grip, dragged out
+            scene.Resize(it, corner: 0, wx: 400, wy: 400);
+
+            Assert.InRange(it.X + it.W, 395, 405);
+            Assert.InRange(it.Y + it.H, 395, 405);
+            scene.ActiveBoard = null;
+        }
+    }
 
     // --- the splitting eraser --------------------------------------------
 

@@ -64,6 +64,37 @@ public static class Strokes
         it.H = y1 - y0 + pad * 2;
     }
 
+    /// <summary>scale every point into a new box.
+    ///
+    /// A stroke has no box of its own to stretch - its bounds are wherever
+    /// the ink happens to be - so resizing one means moving every sample,
+    /// which is why it was left out at first. Mapping from the current bounds
+    /// rather than remembering an original means repeated drags compose, and
+    /// the pen width comes along so a scaled-up stroke does not turn into a
+    /// hairline.</summary>
+    public static void ScaleInto(BoardItem it, SKRect box, float min = 2f)
+    {
+        int n = CountOf(it);
+        if (n == 0) return;
+
+        float fromW = Math.Max(it.W, 0.001f), fromH = Math.Max(it.H, 0.001f);
+        float toW = Math.Max(box.Width, min), toH = Math.Max(box.Height, min);
+        float sx = toW / fromW, sy = toH / fromH;
+        float ox = it.X, oy = it.Y;
+
+        for (int i = 0; i < it.Points!.Count; i += 2)
+        {
+            it.Points[i] = box.Left + (it.Points[i] - ox) * sx;
+            it.Points[i + 1] = box.Top + (it.Points[i + 1] - oy) * sy;
+        }
+
+        // the smaller axis, so a stroke squashed flat does not keep a pen
+        // wider than the shape it is drawing
+        float weight = Math.Max(it.Weight, DefaultWeight) * Math.Min(sx, sy);
+        it.Weight = Math.Clamp(weight, 0.5f, 60f);
+        Reframe(it);
+    }
+
     /// <summary>shift every point, and the bounds with them.</summary>
     public static void Move(BoardItem it, float dx, float dy)
     {

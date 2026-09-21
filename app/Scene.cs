@@ -1532,22 +1532,89 @@ public sealed class Scene : IDisposable
         DrawShape(canvas, draft.Kind, draft.Box, fill, edge);
     }
 
+    SKPicture? _strokePic;
+    long _strokeSig;
+
+    /// <summary>how many times the ink has been re-recorded. The point of the
+    /// cache is that this stays still while nothing is being drawn, and a
+    /// count is a steadier thing to assert on than a stopwatch.</summary>
+    public int StrokeRebuilds { get; private set; }
+
+    static SKPaint Pen() => new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeCap = SKStrokeCap.Round,
+        StrokeJoin = SKStrokeJoin.Round,
+    };
+
+    /// <summary>ink is recorded once and replayed, the way the map does its
+    /// bars. Measured at a thousand strokes: rebuilding every path every
+    /// frame cost 37ms, which is past the 60fps budget on its own, and a
+    /// drawing surface is somewhere people make thousands.
+    ///
+    /// The stroke being drawn right now is not in the recording - it changes
+    /// every frame by definition - so it goes on top, live.</summary>
     void DrawStrokes(SKCanvas canvas, Board board)
     {
-        using var pen = new SKPaint
+        long sig = StrokeSignature(board);
+        if (_strokePic is null || sig != _strokeSig)
         {
-            IsAntialias = true,
-            Style = SKPaintStyle.Stroke,
-            StrokeCap = SKStrokeCap.Round,
-            StrokeJoin = SKStrokeJoin.Round,
-        };
+            _strokePic?.Dispose();
+            _strokePic = RecordStrokes(board);
+            _strokeSig = sig;
+            StrokeRebuilds++;
+        }
+        if (_strokePic is not null) canvas.DrawPicture(_strokePic);
 
+        if (StrokeDraft is { } draft)
+        {
+            using var pen = Pen();
+            DrawStroke(canvas, draft, pen);
+        }
+    }
+
+    SKPicture? RecordStrokes(Board board)
+    {
+        var bounds = SKRect.Empty;
+        bool any = false;
         foreach (var it in board.Items)
         {
             if (!Strokes.Is(it)) continue;
-            DrawStroke(canvas, it, pen);
+            var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + it.H);
+            bounds = any ? SKRect.Union(bounds, box) : box;
+            any = true;
         }
-        if (StrokeDraft is { } draft) DrawStroke(canvas, draft, pen);
+        if (!any) return null;
+
+        var rec = new SKPictureRecorder();
+        var c = rec.BeginRecording(bounds);
+        using (var pen = Pen())
+            foreach (var it in board.Items)
+                if (Strokes.Is(it)) DrawStroke(c, it, pen);
+        return rec.EndRecording();
+    }
+
+    /// <summary>cheap enough to compute every frame, and changes whenever the
+    /// ink does. Bounds rather than points, so it stays O(strokes) rather
+    /// than O(samples): every edit that changes a stroke's shape moves its
+    /// bounds, its sample count, its weight or its colour.</summary>
+    public static long StrokeSignature(Board board)
+    {
+        long sig = 17;
+        foreach (var it in board.Items)
+        {
+            if (!Strokes.Is(it)) continue;
+            sig = sig * 31 + it.Id.GetHashCode();
+            sig = sig * 31 + (it.Points?.Count ?? 0);
+            sig = sig * 31 + BitConverter.SingleToInt32Bits(it.X);
+            sig = sig * 31 + BitConverter.SingleToInt32Bits(it.Y);
+            sig = sig * 31 + BitConverter.SingleToInt32Bits(it.W);
+            sig = sig * 31 + BitConverter.SingleToInt32Bits(it.H);
+            sig = sig * 31 + BitConverter.SingleToInt32Bits(it.Weight);
+            sig = sig * 31 + (it.Color?.GetHashCode() ?? 0);
+        }
+        return sig;
     }
 
     void DrawStroke(SKCanvas canvas, BoardItem it, SKPaint pen)
@@ -1744,7 +1811,7 @@ public sealed class Scene : IDisposable
     }
 
     public static bool Resizable(BoardItem it) =>
-        it.Kind is "note" or "image" or "text" || IsShape(it.Kind);
+        it.Kind is "note" or "image" or "text" || IsShape(it.Kind) || Strokes.Is(it);
 
     /// <summary>the resize grip of a picked item, if the point is on one.</summary>
     /// <summary>which corner: bit 1 is the left edge, bit 2 the top. So 0 is
@@ -1786,6 +1853,14 @@ public sealed class Scene : IDisposable
 
         if ((corner & GripTop) != 0) top = Math.Min(wy, bottom - min);
         else bottom = Math.Max(wy, top + min);
+
+        // a stroke has no box to stretch: its bounds are where the ink is, so
+        // resizing one means moving every sample into the new box
+        if (Strokes.Is(it))
+        {
+            Strokes.ScaleInto(it, new SKRect(left, top, right, bottom), min);
+            return;
+        }
 
         it.X = left;
         it.Y = top;
@@ -1962,6 +2037,7 @@ public sealed class Scene : IDisposable
     public void Dispose()
     {
         foreach (var p in _bars.Values) p.Dispose();
+        _strokePic?.Dispose();
         _folderPic?.Dispose();
         _cardPic?.Dispose();
         _mono.Dispose();

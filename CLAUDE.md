@@ -23,7 +23,13 @@ co-author:
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
-Pushing is the user's. Do not push.
+**Push as well.** Push to `origin/main` once the work is committed and the
+suite passes - the user cannot push from where they are reading this. Fetch
+first and look at what is outstanding, because the branch may have moved.
+
+Pushing is publishing: it goes to a repository other people can see and it
+cannot be taken back cleanly. So push finished work, not a checkpoint, and
+never force push or rewrite anything already pushed without being asked.
 
 ## TODO
 

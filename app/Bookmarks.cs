@@ -12,6 +12,11 @@ public sealed class Bookmark
     /// <summary>repo-relative path. null means the bookmark is a free camera
     /// position (a wide view of the map) rather than a place in a file.</summary>
     [JsonPropertyName("file")] public string? File { get; set; }
+
+    /// <summary>content fingerprint of that file, so the bookmark survives it
+    /// being renamed or moved. A path alone made every bookmark and every tour
+    /// stop in a file orphans the moment somebody renamed it.</summary>
+    [JsonPropertyName("key")] public string? Key { get; set; }
     /// <summary>first line of the region. -1 means the whole file.</summary>
     [JsonPropertyName("line")] public int Line { get; set; } = -1;
 
@@ -111,7 +116,7 @@ public static class BookmarkTargets
     {
         if (b.File is null) return new Target(b.X, b.Y, b.S, false);
 
-        int i = scene.IndexOfPath(b.File);
+        int i = scene.ResolveFile(b.File, b.Key);
         if (i < 0) return new Target(b.X, b.Y, b.S, true);
 
         var f = scene.Data.Files[i];
@@ -165,6 +170,7 @@ public static class BookmarkTargets
         if (i < 0) return b;
 
         var f = scene.Data.Files[i];
+        b.Key = scene.KeyFor(f.P);
         float lineH = scene.Data.LineH, headerH = scene.Data.HeaderH;
         float halfH = vh / 2 / scene.CamS;
 

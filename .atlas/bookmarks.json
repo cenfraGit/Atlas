@@ -5,6 +5,7 @@
       "name": "the scan",
       "note": "Everything starts here: the repo is read and laid out once.",
       "file": "app/Scanner.cs",
+      "key": "8F668565D516",
       "line": 184,
       "endLine": 209,
       "x": 0,
@@ -16,6 +17,7 @@
       "name": "the four tiers",
       "note": "What the zoom decides you are looking at.",
       "file": "app/Scene.cs",
+      "key": "312478C6364C",
       "line": 73,
       "endLine": 74,
       "x": 0,
@@ -27,8 +29,9 @@
       "name": "real text",
       "note": "The innermost tier, where a card becomes source.",
       "file": "app/Scene.cs",
-      "line": 674,
-      "endLine": 705,
+      "key": "312478C6364C",
+      "line": 703,
+      "endLine": 734,
       "x": 0,
       "y": 0,
       "s": 0
@@ -38,6 +41,7 @@
       "name": "the one lock",
       "note": "TextMate is not thread safe, and finding that out cost a stack overflow.",
       "file": "app/Highlighter.cs",
+      "key": "2B34A02855E1",
       "line": 5,
       "endLine": 5,
       "x": 0,
@@ -49,8 +53,9 @@
       "name": "the anchor ladder",
       "note": "Symbol, then fingerprint, then the stored line.",
       "file": "app/Annotations.cs",
-      "line": 178,
-      "endLine": 219,
+      "key": "C96136700B0F",
+      "line": 182,
+      "endLine": 223,
       "x": 0,
       "y": 0,
       "s": 0
@@ -60,6 +65,7 @@
       "name": "ink that resizes",
       "note": "A stroke is a box like everything else, as far as the board knows.",
       "file": "app/Strokes.cs",
+      "key": "D48386DE837B",
       "line": 74,
       "endLine": 95,
       "x": 0,
@@ -72,9 +78,9 @@
       "note": "Not a place in a file - just a view. F does this too.",
       "line": -1,
       "endLine": -1,
-      "x": 2672,
-      "y": 5493,
-      "s": 0.25261977
+      "x": 2648,
+      "y": 5656.5,
+      "s": 0.25490937
     }
   ],
   "tours": [

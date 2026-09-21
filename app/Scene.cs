@@ -495,6 +495,35 @@ public sealed class Scene : IDisposable
     /// <summary>the file's text, if it has been read yet.</summary>
     public string[]? LinesOf(string relPath) => _text.GetValueOrDefault(relPath);
 
+    /// <summary>a content fingerprint for a file, so whatever stores a
+    /// reference to it can find it again after a rename. Reads the file if it
+    /// has not been read yet - a few kilobytes, once, off the draw loop.</summary>
+    public string? KeyFor(string relPath)
+    {
+        if (LinesOf(relPath) is { } cached) return FileKeys.Of(cached);
+        if (TextSource is not null)
+            return TextSource(relPath) is { } fromTree ? FileKeys.Of(fromTree) : null;
+        return FileKeys.OfFile(Path.Combine(Data.Root, relPath.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    /// <summary>fill in the fingerprints on a board made before windows kept
+    /// them. Without one, a window falls back to matching on the path, so
+    /// renaming the file orphans it - which is exactly what the fingerprint
+    /// exists to prevent. Returns true when something was filled in, so the
+    /// caller knows the board is worth saving.</summary>
+    public bool EnsureKeys(Board board)
+    {
+        bool filled = false;
+        foreach (var it in board.Items)
+        {
+            if (it.Kind != "file" || it.File is null || !string.IsNullOrEmpty(it.Key)) continue;
+            if (KeyFor(it.File) is not { Length: > 0 } key) continue;
+            it.Key = key;
+            filled = true;
+        }
+        return filled;
+    }
+
     /// <summary>the annotations to draw on this file, here.
     ///
     /// Global ones everywhere; a board's own only on that board. Filtered on

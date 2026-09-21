@@ -860,7 +860,7 @@ public sealed class SceneView : Control
         var f = _scene.Data.Files[target.File];
         return new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "file", File = f.P,
+            Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
             Line = target.From < 0 ? 0 : target.From,
             EndLine = target.To, W = 620,
         };
@@ -875,7 +875,7 @@ public sealed class SceneView : Control
             var f = _scene.Data.Files[i];
             board.Items.Add(new BoardItem
             {
-                Id = BookmarkStore.NewId(), Kind = "file", File = f.P,
+                Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
                 Line = 0, EndLine = -1, W = 620, X = 0, Y = y,
             });
             y += Math.Min(f.N, 400) * _scene.Data.LineH * (620f / f.W) + 26 + 40;
@@ -1788,7 +1788,7 @@ public sealed class SceneView : Control
     public void FlyToAnnotation(Annotation a)
     {
         _scene.EnsureAnchored(a.File);
-        int i = _scene.IndexOfPath(a.File);
+        int i = _scene.ResolveFile(a.File, a.Key);
         if (i < 0) { _caption = $"{a.File} is not in this scan"; InvalidateVisual(); return; }
 
         int line = a.Line;
@@ -1864,6 +1864,8 @@ public sealed class SceneView : Control
         _boards?.Close();
         if (_scene.ActiveBoard is null) _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.ActiveBoard = b;
+        // a board made before windows kept fingerprints gets them now
+        if (_scene.EnsureKeys(b)) _boardStore?.Save(b);
         _scene.Grid = Editing ? GridStep : 0;
         _scene.Picked.Clear();
         _history.Clear();
@@ -2018,6 +2020,7 @@ public sealed class SceneView : Control
             Id = BookmarkStore.NewId(),
             Kind = "file",
             File = mark.File,
+            Key = mark.File is null ? null : _scene.KeyFor(mark.File),
             Line = mark.Line,
             EndLine = mark.EndLine,
             W = 620,
@@ -2429,7 +2432,7 @@ public sealed class SceneView : Control
         var t = BookmarkTargets.Resolve(_scene, b, (float)Bounds.Width, (float)Bounds.Height);
         _caption = t.Orphaned ? $"{b.Name}  (file is gone: {b.File})" : b.Name;
 
-        int i = b.File is null ? -1 : _scene.IndexOfPath(b.File);
+        int i = b.File is null ? -1 : _scene.ResolveFile(b.File, b.Key);
         _scene.Highlight = i >= 0 && b.EndLine >= b.Line && b.Line >= 0
             ? (i, b.Line, b.EndLine)
             : null;
@@ -2544,7 +2547,7 @@ public sealed class SceneView : Control
         Remember();
         board.Items.Add(new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "file", File = f.P,
+            Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
             Line = 0, EndLine = -1, W = 620,
             X = _scene.CamX - 310, Y = _scene.CamY - 120,
         });

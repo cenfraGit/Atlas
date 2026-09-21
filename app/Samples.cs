@@ -129,7 +129,7 @@ public static class Samples
                 // than filling the file with fresh copies of the same places
                 Id = IdFor(name),
                 Name = name, Note = note,
-                File = f.P, Line = from, EndLine = to,
+                File = f.P, Key = scene.KeyFor(f.P), Line = from, EndLine = to,
             };
             store.Bookmarks.Add(b);
             stops.Add(b.Id);
@@ -263,7 +263,7 @@ public static class Samples
 
             board.Items.Add(new BoardItem
             {
-                Id = $"{id}-{n++}", Kind = "file", File = f.P,
+                Id = $"{id}-{n++}", Kind = "file", File = f.P, Key = scene.KeyFor(f.P),
                 Line = start, EndLine = end, X = 0, Y = y, W = 620,
             });
             board.Items.Add(new BoardItem
@@ -360,7 +360,7 @@ public static class Samples
         if (big is not null)
             Add(new BoardItem
             {
-                Id = Id(), Kind = "file", File = big.P,
+                Id = Id(), Kind = "file", File = big.P, Key = scene.KeyFor(big.P),
                 Line = 0, EndLine = Math.Min(big.N - 1, 120),
                 X = 0, Y = 520, W = 620,
             });

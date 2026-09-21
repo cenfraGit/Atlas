@@ -82,8 +82,8 @@ public sealed class BookmarkOverlay : Border
     // parallel to the list rows: a tour, or a bookmark
     readonly List<(Tour? Tour, Bookmark? Mark)> _rows = [];
 
-    public event Action<Bookmark>? FlyTo;
-    public event Action<Tour>? Play;
+    /// <summary>a tour to walk, and which stop to start on.</summary>
+    public event Action<Tour, int>? Play;
 
     public BookmarkOverlay(BookmarkStore store, Scene scene)
     {
@@ -171,14 +171,30 @@ public sealed class BookmarkOverlay : Border
         _list.ScrollIntoView(_list.SelectedIndex);
     }
 
+    /// <summary>open whatever is selected, as something you can step through.
+    ///
+    /// A single bookmark used to be a one-way trip: it flew you there and
+    /// that was the end of it, so the arrows meant nothing and going to the
+    /// next one meant opening this panel again. A bookmark is now the
+    /// starting point of an unnamed tour of all of them, which is what a
+    /// list of places you saved is - the arrows then work the same whether
+    /// you opened a tour or a bookmark.</summary>
     void Commit()
     {
         int i = _list.SelectedIndex;
         if (i < 0 || i >= _rows.Count) return;
         var (tour, mark) = _rows[i];
         Close();
-        if (tour is not null) Play?.Invoke(tour);
-        else if (mark is not null) FlyTo?.Invoke(mark);
+
+        if (tour is not null) { Play?.Invoke(tour, 0); return; }
+        if (mark is null) return;
+
+        var marks = _rows.Where(r => r.Mark is not null).Select(r => r.Mark!).ToList();
+        int at = marks.FindIndex(m => m.Id == mark.Id);
+        Play?.Invoke(
+            // never stored: it exists for as long as you are walking it
+            new Tour { Id = "", Name = "bookmarks", Stops = marks.Select(m => m.Id).ToList() },
+            Math.Max(0, at));
     }
 
     void Remove()

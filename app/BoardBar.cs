@@ -32,7 +32,7 @@ public sealed class BoardBar : Border
                  {
                      ("note  N", "note"), ("rect  1", "shape"),
                      ("ellipse  2", "ellipse"), ("diamond  3", "diamond"),
-                     ("label  4", "text"), ("arrow  Y", "arrow"),
+                     ("text  4", "text"), ("arrow  Y", "arrow"),
                      ("brush  B", "brush"), ("eraser  X", "eraser"),
                      ("file  A", "file"),
                  })

@@ -203,9 +203,25 @@ covered by `AnchorTests` and works.
       line one of a three thousand line file.
 - [ ] The gathered change view still has not been driven by hand on a repo
       with real merge commits.
+- [x] The gathered view rebuilds whenever the change set does. Picking a
+      commit in the panel used to leave the previous commit's windows up,
+      so only the files both commits happened to touch appeared to change.
+      Every route to a different change set goes through `ShowChanges`, so
+      that is the only place that can rebuild it - and a commit with
+      nothing on the map now shows an empty board rather than a stale one.
+- [x] The read-only board is not deaf. Its key block returned on anything
+      it did not handle, so `S` could not switch the wheel between zoom and
+      scroll once you were inside it.
+- [x] Up and down step the commits, which is what a list of commits down
+      the side looks like it does. Not while a tour is running: those are
+      its arrows.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
       is of what is there now, so it cannot be shown at all. It should
       appear somewhere - probably at the folder that lost it.
+- [ ] The mode islands sit behind a side panel, so in review mode - where
+      the commits panel is always open - the wheel-mode indicator cannot be
+      seen at all. `S` toasts now, which covers it, but the islands should
+      not be under a panel in the first place.
 - [ ] Opening a panel or the commit list takes a visible moment with no sign
       that anything is happening, so it reads as broken until it appears.
       Needs a spinner, or the list up front and its contents filled in.

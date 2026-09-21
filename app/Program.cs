@@ -62,7 +62,6 @@ public sealed class App : Application
             var store = BookmarkStore.Load(scene.Data.Root);
             var prompt = new PromptOverlay();
             var marks = new BookmarkOverlay(store, scene);
-            marks.FlyTo += view.FlyToBookmark;
             marks.Play += view.PlayTour;
             view.Attach(store, prompt, marks);
 
@@ -347,7 +346,7 @@ public sealed class SceneView : Control
         if (_autoBench && _phase < 0 && !_benchDone && ++_warmFrames > 30) { _phase = 0; _phaseFrame = 0; }
         if (_phase >= 0) StepBench(w);
 
-        if (EditingItem() is { } typing) PlaceEditor(typing);
+        if (EditingItem() is not null) QueuePlaceEditor();
 
         context.Custom(new SceneOp(new Rect(0, 0, w, h), _scene, w, h));
         if (_scene.Samples.Count > 0)
@@ -409,6 +408,11 @@ public sealed class SceneView : Control
     {
         if (_scene.ActiveBoard is not null)
         {
+            // edit mode is what says whether this board is being changed or
+            // read. A double click that opens an editor outside it is a way
+            // to alter a board you only meant to look at
+            if (!Editing) return;
+
             var (bx, by) = WorldAt(e.GetPosition(this));
             // anything with words in it, which now includes the shapes: a
             // rectangle you double click is a rectangle you are naming
@@ -1162,6 +1166,10 @@ public sealed class SceneView : Control
         if (WheelZoom == on) return;
         WheelZoom = on;
         MouseModeChanged?.Invoke();
+        // the mode island says this too, but a side panel covers it - and
+        // in review mode, where the commits panel is always open, the only
+        // indication that the key had done anything was invisible
+        Toast(on ? "wheel zooms" : "wheel scrolls");
     }
     int _clickCount = 1;
     bool _secondary;
@@ -1255,6 +1263,9 @@ public sealed class SceneView : Control
     {
         if (_editor is null || _scene.ActiveBoard is not { } board) return;
         if (_scene.BoardReadOnly) { Toast("this view is read only"); return; }
+        // the one place that opens an editor, so the one place that has to
+        // know a board being read is not a board being written
+        if (!Editing) { Toast("press E to edit this board"); return; }
         if (!HasText(it)) return;
 
         // stale from whatever was edited last; the draw loop refills it
@@ -1285,10 +1296,31 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    bool _placeQueued;
+
+    /// <summary>ask for the editor to be moved, after this frame.
+    ///
+    /// Placing writes layout properties, and writing one from inside the
+    /// render pass throws "Visual was invalidated during the render pass" -
+    /// every frame, for as long as you pan with an editor open. The camera
+    /// moves during Render (the glide is stepped there), so the placement
+    /// cannot simply be moved to wherever the camera changes; it is posted
+    /// instead. The box lands a frame behind the canvas while panning, which
+    /// nobody can see, and never throws.</summary>
+    void QueuePlaceEditor()
+    {
+        if (_placeQueued) return;
+        _placeQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _placeQueued = false;
+            if (EditingItem() is { } it) PlaceEditor(it);
+        }, DispatcherPriority.Background);
+    }
+
     /// <summary>put the editor over the item it is editing, in screen space.
-    /// Called every frame, because the canvas can pan and zoom underneath an
-    /// open editor and a box that stayed put would be editing one thing
-    /// while pointing at another.</summary>
+    /// The canvas can pan and zoom underneath an open editor, and a box that
+    /// stayed put would be editing one thing while pointing at another.</summary>
     void PlaceEditor(BoardItem it)
     {
         if (_editor is null) return;
@@ -1696,8 +1728,12 @@ public sealed class SceneView : Control
         _commitsPanel?.Sync(_commitAt, set, placed, _scene.OnSnapshot);
         RefreshHints();
 
-        // on the gathered view the camera belongs to the board, not the map
-        if (_scene.BoardReadOnly) return;
+        // every route to a different change set comes through here, so this
+        // is the only place the gathered board can be rebuilt without one of
+        // them being forgotten - and one of them was. Picking a commit in
+        // the panel left the board showing the previous commit's files, and
+        // only the windows both commits happened to share changed at all
+        if (_scene.BoardReadOnly) { RebuildChangeBoard(); return; }
 
         var w = (float)Bounds.Width;
         var h = (float)Bounds.Height;
@@ -1897,14 +1933,20 @@ public sealed class SceneView : Control
 
         var label = _commitAt < 0 ? _target?.Label ?? "changes" : _prCommits[_commitAt].Subject;
         var board = ChangeBoard.Build(set, _scene, label);
+
+        // an empty board is shown rather than refused. Leaving the previous
+        // commit's windows up because this one touched nothing on the map is
+        // how the view came to be showing one commit while the panel said
+        // another, which is worse than showing nothing
+        _scene.ActiveBoard = board;
+        _scene.Picked.Clear();
         if (board.Items.Count == 0)
         {
-            Toast("none of this commit's changes are on the map");
+            _caption = $"{label}  -  nothing from this commit is on the map";
+            InvalidateVisual();
             return;
         }
 
-        _scene.ActiveBoard = board;
-        _scene.Picked.Clear();
         ShowFirstChange(board, set);
         _caption = $"{label}  [changed code]";
         InvalidateVisual();
@@ -2129,7 +2171,10 @@ public sealed class SceneView : Control
         "shape" => "rectangle",
         "ellipse" => "ellipse",
         "diamond" => "diamond",
-        "text" => "label",
+        // called "text" everywhere the user can see: the kind has always
+        // been "text", and only the button said "label", which is why plain
+        // words with no panel behind them were hard to find
+        "text" => "text",
         _ => kind,
     };
 
@@ -2364,26 +2409,43 @@ public sealed class SceneView : Control
         FlyTo(t.X, t.Y, t.S);
     }
 
-    public void PlayTour(Tour tour)
+    public void PlayTour(Tour tour) => PlayTour(tour, 0);
+
+    /// <summary>walk a tour from a given stop. Starting anywhere but the
+    /// beginning is what makes a single bookmark steppable: it is stop n of
+    /// an unnamed tour of all of them.</summary>
+    public void PlayTour(Tour tour, int at)
     {
         if (_store is null || tour.Stops.Count == 0) return;
         _tour = tour;
-        _stop = -1;
+        _stop = Math.Clamp(at, 0, tour.Stops.Count - 1) - 1;
         Step(1);
     }
 
+    /// <summary>move to another stop.
+    ///
+    /// Both ends clamp rather than leaving. Walking off the end used to end
+    /// the tour, which meant the left arrow could not bring you back from
+    /// it - and now that a plain bookmark is a stop on an unnamed tour of
+    /// all of them, being ejected for reaching the last one would be worse
+    /// still. Escape is how you leave.</summary>
     void Step(int by)
     {
-        if (_tour is null || _store is null) return;
-        int next = _stop + by;
-        if (next < 0) return;
-        if (next >= _tour.Stops.Count) { EndTour(); return; }
+        if (_tour is null || _store is null || _tour.Stops.Count == 0) return;
+        int step = Math.Sign(by);
+        if (step == 0) return;
 
-        _stop = next;
-        var b = _store.ById(_tour.Stops[_stop]);
-        if (b is null) { Step(by); return; }  // stop was deleted, skip it
-        FlyToBookmark(b);
-        _caption = $"{_tour.Name}   {_stop + 1}/{_tour.Stops.Count}   -   {_caption}";
+        // a stop whose bookmark was deleted is skipped over, and the search
+        // gives up at the end rather than walking off it
+        for (int next = _stop + step; next >= 0 && next < _tour.Stops.Count; next += step)
+        {
+            if (_store.ById(_tour.Stops[next]) is not { } b) continue;
+            _stop = next;
+            FlyToBookmark(b);
+            _caption = $"{_tour.Name}   {_stop + 1}/{_tour.Stops.Count}   -   {_caption}" +
+                       "   -   arrows: next, esc: done";
+            return;
+        }
     }
 
     void EndTour()
@@ -3058,18 +3120,27 @@ public sealed class SceneView : Control
             {
                 case Key.OemCloseBrackets: StepCommit(1); return;
                 case Key.OemOpenBrackets: StepCommit(-1); return;
+                // the arrows walk the commit list the same way, which is
+                // what a list of commits down the side looks like it does.
+                // Not while a tour is running: those are its arrows
+                case Key.Down when _tour is null: StepCommit(1); return;
+                case Key.Up when _tour is null: StepCommit(-1); return;
             }
         }
 
         if (_scene.BoardReadOnly)
         {
-            // a generated board reads and navigates; it does not author
+            // a generated board reads and navigates; it does not author.
+            // It is still a *view* though, and everything about how you look
+            // at it was unreachable here - S in particular, so the wheel
+            // could not be switched between zoom and scroll once you were in
             switch (key)
             {
                 case Key.C: LeaveBoard(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
-                case Key.OemCloseBrackets: StepCommit(1); RebuildChangeBoard(); return;
-                case Key.OemOpenBrackets: StepCommit(-1); RebuildChangeBoard(); return;
+                case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
+                case Key.B: _marks?.Open(); InvalidateVisual(); return;
+                case Key.OemQuestion: OpenSearch?.Invoke(); return;
                 default: return;
             }
         }

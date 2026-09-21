@@ -316,7 +316,11 @@ threads in SkiaSharp's text path does not throw: the process disappears, with
 no dialog and no exception, exactly the way TextMate takes it down. Sizing the
 inline editor did this and killed the app on every double click. The rule is
 that the draw loop leaves numbers behind (`Scene.EditingHeight`) and the UI
-thread reads them. Covered by `SceneThreadingTests`.
+thread reads them: `Scene.LastHeight` is that reader, and every call
+off the draw loop - picking, the band, the eraser, resizing, fitting,
+clamping - goes through it. `ItemHeight` is for the draw loop.
+`Scene.TextMeasures` counts measurements so a test can assert nobody
+measured. Covered by `SceneThreadingTests`.
 
 **Nothing may touch `Dispatcher.UIThread` before `AppBuilder` runs.**
 Reading it creates Avalonia's dispatcher singleton, and one made before

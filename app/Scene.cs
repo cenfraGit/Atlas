@@ -974,7 +974,7 @@ public sealed class Scene : IDisposable
         if (it.Kind == "image") return Math.Max(20, it.H > 0 ? it.H : it.W * 0.6f);
         if (it.Kind == "note")
             return Math.Max(it.H > 0 ? it.H : 0,
-                NotePad * 2 + Math.Max(1, WrapNote(it).Count) * NoteLineH);
+                NotePad * 2 + Math.Max(1, WrapNote(it).Count) * LineStep(SizeOf(it)));
 
         int i = it.File is null ? -1 : ResolveFile(it.File, it.Key);
         if (i < 0) return 64;
@@ -1043,6 +1043,34 @@ public sealed class Scene : IDisposable
         }
     }
 
+    /// <summary>words inside a shape: a box with a label in it is what most
+    /// of a flowchart is, and writing one meant putting a separate label on
+    /// top and then moving the two together for ever afterwards.
+    ///
+    /// Centred both ways, because a shape's text belongs to the shape rather
+    /// than starting at a corner of it, and wrapped to the box less a margin
+    /// so a diamond's corners do not cut through the first word.</summary>
+    void DrawShapeText(SKCanvas canvas, BoardItem it, SKRect box)
+    {
+        if (string.IsNullOrWhiteSpace(it.Text)) return;
+
+        float size = SizeOf(it), step = LineStep(size);
+        // a diamond holds about half the words a rectangle of the same box
+        // does, and the ones near the top and bottom are outside it
+        float inset = it.Kind == "diamond" ? box.Width * 0.26f : 10f;
+        var lines = Wrap(it.Text, Math.Max(16f, box.Width - inset * 2), size, out var paint);
+
+        using (paint)
+        {
+            paint.Color = ParseColor(it.Color, LabelCol);
+            paint.TextAlign = SKTextAlign.Center;
+            float block = lines.Count * step;
+            float top = box.MidY - block / 2;
+            for (int i = 0; i < lines.Count; i++)
+                canvas.DrawText(lines[i], box.MidX, top + (i + 1) * step - size * 0.35f, paint);
+        }
+    }
+
     static SKPath Diamond(SKRect b)
     {
         var path = new SKPath();
@@ -1054,9 +1082,30 @@ public sealed class Scene : IDisposable
         return path;
     }
 
+    /// <summary>type size when the item has not been given one. A label is
+    /// large because being large is what makes it a heading; a note is small
+    /// because it is an aside; words inside a shape sit between the two.
+    ///
+    /// Every one of them is only a default: `Size` on the item wins, and the
+    /// "Text size" menu sets it, so anything with words in it can be made
+    /// any size. Zero means "whatever this kind is normally", which is the
+    /// one value that cannot be mistaken for a real size.</summary>
     public const float LabelSize = 34f;
+    public const float ShapeFont = 18f;
 
-    static float SizeOf(BoardItem it) => it.Size > 0 ? it.Size : LabelSize;
+    public static float DefaultSize(string kind) => kind switch
+    {
+        "text" => LabelSize,
+        "note" => NoteFont,
+        _ => ShapeFont,
+    };
+
+    public static float SizeOf(BoardItem it) => it.Size > 0 ? it.Size : DefaultSize(it.Kind);
+
+    /// <summary>the baseline step for a block of text at this size. Wrapped
+    /// lines need room between them, and the note's old fixed 14 stopped
+    /// being room at all once a note could be set in 34 point.</summary>
+    public static float LineStep(float size) => size * 1.28f;
 
     /// <summary>a standalone label: words on the board with no box round them.
     /// A note is a note *about* something and looks like a sticker; a label
@@ -1064,26 +1113,26 @@ public sealed class Scene : IDisposable
     void DrawLabel(SKCanvas canvas, BoardItem it)
     {
         float size = SizeOf(it);
+        float step = LineStep(size);
         var lines = Wrap(it.Text ?? "", it.W, size, out var paint);
         using (paint)
         {
             paint.Color = ParseColor(it.Color, LabelCol);
             for (int i = 0; i < lines.Count; i++)
-                canvas.DrawText(lines[i], it.X, it.Y + (i + 1) * size * 1.25f - size * 0.28f, paint);
+                canvas.DrawText(lines[i], it.X, it.Y + (i + 1) * step - size * 0.28f, paint);
         }
     }
 
     float LabelHeight(BoardItem it)
     {
-        float size = SizeOf(it);
-        var lines = Wrap(it.Text ?? "", it.W, size, out var paint);
+        var lines = Wrap(it.Text ?? "", it.W, SizeOf(it), out var paint);
         paint.Dispose();
-        return Math.Max(1, lines.Count) * size * 1.25f;
+        return Math.Max(1, lines.Count) * LineStep(SizeOf(it));
     }
 
     List<string> WrapNote(BoardItem it)
     {
-        var wrapped = Wrap(it.Text ?? "", it.W - NotePad * 2, NoteFont, out var paint);
+        var wrapped = Wrap(it.Text ?? "", it.W - NotePad * 2, SizeOf(it), out var paint);
         paint.Dispose();
         return wrapped;
     }
@@ -1211,7 +1260,11 @@ public sealed class Scene : IDisposable
         using var label = new SKPaint { Color = LabelCol, Typeface = _mono, TextSize = 11, IsAntialias = true };
         using var code = new SKPaint { Typeface = _mono, TextSize = Data.LineH * 0.78f, IsAntialias = true };
         using var noteBg = new SKPaint { Color = new SKColor(0x15, 0x1b, 0x12), IsAntialias = false };
-        using var noteEdge = new SKPaint { Color = new SKColor(0xff, 0xd1, 0x66, 200), IsAntialias = false };
+        using var noteEdge = new SKPaint
+        {
+            Color = new SKColor(0xff, 0xd1, 0x66, 200),
+            IsStroke = true, StrokeWidth = DefaultBorder, IsAntialias = true,
+        };
         using var noteText = new SKPaint { Color = new SKColor(0xe8, 0xd8, 0xa8), Typeface = _mono, TextSize = NoteFont, IsAntialias = true };
         using var missing = new SKPaint { Color = new SKColor(0x6a, 0x2b, 0x2b), IsAntialias = false };
         if (_charW == 0) _charW = code.MeasureText("0");
@@ -1233,6 +1286,7 @@ public sealed class Scene : IDisposable
                 shapeEdge.Color = col.WithAlpha(150);
                 shapeEdge.StrokeWidth = LineWidth(it);
                 DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
+                DrawShapeText(canvas, it, box);
                 continue;
             }
             if (it.Kind == "text")
@@ -1257,15 +1311,22 @@ public sealed class Scene : IDisposable
             {
                 var wrapped = WrapNote(it);
                 float h = ItemHeight(it);
+                float size = SizeOf(it), step = LineStep(size);
                 var accent = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
                 noteEdge.Color = accent;
+                noteEdge.StrokeWidth = LineWidth(it);
                 noteText.Color = accent.WithAlpha(235);
+                noteText.TextSize = size;
                 canvas.Save();
                 canvas.Translate(it.X, it.Y);
                 canvas.DrawRect(0, 0, it.W, h, noteBg);
-                canvas.DrawRect(0, 0, 3, h, noteEdge);
+                // all the way round. It used to be a 3 unit bar down the left
+                // only, which reads as a quote in a document rather than as a
+                // card on a canvas - and the other three sides of a note are
+                // where it meets whatever it overlaps
+                canvas.DrawRect(new SKRect(0, 0, it.W, h), noteEdge);
                 for (int li = 0; li < wrapped.Count; li++)
-                    canvas.DrawText(wrapped[li], NotePad, NotePad + (li + 1) * NoteLineH - 4, noteText);
+                    canvas.DrawText(wrapped[li], NotePad, NotePad + (li + 1) * step - size * 0.3f, noteText);
                 canvas.Restore();
                 continue;
             }

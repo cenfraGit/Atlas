@@ -705,6 +705,9 @@ public sealed class SceneView : Control
 
         if (picked.Count > 0 && picked.All(HasLineWidth))
             items.Add(ContextActions.Submenu("Line width", LineWidths(picked)));
+
+        if (picked.Count > 0 && picked.All(HasText))
+            items.Add(ContextActions.Submenu("Text size", TextSizes(picked)));
         if (picked.Count > 0)
         {
             items.Add(ContextActions.Item("Bring to front", BringToFront));
@@ -1178,9 +1181,15 @@ public sealed class SceneView : Control
 
     void ApplyToPickedStrokes(Action<BoardItem> change) => ApplyToPicked(Strokes.Is, change);
 
-    /// <summary>everything picked that is drawn with a line.</summary>
+    /// <summary>everything picked that is drawn with a line. A note has a
+    /// border all the way round it now, which makes it one of these.</summary>
     static bool HasLineWidth(BoardItem it) =>
-        Strokes.Is(it) || Scene.IsShape(it.Kind) || it.Kind == "arrow";
+        Strokes.Is(it) || Scene.IsShape(it.Kind) || it.Kind is "arrow" or "note";
+
+    /// <summary>everything with words in it. A file window's text is the
+    /// file's, and its size is the zoom's business.</summary>
+    static bool HasText(BoardItem it) =>
+        it.Kind is "note" or "text" || Scene.IsShape(it.Kind);
 
     List<BoardItem> PickedLines() =>
         _scene.ActiveBoard is not { } b
@@ -2050,6 +2059,32 @@ public sealed class SceneView : Control
         items.AddRange(Weights.Select(w =>
             ContextActions.Item($"{w:0.#}", () => SetLineWidth(picked, w))));
         return items;
+    }
+
+    /// <summary>type sizes, as a ladder for the same reason the pen widths
+    /// are one: the useful sizes are few and far apart.</summary>
+    static readonly float[] TextLadder = [11f, 14f, 18f, 24f, 34f, 48f, 72f];
+
+    List<MenuItem> TextSizes(List<BoardItem> picked)
+    {
+        var items = new List<MenuItem>
+        {
+            ContextActions.Item("Default", () => SetTextSize(picked, 0)),
+            ContextActions.Separator(),
+        };
+        items.AddRange(TextLadder.Select(sz =>
+            ContextActions.Item($"{sz:0.#}", () => SetTextSize(picked, sz))));
+        return items;
+    }
+
+    void SetTextSize(List<BoardItem> picked, float size)
+    {
+        if (picked.Count == 0) return;
+        Remember();
+        foreach (var it in picked) it.Size = size;
+        if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
+        Saved(size > 0 ? $"text {size:0.#}" : "default text size");
+        InvalidateVisual();
     }
 
     List<MenuItem> Palette(List<BoardItem> picked) =>

@@ -79,6 +79,19 @@ change freely.
       empty shape keeps its hitbox, so it works as a frame round other
       things; picking has always gone by the box and now there is a test
       saying it must.
+- [x] Words inside a shape, centred and wrapped, which is what most of a
+      flowchart is. Writing one used to mean laying a separate label over a
+      rectangle and moving the two together for ever afterwards.
+- [x] A note's border goes all the way round. A three unit bar down the
+      left edge reads as a quote in a document rather than as a card on a
+      canvas, and the other three sides are where a note meets what it
+      overlaps.
+- [x] Type size on anything with words in it, from a "Text size" menu. The
+      default is per kind rather than one number - a label is large because
+      being large is what makes it a heading, a note is small because it is
+      an aside, a shape's words sit between - and 0 means "whatever this
+      kind is normally", which is the one value that cannot be a real size.
+      `Scene.LineStep` moves the lines apart as the type grows.
 - [x] Line width. A shape's border and an arrow's shaft were a hairline -
       one screen pixel at any zoom, the one width that says nothing about
       what it outlines. They now share the stroke's `Weight`, so `[`, `]`

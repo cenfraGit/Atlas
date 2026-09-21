@@ -997,6 +997,19 @@ public sealed class Scene : IDisposable
     ///
     /// A chosen colour is laid on at a low alpha rather than flat, so a
     /// shape stays something you read *through* on a board full of code.</summary>
+    /// <summary>how thick a shape's border or an arrow's shaft is, in board
+    /// units, so it scales with the drawing rather than staying a hairline
+    /// however far you zoom in.
+    ///
+    /// These were a hairline - stroke width zero, one screen pixel at any
+    /// zoom - which is the one width that cannot be part of a drawing,
+    /// because it says nothing about the thing it outlines. The default is
+    /// what a hairline looked like at the zoom a board is usually read at.</summary>
+    public const float DefaultBorder = 2f;
+
+    public static float LineWidth(BoardItem it, float fallback = DefaultBorder) =>
+        it.Weight > 0 ? it.Weight : fallback;
+
     public static SKColor FillOf(BoardItem it, SKColor border)
     {
         if (it.Fill is null) return border.WithAlpha(16);
@@ -1205,7 +1218,9 @@ public sealed class Scene : IDisposable
 
         using var pixels = new SKPaint { FilterQuality = SKFilterQuality.Medium, IsAntialias = true };
         using var shapeFill = new SKPaint { Color = new SKColor(0x5f, 0xd3, 0xf3, 16), IsAntialias = false };
-        using var shapeEdge = new SKPaint { Color = new SKColor(0x5f, 0xd3, 0xf3, 120), IsStroke = true, StrokeWidth = 0, IsAntialias = false };
+        // antialiased now that the width is the user's to choose: a hairline
+        // is crisp aliased, a five unit border is a staircase
+        using var shapeEdge = new SKPaint { Color = new SKColor(0x5f, 0xd3, 0xf3, 120), IsStroke = true, StrokeWidth = DefaultBorder, IsAntialias = true };
 
         foreach (var it in board.Items)
         {
@@ -1216,6 +1231,7 @@ public sealed class Scene : IDisposable
                 var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + ItemHeight(it));
                 shapeFill.Color = FillOf(it, col);
                 shapeEdge.Color = col.WithAlpha(150);
+                shapeEdge.StrokeWidth = LineWidth(it);
                 DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
                 continue;
             }
@@ -1448,18 +1464,20 @@ public sealed class Scene : IDisposable
 
     void DrawArrows(SKCanvas canvas, Board board)
     {
-        using var line = new SKPaint { IsStroke = true, StrokeWidth = 2.5f, IsAntialias = true };
+        const float ArrowShaft = 2.5f;
+        using var line = new SKPaint { IsStroke = true, StrokeWidth = ArrowShaft, IsAntialias = true };
         foreach (var it in board.Items)
         {
             if (it.Kind != "arrow") continue;
 
             line.Color = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
+            line.StrokeWidth = LineWidth(it, ArrowShaft);
             var (p1, p2) = ArrowEnds(it);
             canvas.DrawLine(p1, p2, line);
 
-            // a small head, turned to face the direction of travel
+            // the head grows with the shaft, or a thick arrow ends in a tick
             float ang = MathF.Atan2(p2.Y - p1.Y, p2.X - p1.X);
-            const float head = 11f;
+            float head = 11f * (line.StrokeWidth / ArrowShaft);
             canvas.DrawLine(p2, new SKPoint(
                 p2.X - head * MathF.Cos(ang - 0.4f), p2.Y - head * MathF.Sin(ang - 0.4f)), line);
             canvas.DrawLine(p2, new SKPoint(
@@ -1483,6 +1501,7 @@ public sealed class Scene : IDisposable
         if (ArrowDraft is { } draft)
         {
             line.Color = new SKColor(0x5f, 0xd3, 0xf3, 200);
+            line.StrokeWidth = ArrowShaft;
             canvas.DrawLine(draft.A, draft.B, line);
         }
     }

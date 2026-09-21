@@ -61,7 +61,11 @@ public sealed class BoardItem
     /// treating every item the same way.</summary>
     [JsonPropertyName("points")] public List<float>? Points { get; set; }
 
-    /// <summary>pen width, in board units.</summary>
+    /// <summary>line width, in board units: the pen for a stroke, the border
+    /// for a shape, the shaft for an arrow. One field, because they are one
+    /// idea - how thick is the line - and a shape with a separate "border
+    /// width" would need [ and ] to mean two different things depending on
+    /// what is picked. 0 means the default.</summary>
     [JsonPropertyName("weight")] public float Weight { get; set; }
 
     /// <summary>a shape's interior. Null means a wash of the border colour,

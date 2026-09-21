@@ -79,6 +79,11 @@ change freely.
       empty shape keeps its hitbox, so it works as a frame round other
       things; picking has always gone by the box and now there is a test
       saying it must.
+- [x] Line width. A shape's border and an arrow's shaft were a hairline -
+      one screen pixel at any zoom, the one width that says nothing about
+      what it outlines. They now share the stroke's `Weight`, so `[`, `]`
+      and the "Line width" menu mean one thing rather than three, and an
+      arrow's head grows with its shaft.
 - [x] Drag to place a shape, the way an arrow does. Arming shows a ghost and
       does nothing until you drag out the box; the button stays lit until the
       shape is drawn, and `Esc` cancels. Rectangles, ellipses, diamonds and

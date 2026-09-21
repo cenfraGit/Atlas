@@ -702,6 +702,9 @@ public sealed class SceneView : Control
         // a fill is a shape's own business; a note or an arrow has no inside
         if (picked.Count > 0 && picked.All(i => Scene.IsShape(i.Kind)))
             items.Add(ContextActions.Submenu("Fill", Fills(picked)));
+
+        if (picked.Count > 0 && picked.All(HasLineWidth))
+            items.Add(ContextActions.Submenu("Line width", LineWidths(picked)));
         if (picked.Count > 0)
         {
             items.Add(ContextActions.Item("Bring to front", BringToFront));
@@ -1156,10 +1159,12 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
         _weightAt = Math.Clamp(_weightAt + by, 0, Weights.Length - 1);
 
-        // a selection makes it mean "make those this thick" as well
-        ApplyToPickedStrokes(it => { it.Weight = PenWeight; Strokes.Reframe(it); });
+        // a selection makes it mean "make those this thick" as well - and
+        // that is every line on the board, not just the inked ones: a shape's
+        // border and an arrow's shaft are the same idea as a pen width
+        SetLineWidth(PickedLines(), PenWeight);
         RefreshBoardBar();
-        Toast($"pen {PenWeight:0.#}");
+        Toast($"line {PenWeight:0.#}");
     }
 
     void SetPenColour(string hex)
@@ -1172,6 +1177,31 @@ public sealed class SceneView : Control
     }
 
     void ApplyToPickedStrokes(Action<BoardItem> change) => ApplyToPicked(Strokes.Is, change);
+
+    /// <summary>everything picked that is drawn with a line.</summary>
+    static bool HasLineWidth(BoardItem it) =>
+        Strokes.Is(it) || Scene.IsShape(it.Kind) || it.Kind == "arrow";
+
+    List<BoardItem> PickedLines() =>
+        _scene.ActiveBoard is not { } b
+            ? []
+            : b.Items.Where(i => HasLineWidth(i) && _scene.Picked.Contains(i.Id)).ToList();
+
+    /// <summary>a stroke has to be reframed afterwards: its box is its ink's
+    /// bounds and a fatter pen spills past them.</summary>
+    void SetLineWidth(List<BoardItem> picked, float width)
+    {
+        if (picked.Count == 0) return;
+        Remember();
+        foreach (var it in picked)
+        {
+            it.Weight = width;
+            if (Strokes.Is(it)) Strokes.Reframe(it);
+        }
+        if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
+        Saved($"line {width:0.#}");
+        InvalidateVisual();
+    }
 
     /// <summary>apply to everything picked that the tool means something for,
     /// and save. Nothing picked means the change is only to the tool.</summary>
@@ -2006,6 +2036,20 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
         Saved(fill == BoardItem.NoFill ? "no fill" : "fill");
         InvalidateVisual();
+    }
+
+    /// <summary>the same ladder [ and ] step through, so the menu and the
+    /// keyboard cannot offer two different sets of widths.</summary>
+    List<MenuItem> LineWidths(List<BoardItem> picked)
+    {
+        var items = new List<MenuItem>
+        {
+            ContextActions.Item("Default", () => SetLineWidth(picked, 0)),
+            ContextActions.Separator(),
+        };
+        items.AddRange(Weights.Select(w =>
+            ContextActions.Item($"{w:0.#}", () => SetLineWidth(picked, w))));
+        return items;
     }
 
     List<MenuItem> Palette(List<BoardItem> picked) =>

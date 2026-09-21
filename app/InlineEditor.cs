@@ -28,6 +28,7 @@ public sealed class InlineEditor : Canvas
     Action<string>? _commit;
     string _before = "";
     bool _closing;
+    (double X, double Y, double W, double H, double Size)? _placed;
 
     /// <summary>the item being edited, so the canvas knows to leave its own
     /// text off while the box is over it.</summary>
@@ -60,8 +61,17 @@ public sealed class InlineEditor : Canvas
     }
 
     /// <summary>start editing. <paramref name="commit"/> is called with the
-    /// final text, once, whether it was Enter or a click somewhere else.</summary>
-    public void Begin(string itemId, string text, Action<string> commit)
+    /// final text, once, whether it was Enter or a click somewhere else.
+    ///
+    /// The placement is an argument rather than a separate call afterwards,
+    /// and that is the whole point of the signature. It used to be shown
+    /// first and positioned on the next frame, which left one layout pass to
+    /// measure a wrapping TextBox with no width against infinite space - and
+    /// that killed the process outright, with no exception and no message,
+    /// on every double click.</summary>
+    public void Begin(string itemId, string text,
+        double x, double y, double w, double h, double fontSize,
+        Action<string>? commit = null)
     {
         ItemId = itemId;
         _before = text;
@@ -69,6 +79,8 @@ public sealed class InlineEditor : Canvas
         _closing = false;
 
         _box.Text = text;
+        _placed = null;
+        Place(x, y, w, h, fontSize);
         _box.IsVisible = true;
 
         // the double-click that opened this is still in flight; taking focus
@@ -88,12 +100,35 @@ public sealed class InlineEditor : Canvas
     {
         if (!Editing) return;
 
-        _box.FontSize = Math.Clamp(fontSize, 6, 200);
-        _box.Width = Math.Max(60, w);
-        _box.MinHeight = Math.Max(24, h);
-        SetLeft(_box, x);
-        SetTop(_box, y);
+        // only when something actually moved. This is called from inside the
+        // render pass, and writing a layout property there - even the value
+        // it already had - is how you get a render that invalidates layout
+        // that schedules a render, every frame, for ever
+        var now = (x, y, w, h, fontSize);
+        if (_placed == now) return;
+        _placed = now;
+
+        // a board zoomed right out asks for a two pixel box in half point
+        // type, and one zoomed right in asks for twelve thousand pixels.
+        // Neither is a thing to hand a layout pass, and an editor you cannot
+        // read is not an editor, so both ends are clamped
+        _box.FontSize = Finite(fontSize, 14, 6, 200);
+        _box.Width = Finite(w, 260, 60, 2000);
+        _box.MinHeight = Finite(h, 32, 24, 1200);
+        SetLeft(_box, Finite(x, 0, -10000, 10000));
+        SetTop(_box, Finite(y, 0, -10000, 10000));
     }
+
+    /// <summary>NaN and infinity are what a camera at a degenerate scale
+    /// produces, and either one poisons a layout pass rather than failing
+    /// where it was introduced.</summary>
+    static double Finite(double v, double fallback, double lo, double hi) =>
+        double.IsNaN(v) || double.IsInfinity(v) ? fallback : Math.Clamp(v, lo, hi);
+
+    /// <summary>set the text as if it had been typed. For tests: driving real
+    /// keystrokes through a headless window tests Avalonia's TextBox rather
+    /// than anything here.</summary>
+    internal void SetTextForTest(string text) => _box.Text = text;
 
     void OnKey(object? sender, KeyEventArgs e)
     {

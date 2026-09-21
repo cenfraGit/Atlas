@@ -23,6 +23,10 @@ public static class Program
     {
         // tests live in tests/Atlas.Tests and run with `dotnet test`
         if (args.Contains("--samples")) { Samples.Run(args); return; }
+
+        // before anything can throw. A WinExe has no console, so without this
+        // an unhandled exception is a window that vanishes with no message
+        Crash.Install();
         AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
     }
 }
@@ -137,6 +141,10 @@ public sealed class App : Application
                 if (e.Key != Key.Escape) return;
                 if (view.Escape()) e.Handled = true;
             }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+            // now there is somewhere to say it out loud
+            Crash.Install(msg => Dispatcher.UIThread.Post(() =>
+                view.Toast($"something went wrong - {msg}")));
 
             desktop.MainWindow = window;
         }
@@ -943,7 +951,7 @@ public sealed class SceneView : Control
     /// board you are on - so every passing message permanently replaced it,
     /// and a run of them read as the bottom of the screen going haywire. A
     /// toast is transient and a caption is not, so they are two things.</summary>
-    void Toast(string message)
+    public void Toast(string message)
     {
         _toast = message;
         _toastUntil = _clock.Elapsed.TotalSeconds + ToastSeconds;
@@ -1246,9 +1254,11 @@ public sealed class SceneView : Control
         if (_scene.BoardReadOnly) { Toast("this view is read only"); return; }
         if (!HasText(it)) return;
 
+        // stale from whatever was edited last; the draw loop refills it
+        _scene.EditingHeight = 0;
         _scene.EditingItem = it.Id;
-        PlaceEditor(it);
-        _editor.Begin(it.Id, it.Text ?? "", text =>
+        var (x, y, w, h, size) = EditorRect(it);
+        _editor.Begin(it.Id, it.Text ?? "", x, y, w, h, size, text =>
         {
             _scene.EditingItem = null;
             if (text != (it.Text ?? ""))
@@ -1279,10 +1289,31 @@ public sealed class SceneView : Control
     void PlaceEditor(BoardItem it)
     {
         if (_editor is null) return;
+        var (x, y, w, h, size) = EditorRect(it);
+        _editor.Place(x, y, w, h, size);
+    }
+
+    /// <summary>where an item is on screen, and how big its type is there.
+    ///
+    /// Deliberately arithmetic only. Scene.ItemHeight would be the obvious
+    /// way to get the height and it is the one thing that must not happen
+    /// here: for a note it wraps the text, wrapping measures it with
+    /// SkiaSharp, and this runs on the UI thread while the render thread is
+    /// inside Scene.Draw doing the same with the same typeface. Two threads
+    /// in Skia's text path is not an exception, it is the process
+    /// disappearing. The draw loop leaves the height in EditingHeight.</summary>
+    (double X, double Y, double W, double H, double Size) EditorRect(BoardItem it)
+    {
         float s = _scene.CamS;
-        double x = (it.X - _scene.CamX) * s + Bounds.Width / 2;
-        double y = (it.Y - _scene.CamY) * s + Bounds.Height / 2;
-        _editor.Place(x, y, it.W * s, _scene.ItemHeight(it) * s, Scene.SizeOf(it) * s);
+        float h = _scene.EditingHeight > 0 ? _scene.EditingHeight
+            : it.H > 0 ? it.H
+            : 64;
+        return (
+            (it.X - _scene.CamX) * s + Bounds.Width / 2,
+            (it.Y - _scene.CamY) * s + Bounds.Height / 2,
+            it.W * s,
+            h * s,
+            Scene.SizeOf(it) * s);
     }
 
     BoardItem? EditingItem() =>

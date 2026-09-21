@@ -268,6 +268,21 @@ behind one lock. Do not "optimise" that lock away; give each worker its own
 `Registry` if tokenising ever shows up as a bottleneck.
 Covered by `HighlighterTests.TokenisingManyFilesAtOnceDoesNotCorruptTheRegistry`.
 
+**`Scene.Draw` runs on the render thread.** It is called from an Avalonia
+`ICustomDrawOperation`, not from `SceneView.Render`. Anything in `Program.cs`
+runs on the UI thread, so **the UI thread must never call a `Scene` method
+that measures text** - `ItemHeight` on a note, `Wrap`, `LabelHeight`. Two
+threads in SkiaSharp's text path does not throw: the process disappears, with
+no dialog and no exception, exactly the way TextMate takes it down. Sizing the
+inline editor did this and killed the app on every double click. The rule is
+that the draw loop leaves numbers behind (`Scene.EditingHeight`) and the UI
+thread reads them. Covered by `SceneThreadingTests`.
+
+**An unhandled exception used to be invisible.** Atlas is a `WinExe` with no
+console. `Crash.cs` logs to `%LOCALAPPDATA%/Atlas/crash.log`, reports into the
+window, and marks UI-thread exceptions handled so a bug in one event handler
+does not throw away the board someone is working on.
+
 **Redraws are driven by input, not a loop.** Anything that finishes off-frame
 - a file load, a partially built view - must call `Scene.RequestRedraw`.
 Setting a flag does not work: nothing watches one between frames.
@@ -329,6 +344,11 @@ When adding tests:
 - `ImageStore` and `Highlighter` hold process-wide state; their tests sit in
   the `images` and `highlighter` collections so they do not run alongside
   anything that would disturb them.
+
+`Avalonia.Headless` gives the suite a real window, off screen, with real Skia
+drawing (`Support/HeadlessApp.cs`, `[AvaloniaFact]`). Everything in
+`Program.cs` that answers a click was untestable before it. Use it for
+anything that touches a control.
 
 `uitest.ps1` remains for what a headless test cannot see: a real window, real
 keystrokes, and the real Windows clipboard. Run it with

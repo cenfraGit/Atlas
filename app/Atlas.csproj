@@ -11,6 +11,11 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
+    <!-- so a test can reach a hook like InlineEditor.SetTextForTest without
+         it having to be public on a type the app exposes -->
+    <InternalsVisibleTo Include="Atlas.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.22" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
     <PackageReference Include="Avalonia.Skia" Version="11.3.22" />

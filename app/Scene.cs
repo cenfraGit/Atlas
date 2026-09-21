@@ -1284,6 +1284,8 @@ public sealed class Scene : IDisposable
         foreach (var it in board.Items)
         {
             if (it.Kind == "arrow" || Strokes.Is(it)) continue;   // drawn after, on top
+            // measured here, on the render thread, for the UI thread to read
+            if (it.Id == EditingItem) EditingHeight = ItemHeight(it);
             if (IsShape(it.Kind))
             {
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
@@ -1593,6 +1595,20 @@ public sealed class Scene : IDisposable
     /// over it. Its own text is left undrawn while that is up, or the same
     /// words appear twice, slightly out of register.</summary>
     public string? EditingItem;
+
+    /// <summary>how tall that item was, last time it was drawn.
+    ///
+    /// The editor has to be the size of the item, and asking for it with
+    /// ItemHeight is not allowed: a note's height comes from wrapping its
+    /// words, wrapping measures them with SkiaSharp, and the caller is the
+    /// UI thread while the render thread is inside Draw measuring text with
+    /// the same typeface. Two threads in Skia's text path at once does not
+    /// throw - it takes the process down where no handler can see it.
+    ///
+    /// So the draw loop leaves the number here and the UI thread reads it. A
+    /// float is written and read whole, and a frame of staleness in the size
+    /// of a text box is not worth a lock.</summary>
+    public float EditingHeight;
 
     /// <summary>the stroke being drawn right now, before it is committed.</summary>
     public BoardItem? StrokeDraft;

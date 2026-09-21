@@ -18,6 +18,12 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <!-- a real Avalonia window, off screen. Everything in Program.cs that
+         responds to a click was untestable without this, which is how an
+         inline editor that killed the process on every double click got
+         shipped -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="11.3.22" />
   </ItemGroup>
 
   <ItemGroup>

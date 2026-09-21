@@ -159,4 +159,22 @@ public class BoardStoreTests
         // one corrupt file must not cost you every other board
         Assert.Single(BoardStore.Load(dir.Path).Boards);
     }
+
+    /// <summary>what the app writes is what git stores. A board written with
+    /// this machine's newline shows up as modified the moment Atlas saves it,
+    /// however little changed - and .atlas/ is a folder people commit.</summary>
+    [Fact]
+    public void ABoardIsWrittenWithLfEndings()
+    {
+        using var dir = new TempDir("atlas_boards");
+        var store = BoardStore.Load(dir.Path);
+        var board = store.Create("endings", "e1");
+        board.Items.Add(new BoardItem { Id = "n", Kind = "note", Text = "a note" });
+        store.Save(board);
+
+        var text = File.ReadAllText(board.Path);
+
+        Assert.Contains("\n", text);
+        Assert.DoesNotContain("CRLF", text.Replace("\r\n", "CRLF"));
+    }
 }

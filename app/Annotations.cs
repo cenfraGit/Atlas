@@ -74,6 +74,10 @@ public sealed class AnnotationStore
     static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
+        // LF, not this machine's newline. Everything in .atlas/ is committed,
+        // and a file written with CRLF on windows shows up as modified in git
+        // the moment the app saves it, however little changed
+        NewLine = "\n",
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 

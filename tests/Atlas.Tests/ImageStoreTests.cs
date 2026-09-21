@@ -140,6 +140,21 @@ public class ImageStoreTests
         Assert.False(File.Exists(Path.Combine(ImageStore.DirFor(dir.Path), undone)));
     }
 
+    /// <summary>the app looks at an image the moment it pastes one, to get
+    /// its shape. Pruning has to work afterwards.</summary>
+    [Fact]
+    public void PruningRemovesAnImageThatHasBeenLookedAt()
+    {
+        using var dir = new TempDir("atlas_img");
+        using var bmp = Bitmap(32, 32);
+        var orphan = ImageStore.Save(dir.Path, bmp)!;
+
+        Assert.NotNull(ImageStore.Load(dir.Path, orphan));
+
+        Assert.Equal(1, ImageStore.Prune(dir.Path, []));
+        Assert.False(File.Exists(Path.Combine(ImageStore.DirFor(dir.Path), orphan)));
+    }
+
     [Fact]
     public void PruningLooksAcrossEveryBoard()
     {

@@ -23,9 +23,20 @@ co-author:
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
+**Pull before you start.** Another session works on this repo and pushes to
+the same branch, so the working tree is not where you left it. `git fetch`
+and `git pull --ff-only` first, then **read the new commits** - the messages
+carry the reasoning, and this file carries the rules they established. Doing
+that is how you avoid re-fixing something already fixed, or building on a
+function that has been replaced.
+
+Run the suite after pulling, before writing anything. A red test on a
+freshly pulled tree is the other session's, and it is yours to fix now:
+`ImageStore.Prune` arrived with a test for a bug nobody had fixed yet.
+
 **Push as well.** Push to `origin/main` once the work is committed and the
 suite passes - the user cannot push from where they are reading this. Fetch
-first and look at what is outstanding, because the branch may have moved.
+again before pushing, because the branch may have moved while you worked.
 
 Pushing is publishing: it goes to a repository other people can see and it
 cannot be taken back cleanly. So push finished work, not a checkpoint, and

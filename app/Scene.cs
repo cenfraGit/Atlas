@@ -1374,6 +1374,22 @@ public sealed class Scene : IDisposable
     }
 
     /// <summary>topmost item under a board-space point, or null.</summary>
+    /// <summary>what a click lands on, in the order things are painted.
+    ///
+    /// Arrows and strokes are drawn after every box - see the end of the
+    /// board loop - so they are always on top of one, and an arrow lying
+    /// over a file window is visibly over it. Picking used to ask
+    /// <see cref="ItemAt"/> first and only fall back to the lines, which is
+    /// the opposite order: a window is a large box, so an arrow drawn across
+    /// one could not be selected at all. Moving the boxes out of the window
+    /// to get at the arrow was the only way.
+    ///
+    /// Arrows before strokes, because arrows are drawn last of all.</summary>
+    public BoardItem? PickAt(float wx, float wy) =>
+        ArrowAt(wx, wy) ?? StrokeAt(wx, wy) ?? ItemAt(wx, wy);
+
+    /// <summary>the topmost *box* under a point. Lines are not boxes; ask
+    /// <see cref="PickAt"/> unless you specifically mean the boxes.</summary>
     public BoardItem? ItemAt(float wx, float wy)
     {
         if (ActiveBoard is null) return null;
@@ -2130,8 +2146,10 @@ public sealed class Scene : IDisposable
     public (BoardItem Item, int File, int Line)? LineInWindowAt(float wx, float wy)
     {
         if (ActiveBoard is null) return null;
-        // a rectangle laid over a window must take the click, not pass it down
-        if (ItemAt(wx, wy) is { } top && top.Kind != "file") return null;
+        // anything laid over a window takes the click rather than passing it
+        // down - a rectangle, and an arrow or a stroke too, which are drawn
+        // over the top of one and so are what you are pointing at
+        if (PickAt(wx, wy) is { } top && top.Kind != "file") return null;
 
         for (int n = ActiveBoard.Items.Count - 1; n >= 0; n--)
         {

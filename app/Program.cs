@@ -637,7 +637,8 @@ public sealed class SceneView : Control
     void ShowBoardMenu(Point p)
     {
         var (wx, wy) = WorldAt(p);
-        var item = _scene.ItemAt(wx, wy);
+        // the menu acts on whatever a click would select, arrows included
+        var item = _scene.PickAt(wx, wy);
         var board = _scene.ActiveBoard!;
         // a right click on a line of code in a window offers notes
         if (_scene.LineInWindowAt(WorldAt(p).X, WorldAt(p).Y) is { } spot)
@@ -2662,7 +2663,7 @@ public sealed class SceneView : Control
                 return;
             }
 
-            var hit = _scene.ItemAt(wx, wy) ?? _scene.ArrowAt(wx, wy) ?? _scene.StrokeAt(wx, wy);
+            var hit = _scene.PickAt(wx, wy);
             if (hit is null)
             {
                 // empty canvas: sweep out a selection

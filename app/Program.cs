@@ -566,11 +566,12 @@ public sealed class SceneView : Control
         Layers.Add("tour", () => _tour is not null, EndTour);
         Layers.Add("tool", () => _armBrush || _armEraser || _armArrow || _armShape is not null, DisarmTools);
         Layers.Add("selection", HasSelection, ClearSelection);
-        // a board is a place you are in, so it is the last thing Escape peels
-        // off before the map. It was left out when dismissal moved here, and
-        // HandleKey refuses Escape outright, so Esc on a board did nothing at
-        // all - while the bar along the bottom said "back to map  esc"
-        Layers.Add("board", () => _scene.ActiveBoard is not null, LeaveBoard);
+        // deliberately no "board" layer. Escape closes what is open - a
+        // dialog, a menu, an armed tool, a selection - and leaving the board
+        // is not closing anything; it is going somewhere. That is alt+left
+        // and the "<" button. Escape did leave a board once, and putting a
+        // dialog on top of one then meant Escape both dismissed the dialog
+        // and threw you off the board
         Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
     }
 
@@ -1632,7 +1633,7 @@ public sealed class SceneView : Control
             items.Add(("rectangle", "T", AddShape));
             items.Add(("boards", "O", () => _boards?.Show()));
             items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
-            items.Add(("back to map", "esc", LeaveBoard));
+            items.Add(("back to map", "alt+←", LeaveBoard));
         }
         else if (_scene.Review is not null)
         {
@@ -3271,14 +3272,21 @@ public sealed class SceneView : Control
             e.Handled = true;
             return;
         }
-        _ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        _alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
-        HandleKey(e.Key, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        HandleKey(e.Key, e.KeyModifiers);
     }
 
     bool _ctrl, _alt;
 
-    public void HandleKey(Key key) => HandleKey(key, false);
+    public void HandleKey(Key key) => HandleKey(key, KeyModifiers.None);
+
+    /// <summary>one place that turns modifiers into the flags the handlers
+    /// read, so a test can send alt+left without reaching into fields.</summary>
+    public void HandleKey(Key key, KeyModifiers mods)
+    {
+        _ctrl = mods.HasFlag(KeyModifiers.Control);
+        _alt = mods.HasFlag(KeyModifiers.Alt);
+        HandleKey(key, mods.HasFlag(KeyModifiers.Shift));
+    }
 
     public void HandleKey(Key key, bool e_shift)
     {

@@ -164,28 +164,30 @@ public class BoardGestureTests
         }
     }
 
-    /// <summary>Escape goes back to the map.
+    /// <summary>Escape does not leave a board.
     ///
-    /// It stopped doing so when dismissal moved into the Escape stack and the
-    /// board was left out of it: HandleKey refuses Escape outright, so on a
-    /// board with nothing open the key did nothing whatever - while the bar
-    /// along the bottom went on saying "back to map  esc".</summary>
+    /// It closes what is open - a dialog, a menu, an armed tool, a
+    /// selection - and leaving is not closing anything, it is going
+    /// somewhere else. Alt+left and the "&lt;" button do that. When Escape
+    /// did leave, opening a dialog on a board meant one key both dismissed
+    /// the dialog and threw you off the board.</summary>
     [AvaloniaFact]
-    public void EscapeGoesBackToTheMap()
+    public void EscapeDoesNotLeaveABoard()
     {
         var (view, _, _, _, scene, repo) = Board();
         using (repo)
         using (scene)
         {
-            Assert.True(view.Escape());
-            Assert.Null(scene.ActiveBoard);
+            Assert.False(view.Escape());
+            Assert.NotNull(scene.ActiveBoard);
+            scene.ActiveBoard = null;
         }
     }
 
-    /// <summary>but not while something is picked: Escape takes the innermost
-    /// thing first, and a selection is inside the board.</summary>
+    /// <summary>what it does instead is clear the selection, and then have
+    /// nothing left to do.</summary>
     [AvaloniaFact]
-    public void EscapeClearsASelectionBeforeItLeaves()
+    public void EscapeClearsASelectionAndStopsThere()
     {
         var (view, window, _, _, scene, repo) = Board();
         using (repo)
@@ -198,7 +200,23 @@ public class BoardGestureTests
             Assert.Empty(scene.Picked);
             Assert.NotNull(scene.ActiveBoard);
 
-            Assert.True(view.Escape());
+            Assert.False(view.Escape());
+            Assert.NotNull(scene.ActiveBoard);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>alt+left is the way out, and the bar along the bottom has to
+    /// say so - it said "esc" while Escape did nothing, which is how the
+    /// key came to be added back.</summary>
+    [AvaloniaFact]
+    public void AltLeftLeavesTheBoard()
+    {
+        var (view, _, _, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            view.HandleKey(Key.Left, KeyModifiers.Alt);
             Assert.Null(scene.ActiveBoard);
         }
     }

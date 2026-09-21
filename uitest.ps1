@@ -77,7 +77,9 @@ $pasted = (Get-ChildItem $images -ErrorAction SilentlyContinue).Count
 Check ($pasted -eq $before + 1) "ctrl+V writes one image into .atlas/images"
 
 Key "^z" 1.5; Shot "06-image-undone"
-Key "{ESC}" 2.5; Shot "07-back-to-map"
+# alt+left leaves a board, not Escape: Escape closes what is open, and
+# leaving is going somewhere rather than closing something
+Key "%{LEFT}" 2.5; Shot "07-back-to-map"
 $after = (Get-ChildItem $images -ErrorAction SilentlyContinue).Count
 Check ($after -eq $before) "leaving the board prunes the image undo threw away"
 

@@ -84,6 +84,11 @@ public sealed class Scene : IDisposable
     static readonly SKColor LabelCol = new(0x7f, 0xd8, 0xf0);
     static readonly SKColor CodeCol = new(0x9f, 0xd4, 0xea);
 
+    /// <summary>line numbers. Well down from the code: they are there to be
+    /// glanced at when you need one, and a gutter as bright as the source
+    /// competes with it on every single line.</summary>
+    public static readonly SKColor GutterCol = new(0x45, 0x63, 0x77);
+
     static readonly SKColor[] KindColor =
     [
         SKColors.Transparent,
@@ -701,26 +706,57 @@ public sealed class Scene : IDisposable
     /// <summary>draws source lines [from, to) of a file at the current canvas
     /// origin, in card-local coordinates. false when the text is not loaded yet.
     /// shared by the map and by a board's file windows.</summary>
+    /// <summary>how many characters wide the number column is for a file of
+    /// this many lines. Sized from the whole file rather than from the lines
+    /// on screen, so the code does not shift sideways as you scroll past
+    /// line 99, and never under two digits so neighbouring cards agree.</summary>
+    public static int GutterChars(int lineCount) =>
+        Math.Max(2, (int)Math.Floor(Math.Log10(Math.Max(1, lineCount))) + 1) + 1;
+
+    /// <summary>the same in card-local units.
+    ///
+    /// Depends on `_charW`, which the draw loop measures on its first frame -
+    /// so this answers 0 until something has been drawn. That is fine for
+    /// the one caller that matters, `DrawCode`, which measures it first, but
+    /// it is why nothing off the draw loop should be asking: use
+    /// <see cref="GutterChars"/> if you only need the width in characters.</summary>
+    public float GutterFor(int lineCount) => GutterChars(lineCount) * _charW;
+
     bool DrawCode(SKCanvas canvas, int i, int from, int to, SKPaint code)
     {
         var f = Data.Files[i];
         var lines = TextFor(f);
         if (lines is not { Length: > 0 }) return false;
 
+        if (_charW == 0) _charW = code.MeasureText("0");
         _runs.TryGetValue(f.P, out var runs);
         from = Math.Max(0, from);
         to = Math.Min(lines.Length, to);
 
+        // the numbers are the file's own, not the window's: a board window
+        // onto lines 40-88 says 40 to 88, which is the only numbering that
+        // means anything to somebody reading the file elsewhere
+        float gutter = GutterFor(lines.Length);
+        float numRight = 6 + gutter - _charW;
+        float x0 = 6 + gutter;
+
         for (int li = from; li < to; li++)
         {
+            float baseline = Data.HeaderH + (li + 1) * Data.LineH - 0.6f;
+
+            // drawn before the empty-line skip: a blank line is still a line
+            // and still has a number, and a gap in the column reads as a bug
+            var num = (li + 1).ToString();
+            code.Color = GutterCol;
+            canvas.DrawText(num, numRight - num.Length * _charW, baseline, code);
+
             var s = lines[li];
             if (s.Length == 0) continue;
-            float baseline = Data.HeaderH + (li + 1) * Data.LineH - 0.6f;
             var lineRuns = runs?[li];
             if (lineRuns is null || lineRuns.Length == 0)
             {
                 code.Color = CodeCol;
-                canvas.DrawText(s.Length > 160 ? s[..160] : s, 6, baseline, code);
+                canvas.DrawText(s.Length > 160 ? s[..160] : s, x0, baseline, code);
                 continue;
             }
             foreach (var r in lineRuns)
@@ -728,7 +764,7 @@ public sealed class Scene : IDisposable
                 if (r.Start >= 160) break;
                 int runEnd = Math.Min(r.End, 160);
                 code.Color = r.Color;
-                canvas.DrawText(s[r.Start..runEnd], 6 + r.Start * _charW, baseline, code);
+                canvas.DrawText(s[r.Start..runEnd], x0 + r.Start * _charW, baseline, code);
             }
         }
         return true;

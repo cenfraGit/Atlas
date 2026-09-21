@@ -73,6 +73,7 @@ public static class Samples
 
         foreach (var (id, name, parts) in Boards)
             Console.WriteLine("  board: " + MakeBoard(scene, boards, id, name, parts));
+        Console.WriteLine("  board: " + MakeMessyBoard(scene, boards));
         Console.WriteLine($"{made} annotations");
     }
 
@@ -184,5 +185,90 @@ public static class Samples
 
         boards.Save(board);
         return $"{name} ({board.Items.Count} items)";
+    }
+
+    /// <summary>a board that is deliberately awkward.
+    ///
+    /// The two tidy boards are for reading; this one is for editing. Every
+    /// kind of item, shapes that overlap, a stroke, an empty shape over other
+    /// things, connectors between boxes, a long file window and a label. The
+    /// things that break in edit mode break on a board like this: picking the
+    /// wrong item of an overlapping pair, a rubberband that takes too much,
+    /// a connector left pointing at nothing.</summary>
+    static string MakeMessyBoard(Scene scene, BoardStore boards)
+    {
+        var board = boards.Create("Everything at once");
+        board.Id = "sample-3";
+
+        void Add(BoardItem it) => board.Items.Add(it);
+        string Id() => BookmarkStore.NewId();
+
+        Add(new BoardItem
+        {
+            Id = Id(), Kind = "text", Text = "a board to break", Size = 44,
+            X = 0, Y = -110, W = 800, Color = "#ffd166",
+        });
+
+        // two boxes to connect, and a third overlapping one of them
+        var a = new BoardItem { Id = Id(), Kind = "shape", X = 0, Y = 0, W = 300, H = 140, Color = "#5fd3f3" };
+        var b = new BoardItem { Id = Id(), Kind = "ellipse", X = 620, Y = 40, W = 280, H = 160, Color = "#3fb96a" };
+        var c = new BoardItem
+        {
+            Id = Id(), Kind = "diamond", X = 220, Y = 90, W = 240, H = 180,
+            Color = "#b48ae8", Fill = "#b48ae8",
+        };
+        Add(a);
+        Add(b);
+        Add(c);
+
+        // a frame with no fill, laid over the lot: picking through it is
+        // exactly the thing that is easy to get wrong
+        Add(new BoardItem
+        {
+            Id = Id(), Kind = "shape", X = -40, Y = -40, W = 1000, H = 360,
+            Color = "#8aa0b0", Fill = BoardItem.NoFill,
+        });
+
+        Add(new BoardItem
+        {
+            Id = Id(), Kind = "arrow", From = a.Id, To = b.Id,
+            FromSide = Scene.Right, ToSide = Scene.Left, Color = "#ffd166",
+            X = 300, Y = 70, X2 = 620, Y2 = 120,
+        });
+        // one end tied and one loose, which is the awkward case
+        Add(new BoardItem
+        {
+            Id = Id(), Kind = "arrow", From = c.Id, FromSide = Scene.Bottom,
+            X = 340, Y = 270, X2 = 180, Y2 = 470, Color = "#d95c5c",
+        });
+
+        // a stroke laid across the shapes
+        var ink = new BoardItem { Id = Id(), Kind = "stroke", Color = "#d95c5c", Weight = 5 };
+        for (int i = 0; i <= 40; i++)
+        {
+            float t = i / 40f;
+            Strokes.Add(ink, 40 + t * 840, 300 + MathF.Sin(t * 7) * 40, minStep: 0);
+        }
+        Add(ink);
+
+        Add(new BoardItem
+        {
+            Id = Id(), Kind = "note", X = 980, Y = 300, W = 360,
+            Text = "notes, shapes, ink, connectors and a file window, " +
+                   "overlapping on purpose. If edit mode has a bug, it shows up here.",
+        });
+
+        // something long, so the board does not fit on one screen
+        var big = scene.Data.Files.OrderByDescending(f => f.N).FirstOrDefault();
+        if (big is not null)
+            Add(new BoardItem
+            {
+                Id = Id(), Kind = "file", File = big.P,
+                Line = 0, EndLine = Math.Min(big.N - 1, 120),
+                X = 0, Y = 520, W = 620,
+            });
+
+        boards.Save(board);
+        return $"Everything at once ({board.Items.Count} items)";
     }
 }

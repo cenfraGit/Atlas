@@ -1,10 +1,10 @@
 {
   "annotations": [
     {
-      "id": "sample-f4e766",
-      "text": "What you see changes with the zoom rather than just getting bigger. Four tiers: districts, then cards, then a coloured bar per line, then real text.",
+      "id": "sample-265f0e",
+      "text": "What you see changes with the zoom rather than just getting bigger. Four tiers: folders, then cards, then a coloured bar per line, then real text.",
       "file": "app/Scene.cs",
-      "key": "9377C3CEAEE8",
+      "key": "312478C6364C",
       "symbol": "Atlas.Scene.TierFor(1)",
       "offset": 0,
       "span": 2,
@@ -12,7 +12,7 @@
       "context": "A4B1ADE4FA28"
     },
     {
-      "id": "sample-b26a13",
+      "id": "sample-2dceef",
       "text": "Every line is sorted into a kind once, at scan time, so drawing the bars tier is a lookup rather than a parse. Layout lives here too, not in the view.",
       "file": "app/Scanner.cs",
       "key": "8F668565D516",
@@ -23,18 +23,18 @@
       "context": "CD948470E721"
     },
     {
-      "id": "sample-c20558",
+      "id": "sample-040d2e",
       "text": "Symbol first, then the context fingerprint, then the stored line. That ladder is what keeps a note attached while the code moves underneath it.",
       "file": "app/Annotations.cs",
-      "key": "4BADB4F9F588",
+      "key": "C96136700B0F",
       "symbol": "Atlas.Anchors.Resolve(3)",
       "offset": 0,
       "span": 42,
-      "line": 162,
+      "line": 178,
       "context": "FD1E063EEF2D"
     },
     {
-      "id": "sample-0d9c4d",
+      "id": "sample-0b4bc9",
       "text": "A hash of the first forty meaningful lines with the whitespace taken out, so a reference finds its file again after a rename, and reindenting changes nothing.",
       "file": "app/FileKeys.cs",
       "key": "D934846FAA6B",
@@ -45,7 +45,7 @@
       "context": "0629DD0EBB88"
     },
     {
-      "id": "sample-27c2e2",
+      "id": "sample-6aa5d9",
       "text": "Images nothing points at are deleted - but only once the undo history that could bring one back has been dropped.",
       "file": "app/Images.cs",
       "key": "2D88C74D1232",
@@ -56,14 +56,14 @@
       "context": "E108A2701C78"
     },
     {
-      "id": "sample-ce9566",
+      "id": "sample-c85c43",
       "text": "Rubbing a hole in a stroke leaves the surviving pieces as strokes in their own right, so everything that works on a stroke goes on working on them.",
       "file": "app/Strokes.cs",
       "key": "D48386DE837B",
       "symbol": "Atlas.Strokes.Erase(4)",
       "offset": 0,
       "span": 25,
-      "line": 144,
+      "line": 175,
       "context": "0EB19602D737"
     }
   ]

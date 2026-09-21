@@ -3,7 +3,7 @@
   "name": "How a frame is drawn",
   "items": [
     {
-      "id": "e12fd168",
+      "id": "6b91095d",
       "kind": "file",
       "file": "app/Scanner.cs",
       "line": 7,
@@ -14,10 +14,13 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     },
     {
-      "id": "10771129",
+      "id": "c2dda74b",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -28,10 +31,13 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     },
     {
-      "id": "2dbb6835",
+      "id": "3151419c",
       "kind": "file",
       "file": "app/Scene.cs",
       "line": 66,
@@ -42,10 +48,13 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     },
     {
-      "id": "6a218861",
+      "id": "13cfd093",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -56,10 +65,13 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     },
     {
-      "id": "1376e437",
+      "id": "78383105",
       "kind": "file",
       "file": "app/Highlighter.cs",
       "line": 14,
@@ -70,10 +82,13 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     },
     {
-      "id": "203224c4",
+      "id": "8f86c0ff",
       "kind": "note",
       "line": 0,
       "endLine": -1,
@@ -84,7 +99,10 @@
       "h": 0,
       "x2": 0,
       "y2": 0,
-      "weight": 0
+      "fromSide": -1,
+      "toSide": -1,
+      "weight": 0,
+      "size": 0
     }
   ],
   "group": "",

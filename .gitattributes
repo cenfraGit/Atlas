@@ -1,0 +1,16 @@
+# LF in the repository and in the working tree, whatever core.autocrlf says on
+# the machine that cloned it. A checkout that differs per machine turns up as
+# tests failing on one PC and not another, which is how this file came to exist.
+* text=auto eol=lf
+
+# except batch files: cmd.exe is the one thing still entitled to CRLF, and a
+# .cmd with LF line endings can mis-read labels and block bodies
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# images in .atlas/ are bytes, never touched
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary

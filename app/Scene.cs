@@ -2218,10 +2218,26 @@ public sealed class Scene : IDisposable
             if (!Picked.Contains(it.Id) || it.Kind == "arrow") continue;
             float h = ItemHeight(it);
             canvas.DrawRect(it.X - 3 * sc, it.Y - 3 * sc, it.W + 6 * sc, h + 6 * sc, edge);
+            // a bar on each wall that can be dragged, drawn as a bar
+            // rather than a square because it moves one edge rather than
+            // two. On a file window these are the clip handles, and they
+            // are the only handles it has
+            foreach (var wall in EdgesOf(it))
+            {
+                var bar = wall switch
+                {
+                    Top => new SKRect(it.X + it.W * 0.3f, it.Y - 3 * sc, it.X + it.W * 0.7f, it.Y + 3 * sc),
+                    Bottom => new SKRect(it.X + it.W * 0.3f, it.Y + h - 3 * sc, it.X + it.W * 0.7f, it.Y + h + 3 * sc),
+                    Left => new SKRect(it.X - 3 * sc, it.Y + h * 0.3f, it.X + 3 * sc, it.Y + h * 0.7f),
+                    _ => new SKRect(it.X + it.W - 3 * sc, it.Y + h * 0.3f, it.X + it.W + 3 * sc, it.Y + h * 0.7f),
+                };
+                canvas.DrawRect(bar, grip);
+            }
+
             // a grip on each corner, so a box can be pulled from whichever
             // side is nearest rather than only from the bottom right. They
-            // resize the box and leave the font alone; a file window has none,
-            // because its size comes from the range of lines it shows
+            // resize the box and leave the font alone; a file window has
+            // none, because its width scales the whole card
             if (!Resizable(it)) continue;
             for (int corner = 0; corner < 4; corner++)
             {
@@ -2311,6 +2327,132 @@ public sealed class Scene : IDisposable
 
     public static bool Resizable(BoardItem it) =>
         it.Kind is "note" or "image" or "text" || IsShape(it.Kind) || Strokes.Is(it);
+
+    /// <summary>which walls of an item can be dragged, as <see cref="Top"/>,
+    /// <see cref="Right"/>, <see cref="Bottom"/>, <see cref="Left"/>.
+    ///
+    /// A file window gets the top and bottom only, and dragging one of those
+    /// clips the line range rather than stretching anything - see
+    /// <see cref="ClipTo"/>. Its width is a scale factor for the whole card,
+    /// so a side handle there would be a zoom, not a resize, and there is
+    /// already a corner for that.
+    ///
+    /// A label has no height of its own - its words decide - so only its
+    /// sides, which is what the text wraps to.</summary>
+    public static IEnumerable<int> EdgesOf(BoardItem it)
+    {
+        if (it.Kind == "file") { yield return Top; yield return Bottom; yield break; }
+        if (!Resizable(it)) yield break;
+        yield return Right;
+        yield return Left;
+        if (it.Kind == "text") yield break;
+        yield return Top;
+        yield return Bottom;
+    }
+
+    /// <summary>a picked item's wall under the point, if there is one.
+    ///
+    /// Tested after <see cref="GripAt"/> by the caller, so a corner wins
+    /// where the two overlap: a corner is the more precise thing to have
+    /// aimed at, and it is the smaller target.</summary>
+    public (BoardItem Item, int Edge)? EdgeAt(float wx, float wy)
+    {
+        if (ActiveBoard is null) return null;
+        float reach = 6f / CamS;
+
+        for (int i = ActiveBoard.Items.Count - 1; i >= 0; i--)
+        {
+            var it = ActiveBoard.Items[i];
+            if (!Picked.Contains(it.Id)) continue;
+
+            float h = LastHeight(it);
+            float left = it.X, right = it.X + it.W, top = it.Y, bottom = it.Y + h;
+
+            foreach (var edge in EdgesOf(it))
+            {
+                bool on = edge switch
+                {
+                    Top => Math.Abs(wy - top) <= reach && wx >= left - reach && wx <= right + reach,
+                    Bottom => Math.Abs(wy - bottom) <= reach && wx >= left - reach && wx <= right + reach,
+                    Left => Math.Abs(wx - left) <= reach && wy >= top - reach && wy <= bottom + reach,
+                    _ => Math.Abs(wx - right) <= reach && wy >= top - reach && wy <= bottom + reach,
+                };
+                if (on) return (it, edge);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>drag one wall. The opposite three stay where they are, so
+    /// this changes one dimension and, for a top or left wall, the origin
+    /// with it.</summary>
+    public void ResizeEdge(BoardItem it, int edge, float wx, float wy, float min = 8f)
+    {
+        if (it.Kind == "file") { ClipTo(it, edge, wy); return; }
+
+        float h = LastHeight(it);
+        float left = it.X, top = it.Y, right = it.X + it.W, bottom = it.Y + h;
+
+        switch (edge)
+        {
+            case Left: left = Math.Min(wx, right - min); break;
+            case Right: right = Math.Max(wx, left + min); break;
+            case Top: top = Math.Min(wy, bottom - min); break;
+            default: bottom = Math.Max(wy, top + min); break;
+        }
+
+        if (Strokes.Is(it))
+        {
+            Strokes.ScaleInto(it, new SKRect(left, top, right, bottom), min);
+            return;
+        }
+
+        it.X = left;
+        it.Y = top;
+        it.W = right - left;
+        if (it.Kind != "text") it.H = bottom - top;
+    }
+
+    /// <summary>drag the top or bottom of a file window to clip it.
+    ///
+    /// A window onto a three thousand line file is unreadable and expensive,
+    /// and the answer is to show fewer lines rather than to squash them.
+    /// Nothing is scaled: the lines that stay are drawn exactly as they were
+    /// and the rest are no longer in the range, so the window is cheaper as
+    /// well as shorter.
+    ///
+    /// The code under the wall stays put while the wall moves through it.
+    /// Dragging the top down therefore moves the item's Y with it, or the
+    /// lines that remain would slide up the screen as you dragged - which
+    /// reads as scrolling rather than clipping.</summary>
+    public void ClipTo(BoardItem it, int edge, float wy)
+    {
+        if (it.File is null) return;
+        int i = ResolveFile(it.File, it.Key);
+        if (i < 0) return;
+
+        var f = Data.Files[i];
+        var (from, to) = RangeOf(it, f);
+        float step = Data.LineH * (it.W / f.W);
+        if (step <= 0) return;
+
+        int last = Math.Max(0, f.N - 1);
+        if (edge == Top)
+        {
+            int moved = (int)MathF.Round((wy - it.Y) / step);
+            int line = Math.Clamp(from + moved, 0, to);
+            it.Y += (line - from) * step;
+            it.Line = line;
+            it.EndLine = to;          // a range that was open has to close
+        }
+        else
+        {
+            float bottom = it.Y + WinHeadH + (to - from + 1) * step;
+            int moved = (int)MathF.Round((wy - bottom) / step);
+            it.Line = from;
+            it.EndLine = Math.Clamp(to + moved, from, last);
+        }
+    }
 
     /// <summary>the resize grip of a picked item, if the point is on one.</summary>
     /// <summary>which corner: bit 1 is the left edge, bit 2 the top. So 0 is

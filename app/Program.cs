@@ -1138,6 +1138,9 @@ public sealed class SceneView : Control
     BoardItem? _dragItem;
     BoardItem? _resizing;
     int _resizeCorner;
+
+    /// <summary>which wall is being dragged, or -1 when it is a corner.</summary>
+    int _resizeEdge = -1;
     bool _spaceDown;
     bool _band;
     readonly List<string> _bandBase = [];
@@ -2919,6 +2922,19 @@ public sealed class SceneView : Control
             {
                 _resizing = grip.Item;
                 _resizeCorner = grip.Corner;
+                _resizeEdge = -1;
+                _drag = true;
+                _last = e.GetPosition(this);
+                return;
+            }
+
+            // after the corners, so a corner wins where the two overlap: it
+            // is the smaller target and the more precise thing to have aimed
+            // at. On a file window this is the clip handle
+            if (_scene.EdgeAt(wx, wy) is { } wall)
+            {
+                _resizing = wall.Item;
+                _resizeEdge = wall.Edge;
                 _drag = true;
                 _last = e.GetPosition(this);
                 return;
@@ -3088,6 +3104,7 @@ public sealed class SceneView : Control
 
         _dragItem = null;
         _resizing = null;
+        _resizeEdge = -1;
         _unsnapped.Clear();
         e.Pointer.Capture(null);
         SaveBoardIfDirty();
@@ -3240,9 +3257,20 @@ public sealed class SceneView : Control
             var (rx, ry) = WorldAt(p);
             float ratio = _scene.LastHeight(_resizing) / Math.Max(1, _resizing.W);
 
-            // the corner follows the pointer and the opposite one stays put
-            _scene.Resize(_resizing, _resizeCorner, rx, ry);
-            if (_resizing.Kind == "image") _resizing.H = _resizing.W * ratio;   // keeps its shape
+            if (_resizeEdge >= 0)
+            {
+                // one wall follows the pointer and the other three stay put
+                _scene.ResizeEdge(_resizing, _resizeEdge, rx, ry);
+            }
+            else
+            {
+                // the corner follows the pointer and the opposite one stays put
+                _scene.Resize(_resizing, _resizeCorner, rx, ry);
+                // an image keeps its shape, which only makes sense when both
+                // dimensions moved - dragging one wall is asking for the other
+                // not to
+                if (_resizing.Kind == "image") _resizing.H = _resizing.W * ratio;
+            }
             _boardDirty = true;
         }
         else if (_band)

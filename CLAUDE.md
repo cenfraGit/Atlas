@@ -95,6 +95,18 @@ change freely.
       as either box moves, which is what made the first attempt unreadable.
 - [x] Shapes are exactly as tall as they were made - the floor of 40 and the
       default of 240 are gone, so a long thin divider is possible.
+- [x] Drag a wall to change one dimension (`Scene.EdgeAt`,
+      `ResizeEdge`). A corner moves two edges, which is a nuisance when
+      only one of them matters. A label has sides only - its height is its
+      words.
+- [x] A file window's walls **clip** it rather than resize it
+      (`Scene.ClipTo`): the top and bottom drag the line range, so a window
+      onto a three thousand line file can be narrowed to the one method you
+      care about. Nothing is scaled - the lines that stay are the size they
+      were - so it is cheaper to draw as well as shorter, and the code
+      under the wall stays put while the wall moves through it, which is
+      why dragging the top moves the item's Y with it. No side handles: a
+      window's width scales the whole card, so one would be a zoom.
 - [x] Resize from any of the four corners. `GripAt` returns which one and
       `Scene.Resize` moves the two edges that corner owns, which for a top or
       left grip means the origin moves too.

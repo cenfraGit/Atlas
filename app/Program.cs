@@ -2273,28 +2273,34 @@ public sealed class SceneView : Control
         if (_scene.ArrowDraft is { } made)
         {
             _scene.ArrowDraft = null;
+
+            // one arrow per arming. Staying armed is right for the brush,
+            // where you draw stroke after stroke; an arrow is a deliberate
+            // single thing, and a tool still live after it is done is a tool
+            // that catches the next drag you meant for something else
             _armArrow = false;
+            RefreshBoardBar();
+            ApplyCursor();
+
             if (_scene.ActiveBoard is { } b &&
                 (Math.Abs(made.B.X - made.A.X) > 4 || Math.Abs(made.B.Y - made.A.Y) > 4))
             {
                 Remember();
 
-                // an end dropped on something ties to it. Drawing a connector
-                // and attaching a connector should not be two gestures, and
-                // there is nothing else a line ending on a box could mean
-                var from = _scene.ItemAt(made.A.X, made.A.Y);
-                var to = _scene.ItemAt(made.B.X, made.B.Y);
-                if (from is not null && ReferenceEquals(from, to)) to = null;   // not to itself
+                // only a node connects. Landing inside a box is not aiming at
+                // it, and a line that crosses a box is often just a line
+                var from = _scene.AnchorAt(made.A.X, made.A.Y);
+                var to = _scene.AnchorAt(made.B.X, made.B.Y);
+                if (from is not null && to is not null &&
+                    ReferenceEquals(from.Value.Item, to.Value.Item)) to = null;   // not to itself
 
                 b.Items.Add(new BoardItem
                 {
                     Id = BookmarkStore.NewId(), Kind = "arrow",
                     X = made.A.X, Y = made.A.Y, X2 = made.B.X, Y2 = made.B.Y,
-                    From = from?.Id, To = to?.Id,
-                    // the side nearest where it was let go, so which anchor
-                    // you get is the one you aimed at
-                    FromSide = from is null ? -1 : _scene.NearestSide(from, made.A.X, made.A.Y),
-                    ToSide = to is null ? -1 : _scene.NearestSide(to, made.B.X, made.B.Y),
+                    From = from?.Item.Id, To = to?.Item.Id,
+                    FromSide = from?.Side ?? -1,
+                    ToSide = to?.Side ?? -1,
                 });
                 _boardStore?.Save(b);
                 Saved(from is null && to is null ? "arrow"
@@ -2420,24 +2426,23 @@ public sealed class SceneView : Control
         {
             var (ex, ey) = WorldAt(p);
 
-            // dragging an end re-ties it to whatever it is over, and unties it
-            // over empty canvas - the same rule that made it in the first place
-            var over = _scene.ItemAt(ex, ey);
-            if (ReferenceEquals(over, _arrowEnd)) over = null;
+            // dragging an end onto a node ties it there, and anywhere else
+            // lets it go - the same rule that made it in the first place
+            var node = _scene.AnchorAt(ex, ey);
 
             if (_arrowEndWhich == 1)
             {
                 _arrowEnd.X = ex; _arrowEnd.Y = ey;
-                if (over?.Id == _arrowEnd.To) over = null;
-                _arrowEnd.From = over?.Id;
-                _arrowEnd.FromSide = over is null ? -1 : _scene.NearestSide(over, ex, ey);
+                if (node?.Item.Id == _arrowEnd.To) node = null;   // not to itself
+                _arrowEnd.From = node?.Item.Id;
+                _arrowEnd.FromSide = node?.Side ?? -1;
             }
             else
             {
                 _arrowEnd.X2 = ex; _arrowEnd.Y2 = ey;
-                if (over?.Id == _arrowEnd.From) over = null;
-                _arrowEnd.To = over?.Id;
-                _arrowEnd.ToSide = over is null ? -1 : _scene.NearestSide(over, ex, ey);
+                if (node?.Item.Id == _arrowEnd.From) node = null;
+                _arrowEnd.To = node?.Item.Id;
+                _arrowEnd.ToSide = node?.Side ?? -1;
             }
             _boardDirty = true;
             _last = p;

@@ -1330,6 +1330,37 @@ public sealed class Scene : IDisposable
             : dy >= 0 ? Bottom : Top;
     }
 
+    /// <summary>the anchor under a point, or null.
+    ///
+    /// Anywhere inside an element is not an anchor. Landing a line in the
+    /// middle of a box and having it attach itself takes a decision away from
+    /// you - sometimes a line crossing a box is just a line crossing a box -
+    /// and the four nodes are drawn precisely so there is somewhere to aim.
+    /// Aim at one to connect; miss, and the end stays where you put it.</summary>
+    public (BoardItem Item, int Side)? AnchorAt(float wx, float wy)
+    {
+        if (ActiveBoard is null) return null;
+        float reach = 13f / CamS;
+        float nearest = reach * reach;
+        (BoardItem, int)? best = null;
+
+        for (int i = ActiveBoard.Items.Count - 1; i >= 0; i--)
+        {
+            var it = ActiveBoard.Items[i];
+            if (it.Kind == "arrow" || Strokes.Is(it)) continue;
+
+            for (int side = Top; side <= Left; side++)
+            {
+                var p = AnchorOf(it, side);
+                float d = (wx - p.X) * (wx - p.X) + (wy - p.Y) * (wy - p.Y);
+                if (d > nearest) continue;
+                nearest = d;
+                best = (it, side);
+            }
+        }
+        return best;
+    }
+
     /// <summary>which anchor a point is nearest, for attaching to one.</summary>
     public int NearestSide(BoardItem it, float wx, float wy)
     {

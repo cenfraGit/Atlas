@@ -273,6 +273,80 @@ public class ConnectorTests
         Assert.Equal(new SKPoint(100, 30), f.Scene.AnchorOf(oval, Scene.Right));
     }
 
+    // --- only a node connects ---------------------------------------------
+
+    [Fact]
+    public void LandingOnANodeFindsIt()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);            // anchors at 50,0 100,30 50,60 0,30
+        f.Board.Items.Add(box);
+
+        var hit = f.Scene.AnchorAt(100, 30);
+
+        Assert.NotNull(hit);
+        Assert.Equal("b1", hit!.Value.Item.Id);
+        Assert.Equal(Scene.Right, hit.Value.Side);
+    }
+
+    [Fact]
+    public void LandingInsideTheElementIsNotLandingOnANode()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Box("b1", 0, 0, w: 400, h: 300));
+
+        // dead centre of a big box: well inside it, nowhere near a node.
+        // A line crossing a box is often just a line crossing a box
+        Assert.Null(f.Scene.AnchorAt(200, 150));
+    }
+
+    [Fact]
+    public void LandingOnEmptyCanvasFindsNothing()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Box("b1", 0, 0));
+
+        Assert.Null(f.Scene.AnchorAt(900, 900));
+    }
+
+    [Fact]
+    public void ANodeHasSomeReachSoItCanBeHit()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Box("b1", 0, 0));
+
+        // a few pixels off the right node still counts; aiming has to be
+        // possible with a mouse
+        Assert.NotNull(f.Scene.AnchorAt(104, 33));
+    }
+
+    [Fact]
+    public void ArrowsAndStrokesHaveNoNodesToLandOn()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Arrow(x: 0, y: 0, x2: 200, y2: 0));
+
+        var ink = new BoardItem { Id = "s1", Kind = "stroke", Weight = 2 };
+        Strokes.Add(ink, 300, 0, minStep: 0);
+        Strokes.Add(ink, 400, 0, minStep: 0);
+        f.Board.Items.Add(ink);
+
+        // a connector ties to elements, not to other lines
+        Assert.Null(f.Scene.AnchorAt(100, 0));
+        Assert.Null(f.Scene.AnchorAt(350, 0));
+    }
+
+    [Fact]
+    public void TheNearestNodeWinsWhenTwoAreClose()
+    {
+        using var f = new Fixture();
+        f.Board.Items.Add(Box("b1", 0, 0, w: 40, h: 40));    // right node at 40,20
+        f.Board.Items.Add(Box("b2", 44, 0, w: 40, h: 40));   // left node at 44,20
+
+        Assert.Equal("b2", f.Scene.AnchorAt(43, 20)!.Value.Item.Id);
+        Assert.Equal("b1", f.Scene.AnchorAt(41, 20)!.Value.Item.Id);
+    }
+
     // --- things going missing --------------------------------------------
 
     [Fact]

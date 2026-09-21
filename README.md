@@ -124,10 +124,14 @@ erasing, it is undo. Splitting only ever touches ink.
 
 **Join things up.** Every element has four places a connector can meet it -
 top, right, bottom and left - and they light up while you are drawing one. An
-arrow dropped on one ties there, either end, and follows the box when you
-drag or resize it. Four points and no others is the whole reason it reads:
-an end free to sit anywhere along an edge slides about as either box moves,
-and a diagram of sliding lines is not a diagram.
+arrow dropped **on one of those nodes** ties there, either end, and follows
+the box when you drag or resize it. Ending anywhere else, including inside
+the element, leaves that end loose where you put it: a line crossing a box is
+often just a line crossing a box.
+
+Four points and no others is the whole reason it reads: an end free to sit
+anywhere along an edge slides about as either box moves, and a diagram of
+sliding lines is not a diagram.
 
 A ring instead of a dot marks a tied end. Drag it to another side to move it,
 or onto empty canvas to let it loose. Two picked items can be joined straight

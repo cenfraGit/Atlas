@@ -2258,11 +2258,36 @@ public sealed class SceneView : Control
     readonly List<BoardItem> _clipboard = [];
     readonly History _history = new();
 
+    /// <summary>whether a gesture has left anything to undo. For the tests:
+    /// the rule is about what does not get recorded, which is otherwise only
+    /// visible by counting ctrl+Z presses.</summary>
+    public bool CanUndo => _history.CanUndo;
+
     /// <summary>snapshot the board before changing it.</summary>
     void Remember()
     {
         if (_scene.ActiveBoard is { } b) _history.Record(b);
     }
+
+    bool _recorded;
+
+    /// <summary>about to change something in this gesture: take a snapshot,
+    /// once.
+    ///
+    /// A press used to record one, which meant picking a thing up and putting
+    /// it down unchanged - or just clicking it to select it - left an undo
+    /// step that undid nothing. Three clicks and ctrl+Z three times to get
+    /// back to the last real change. A gesture that changes nothing now
+    /// records nothing.</summary>
+    void Mutating()
+    {
+        if (_recorded) return;
+        _recorded = true;
+        Remember();
+    }
+
+    /// <summary>a new gesture: nothing recorded for it yet.</summary>
+    void StartGesture() => _recorded = false;
 
     void Undo()
     {
@@ -2612,7 +2637,6 @@ public sealed class SceneView : Control
 
             if (_scene.ArrowEndAt(wx, wy) is { } end)
             {
-                Remember();
                 _arrowEnd = end.Arrow;
                 _arrowEndWhich = end.End;
                 _scene.ShowAnchors = true;
@@ -2623,7 +2647,6 @@ public sealed class SceneView : Control
 
             if (_scene.GripAt(wx, wy) is { } grip)
             {
-                Remember();
                 _resizing = grip.Item;
                 _resizeCorner = grip.Corner;
                 _drag = true;
@@ -2658,12 +2681,12 @@ public sealed class SceneView : Control
                 _scene.Picked.Clear();
                 _scene.Picked.Add(hit.Id);
             }
-            if (_dragItem != hit) Remember();
             _dragItem = hit;
         }
 
         _clickCount = e.ClickCount;
         _drag = true;
+        StartGesture();
         ApplyCursor();
         _panVx = _panVy = 0;
         _panAt = -1;
@@ -2910,6 +2933,7 @@ public sealed class SceneView : Control
             // lets it go - the same rule that made it in the first place
             var node = _scene.AnchorAt(ex, ey);
 
+            Mutating();
             if (_arrowEndWhich == 1)
             {
                 _arrowEnd.X = ex; _arrowEnd.Y = ey;
@@ -2932,6 +2956,7 @@ public sealed class SceneView : Control
 
         if (_resizing is not null)
         {
+            Mutating();
             var (rx, ry) = WorldAt(p);
             float ratio = _scene.LastHeight(_resizing) / Math.Max(1, _resizing.W);
 
@@ -2963,6 +2988,7 @@ public sealed class SceneView : Control
         }
         else if (_dragItem is not null)
         {
+            Mutating();
             // everything picked moves together
             float mx = (float)(p.X - _last.X) / _scene.CamS;
             float my = (float)(p.Y - _last.Y) / _scene.CamS;

@@ -25,8 +25,10 @@ public static class Program
         if (args.Contains("--samples")) { Samples.Run(args); return; }
 
         // before anything can throw. A WinExe has no console, so without this
-        // an unhandled exception is a window that vanishes with no message
-        Crash.Install();
+        // an unhandled exception is a window that vanishes with no message.
+        // Only the handlers that do not touch Dispatcher.UIThread - see
+        // Crash.InstallEarly for what happens when one does
+        Crash.InstallEarly();
         AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
     }
 }
@@ -142,8 +144,9 @@ public sealed class App : Application
                 if (view.Escape()) e.Handled = true;
             }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
-            // now there is somewhere to say it out loud
-            Crash.Install(msg => Dispatcher.UIThread.Post(() =>
+            // now the framework is up, so the dispatcher is the real one,
+            // and there is somewhere to say it out loud
+            Crash.InstallOnUiThread(msg => Dispatcher.UIThread.Post(() =>
                 view.Toast($"something went wrong - {msg}")));
 
             desktop.MainWindow = window;

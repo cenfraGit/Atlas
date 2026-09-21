@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Headless.XUnit;
 
 namespace Atlas.Tests;
@@ -116,6 +117,53 @@ public class InlineEditorTests
         editor.Cancel();
 
         Assert.Equal(1, calls);
+    }
+
+    /// <summary>Enter commits, typed for real.
+    ///
+    /// A TextBox with AcceptsReturn handles Enter itself and marks it
+    /// handled, so a bubbling handler never runs: Enter put a newline in the
+    /// box and left it open. Driven as a real keystroke rather than by
+    /// calling Commit, because the routing is the whole of what broke.</summary>
+    [AvaloniaFact]
+    public void EnterCommitsRatherThanAddingALine()
+    {
+        var editor = new InlineEditor();
+        var window = Hosted(editor);
+
+        string? got = null;
+        editor.Begin("n1", "", 40, 60, 280, 90, 18, text => got = text);
+        Draw(window);
+
+        var box = Assert.IsType<TextBox>(Assert.Single(editor.Children));
+        box.Focus();
+        box.Text = "a note";
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        Assert.Equal("a note", got);
+        Assert.False(editor.Editing);
+        Assert.DoesNotContain(Environment.NewLine, box.Text ?? "");
+    }
+
+    /// <summary>and shift+Enter still starts a line, which is the reason
+    /// Enter had to be intercepted rather than the box left alone.</summary>
+    [AvaloniaFact]
+    public void ShiftEnterKeepsTypingInstead()
+    {
+        var editor = new InlineEditor();
+        var window = Hosted(editor);
+
+        int calls = 0;
+        editor.Begin("n1", "", 40, 60, 280, 90, 18, _ => calls++);
+        Draw(window);
+
+        var box = Assert.IsType<TextBox>(Assert.Single(editor.Children));
+        box.Focus();
+        box.Text = "first";
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.Shift);
+
+        Assert.Equal(0, calls);
+        Assert.True(editor.Editing);
     }
 
     [AvaloniaFact]

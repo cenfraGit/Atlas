@@ -27,12 +27,17 @@ public static class Crash
 
     static Action<string>? _report;
 
-    /// <summary>hook up the handlers. <paramref name="report"/> shows a line
-    /// in the window, once there is a window to show it in.</summary>
-    public static void Install(Action<string>? report = null)
+    /// <summary>the handlers that are safe before Avalonia exists.
+    ///
+    /// <b>Nothing here may touch <c>Dispatcher.UIThread</c>.</b> Reading it
+    /// creates Avalonia's dispatcher singleton, and one created before
+    /// `UsePlatformDetect` runs binds to no windowing platform - so the app
+    /// starts, finds it has no main loop, throws PlatformNotSupportedException
+    /// and exits before a window is ever shown. A crash handler that stops
+    /// the program starting is worse than no crash handler, and this one did
+    /// exactly that.</summary>
+    public static void InstallEarly()
     {
-        _report = report;
-
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             Write(e.ExceptionObject as Exception, "unhandled");
 
@@ -41,6 +46,13 @@ public static class Crash
             Write(e.Exception, "background task");
             e.SetObserved();
         };
+    }
+
+    /// <summary>the rest, once the framework is up and there is a window to
+    /// report into. <paramref name="report"/> shows a line in it.</summary>
+    public static void InstallOnUiThread(Action<string> report)
+    {
+        _report = report;
 
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {

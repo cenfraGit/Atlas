@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 
@@ -55,7 +56,13 @@ public sealed class InlineEditor : Canvas
             Padding = new Thickness(6, 4),
             VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Top,
         };
-        _box.KeyDown += OnKey;
+        // tunnel, so Enter is seen on the way *down* to the TextBox. A
+        // TextBox with AcceptsReturn handles Enter itself and marks it
+        // handled, so a bubbling handler is never called and Enter puts a
+        // newline in the box instead of committing it - which is exactly
+        // how it behaved, and the same reason the window watches Escape in
+        // the tunnel phase
+        _box.AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
         _box.LostFocus += (_, _) => Commit();
         Children.Add(_box);
     }

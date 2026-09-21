@@ -296,6 +296,14 @@ inline editor did this and killed the app on every double click. The rule is
 that the draw loop leaves numbers behind (`Scene.EditingHeight`) and the UI
 thread reads them. Covered by `SceneThreadingTests`.
 
+**Nothing may touch `Dispatcher.UIThread` before `AppBuilder` runs.**
+Reading it creates Avalonia's dispatcher singleton, and one made before
+`UsePlatformDetect` binds to no windowing platform - the app then starts,
+finds it has no main loop, throws `PlatformNotSupportedException` and exits
+before a window appears. `Crash.InstallEarly` is the pre-Avalonia half for
+this reason; the dispatcher handler goes on in
+`OnFrameworkInitializationCompleted`.
+
 **An unhandled exception used to be invisible.** Atlas is a `WinExe` with no
 console. `Crash.cs` logs to `%LOCALAPPDATA%/Atlas/crash.log`, reports into the
 window, and marks UI-thread exceptions handled so a bug in one event handler
@@ -362,6 +370,17 @@ When adding tests:
 - `ImageStore` and `Highlighter` hold process-wide state; their tests sit in
   the `images` and `highlighter` collections so they do not run alongside
   anything that would disturb them.
+
+**The GUI runs from here.** `Atlas.exe <repo>` started with `Start-Process`
+from PowerShell opens a real window, and it can be driven with `SendKeys`
+and `mouse_event` and screenshotted with `CopyFromScreen` - see the driver
+scripts pattern in `uitest.ps1`. Do not conclude the app cannot be launched
+from a failure to launch it; check the crash log first, because a startup
+bug looks exactly like a missing desktop.
+
+**Driving the app writes to `.atlas/`.** The sample boards are committed, so
+a note added while testing lands in a tracked file. Check `git status` after
+driving and `--samples` to regenerate.
 
 `Avalonia.Headless` gives the suite a real window, off screen, with real Skia
 drawing (`Support/HeadlessApp.cs`, `[AvaloniaFact]`). Everything in

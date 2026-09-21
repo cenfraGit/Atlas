@@ -11,7 +11,10 @@ TestResults/
 # the layout cache: records the absolute path of the folder it scanned, so it
 # is machine specific and must never be committed. Atlas notices a cache from
 # another machine and rescans rather than drawing it.
-/data/
+# not anchored to the root: running the app with its build output somewhere
+# unusual writes the cache beside whatever the working directory was, and a
+# machine specific file is no more committable for having landed in app/
+data/
 
 # ide
 .vs/

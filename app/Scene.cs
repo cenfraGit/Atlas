@@ -782,12 +782,54 @@ public sealed class Scene : IDisposable
             (byte)(DelCol.Blue + (AddCol.Blue - DelCol.Blue) * share));
     }
 
-    /// <summary>zoomed out, a changed file is a solid block. it is forced to at
-    /// least a few pixels: at map zoom a card is thinner than a pixel and would
-    /// flicker in and out as you move.</summary>
+    /// <summary>runs of changed lines, so two hundred lines changed in one
+    /// place is one band rather than two hundred rectangles - and so a band
+    /// can be given a floor without a hundred floors overlapping into a
+    /// solid block.
+    ///
+    /// Lines a couple apart are one run: a diff that changed every other
+    /// line of a method changed that method, and drawing the gaps is noise
+    /// at any zoom where you cannot read them anyway.</summary>
+    public static List<(int From, int To)> Runs(IEnumerable<int> lines, int gap = 2)
+    {
+        var runs = new List<(int, int)>();
+        var sorted = lines.Distinct().Order().ToList();
+        if (sorted.Count == 0) return runs;
+
+        int from = sorted[0], prev = sorted[0];
+        for (int i = 1; i < sorted.Count; i++)
+        {
+            if (sorted[i] - prev <= gap + 1) { prev = sorted[i]; continue; }
+            runs.Add((from, prev));
+            from = prev = sorted[i];
+        }
+        runs.Add((from, prev));
+        return runs;
+    }
+
+    /// <summary>everything of a file's content went, so the whole card is
+    /// the change. A file git actually deleted has no card to draw on - the
+    /// scan is of what is there now - so this is the emptied case.</summary>
+    static bool WhollyRemoved(FileChange change, FileRec f) =>
+        change.Added == 0 && change.Removed > 0 && change.Removed >= f.N;
+
+    /// <summary>zoomed out, the changed lines of a file glow and the rest of
+    /// it does not.
+    ///
+    /// This used to paint the whole card in one colour, which said "a lot
+    /// changed here" about a two line fix in a long file - the file was
+    /// large, so the block was large, and size on the map means size of
+    /// file rather than size of change. Now the card is a dim silhouette
+    /// saying "touched" and the light is only where the diff is.
+    ///
+    /// Everything is floored to a few pixels: at map zoom a line is a
+    /// fraction of a pixel and a real change would flicker in and out as
+    /// you move.</summary>
     void DrawReviewBlocks(SKCanvas canvas)
     {
         float min = 9f / CamS;
+        float minRun = 3.5f / CamS;
+        using var silhouette = new SKPaint { IsAntialias = false };
         using var fill = new SKPaint { IsAntialias = false };
         using var glow = new SKPaint
         {
@@ -802,11 +844,48 @@ public sealed class Scene : IDisposable
             var f = Data.Files[i];
             float w = Math.Max(f.W, min), h = Math.Max(f.H, min);
             float x = f.X + (f.W - w) / 2, y = f.Y + (f.H - h) / 2;
-            var col = ChurnColor(change);
-            glow.Color = col.WithAlpha(120);
-            canvas.DrawRect(x - min * 0.35f, y - min * 0.35f, w + min * 0.7f, h + min * 0.7f, glow);
-            fill.Color = col;
-            canvas.DrawRect(x, y, w, h, fill);
+            var churn = ChurnColor(change);
+
+            // the card, dim. It still has to be findable: "which files did
+            // this commit touch" is the first question, and an unlit card
+            // among hundreds is not an answer
+            silhouette.Color = churn.WithAlpha(46);
+            canvas.DrawRect(x, y, w, h, silhouette);
+
+            if (WhollyRemoved(change, f))
+            {
+                glow.Color = DelCol.WithAlpha(120);
+                canvas.DrawRect(x - min * 0.35f, y - min * 0.35f, w + min * 0.7f, h + min * 0.7f, glow);
+                fill.Color = DelCol;
+                canvas.DrawRect(x, y, w, h, fill);
+                continue;
+            }
+
+            // a card forced up to the minimum size has to stretch its line
+            // positions with it, or every band lands in the top corner
+            float k = h / Math.Max(1f, f.H);
+            float Top(int line) => y + (Data.HeaderH + line * Data.LineH) * k;
+
+            void Bands(IEnumerable<int> lines, SKColor col, bool thin)
+            {
+                foreach (var (a, b) in Runs(lines))
+                {
+                    float top = Top(a);
+                    float bottom = thin ? top : Top(b) + Data.LineH * k;
+                    if (bottom - top < minRun) bottom = top + minRun;
+
+                    glow.Color = col.WithAlpha(120);
+                    canvas.DrawRect(x - min * 0.3f, top - minRun, w + min * 0.6f,
+                        bottom - top + minRun * 2, glow);
+                    fill.Color = col;
+                    canvas.DrawRect(x, top, w, bottom - top, fill);
+                }
+            }
+
+            // removals last: they are points rather than spans, and a
+            // deletion inside a block of additions has to stay visible
+            Bands(change.AddedLines, AddCol, thin: false);
+            Bands(change.RemovedAt, DelCol, thin: true);
         }
     }
 
@@ -827,26 +906,45 @@ public sealed class Scene : IDisposable
         }
     }
 
-    /// <summary>added and removed lines inside one card.</summary>
+    /// <summary>added and removed lines inside one card.
+    ///
+    /// Both glow. A removal used to be a hairline with no light on it, which
+    /// made a commit that deleted a hundred lines look like a commit that
+    /// did nothing - the one case where the absence of code is the change.
+    ///
+    /// Drawn as runs rather than per line, so a block of two hundred added
+    /// lines is one rectangle and one blur instead of two hundred of each.</summary>
     void DrawReviewLines(SKCanvas canvas, FileRec f)
     {
         if (Review is null || !Review.ByPath.TryGetValue(f.P, out var change)) return;
-        using var add = new SKPaint { Color = AddCol.WithAlpha(120), IsAntialias = false };
-        using var del = new SKPaint { Color = DelCol, IsAntialias = false };
-        using var addGlow = new SKPaint
+        using var fill = new SKPaint { IsAntialias = false };
+        using var glow = new SKPaint
         {
-            Color = AddCol.WithAlpha(70), IsAntialias = true,
+            IsAntialias = true,
             MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Data.LineH * 1.6f),
         };
 
-        foreach (var line in change.AddedLines)
+        foreach (var (a, b) in Runs(change.AddedLines))
         {
-            float y = Data.HeaderH + line * Data.LineH;
-            canvas.DrawRect(0, y, f.W, Data.LineH, addGlow);
-            canvas.DrawRect(0, y, f.W, Data.LineH, add);
+            float y = Data.HeaderH + a * Data.LineH;
+            float h = (b - a + 1) * Data.LineH;
+            glow.Color = AddCol.WithAlpha(70);
+            canvas.DrawRect(0, y, f.W, h, glow);
+            fill.Color = AddCol.WithAlpha(120);
+            canvas.DrawRect(0, y, f.W, h, fill);
         }
-        foreach (var line in change.RemovedAt)
-            canvas.DrawRect(0, Data.HeaderH + line * Data.LineH - 0.6f, f.W, 1.2f, del);
+
+        // a deletion is a point in the new file, not a span of it, so it
+        // stays a line - but a lit one
+        foreach (var (a, b) in Runs(change.RemovedAt))
+        {
+            float y = Data.HeaderH + a * Data.LineH;
+            float h = Math.Max(1.2f, (b - a) * Data.LineH);
+            glow.Color = DelCol.WithAlpha(90);
+            canvas.DrawRect(0, y - Data.LineH * 0.5f, f.W, h + Data.LineH, glow);
+            fill.Color = DelCol;
+            canvas.DrawRect(0, y - 0.6f, f.W, h, fill);
+        }
     }
 
     /// <summary>frame every file a change set touched.</summary>

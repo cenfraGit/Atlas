@@ -169,19 +169,37 @@ public static class Anchors
             Context = ContextOf(lines, line),
             Key = FileKeys.Of(lines),
         };
-        var sym = Symbols.Innermost(Symbols.ForFile(fullPath), line);
-        if (sym is { } s)
-        {
-            a.Symbol = s.Name;
-            a.Offset = line - s.StartLine;
-        }
+        var (symbol, offset) = CaptureAt(fullPath, line);
+        a.Symbol = symbol;
+        a.Offset = offset;
         return a;
+    }
+
+    /// <summary>the declaration a line sits in, and how far down it is.
+    ///
+    /// Split out so a board's file window can hold the same anchor an
+    /// annotation does. A window records a range of line *numbers*, and a
+    /// line number stops meaning the same thing the moment somebody inserts
+    /// above it - which is the whole reason this ladder exists.</summary>
+    public static (string? Symbol, int Offset) CaptureAt(string fullPath, int line)
+    {
+        var sym = Symbols.Innermost(Symbols.ForFile(fullPath), line);
+        return sym is { } s ? (s.Name, line - s.StartLine) : (null, 0);
     }
 
     /// <summary>find where an annotation belongs now. symbol first, then the
     /// context fingerprint, then the stored line only if it still matches.</summary>
-    public static Anchor Resolve(Annotation a, string fullPath, string[] lines)
+    public static Anchor Resolve(Annotation a, string fullPath, string[] lines) =>
+        Resolve(a.Symbol, a.Offset, a.Context, a.Line, fullPath, lines);
+
+    /// <summary>the same ladder, for anything that stored an anchor - an
+    /// annotation, or a board's window onto a range of lines. One ladder
+    /// rather than two, because a second copy is a second set of rules
+    /// about when a line has moved.</summary>
+    public static Anchor Resolve(
+        string? symbol, int offset, string? context, int storedLine, string fullPath, string[] lines)
     {
+        var a = new Annotation { Symbol = symbol, Offset = offset, Context = context, Line = storedLine };
         if (lines.Length == 0) return new Anchor(0, AnchorKind.Orphan);
         int last = lines.Length - 1;
 

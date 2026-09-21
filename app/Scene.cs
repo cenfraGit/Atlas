@@ -564,6 +564,84 @@ public sealed class Scene : IDisposable
         return filled;
     }
 
+    /// <summary>put every file window back on the code it was opened on,
+    /// and give one an anchor if it has none.
+    ///
+    /// A window stores line numbers. Insert twenty lines above line 100 and
+    /// the window showing 100-140 is showing what used to be at 80-120 -
+    /// different code, in the same place on the board, with whatever was
+    /// drawn over it now pointing at the wrong thing. Re-resolving the
+    /// anchor moves the *range* so the same code stays in the same place,
+    /// which is what keeps the drawings right without their needing anchors
+    /// of their own.
+    ///
+    /// Returns true when anything changed, so the caller knows to save.</summary>
+    public bool AnchorWindows(Board board)
+    {
+        bool changed = false;
+        foreach (var it in board.Items)
+        {
+            if (it.Kind != "file" || it.File is null) continue;
+            int i = ResolveFile(it.File, it.Key);
+            if (i < 0) continue;
+
+            var full = Path.Combine(Data.Root, Data.Files[i].P.Replace('/', Path.DirectorySeparatorChar));
+
+            // the declarations are cached by path, and the whole reason this
+            // runs is that the file may have changed since - resolving
+            // against yesterday's parse finds the symbol at yesterday's line
+            // and concludes that nothing moved
+            Symbols.Forget(full);
+
+            var lines = ReadLines(Data.Files[i].P);
+            if (lines.Length == 0) continue;
+
+            // a window made before windows had anchors gets one now, from
+            // wherever it currently points - the same catching-up EnsureKeys
+            // does for fingerprints
+            if (it.Context is null)
+            {
+                var (symbol, offset) = Anchors.CaptureAt(full, it.Line);
+                it.Symbol = symbol;
+                it.Offset = offset;
+                it.Context = Anchors.ContextOf(lines, it.Line);
+                changed = true;
+                continue;
+            }
+
+            var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, it.Line, full, lines);
+            // an orphan is left where it is. Moving a window to a guess is
+            // worse than leaving it somewhere the user can see is wrong
+            if (!at.Resolved || at.Line == it.Line) continue;
+
+            int shift = at.Line - it.Line;
+            int last = Math.Max(0, lines.Length - 1);
+            it.Line = Math.Clamp(at.Line, 0, last);
+            if (it.EndLine >= 0) it.EndLine = Math.Clamp(it.EndLine + shift, it.Line, last);
+            changed = true;
+        }
+        return changed;
+    }
+
+    /// <summary>record where a window points now, after something moved it
+    /// deliberately - clipping it, or changing its range by hand. Without
+    /// this the next re-anchor would drag it back to where it used to be.</summary>
+    public void Reanchor(BoardItem window)
+    {
+        if (window.Kind != "file" || window.File is null) return;
+        int i = ResolveFile(window.File, window.Key);
+        if (i < 0) return;
+
+        var lines = ReadLines(Data.Files[i].P);
+        if (lines.Length == 0) return;
+
+        var full = Path.Combine(Data.Root, Data.Files[i].P.Replace('/', Path.DirectorySeparatorChar));
+        var (symbol, offset) = Anchors.CaptureAt(full, window.Line);
+        window.Symbol = symbol;
+        window.Offset = offset;
+        window.Context = Anchors.ContextOf(lines, window.Line);
+    }
+
     /// <summary>the annotations to draw on this file, here.
     ///
     /// Global ones everywhere; a board's own only on that board. Filtered on

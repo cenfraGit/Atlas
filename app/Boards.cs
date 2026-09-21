@@ -84,6 +84,20 @@ public sealed class BoardItem
 
     public const string NoFill = "none";
 
+    /// <summary>a file window's anchor: the declaration its first line sits
+    /// in, how far down that declaration it is, and a fingerprint of the
+    /// line and its neighbours. The same three an annotation carries, and
+    /// resolved by the same ladder.
+    ///
+    /// <c>Line</c> and <c>EndLine</c> are line *numbers*, and a line number
+    /// stops meaning the same thing the moment somebody inserts above it -
+    /// the window then shows different code in the same place, and anything
+    /// drawn over it is pointing at the wrong thing. The anchor is what puts
+    /// the range back on the code it was opened on.</summary>
+    [JsonPropertyName("symbol")] public string? Symbol { get; set; }
+    [JsonPropertyName("offset")] public int Offset { get; set; }
+    [JsonPropertyName("context")] public string? Context { get; set; }
+
     /// <summary>type size for a text label, in board units. 0 means the
     /// default. A label is the one thing on a board whose size is the point
     /// of it - a heading over a group of windows is a heading because it is

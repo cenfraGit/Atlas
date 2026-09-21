@@ -2129,8 +2129,14 @@ public sealed class SceneView : Control
         _boards?.Close();
         if (_scene.ActiveBoard is null) _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.ActiveBoard = b;
-        // a board made before windows kept fingerprints gets them now
-        if (_scene.EnsureKeys(b)) _boardStore?.Save(b);
+        // a board made before windows kept fingerprints gets them now, and
+        // every window is put back on the code it was opened on - lines may
+        // have been inserted above it since, which would otherwise leave it
+        // showing different code with the drawings still over the old spot
+        bool keys = _scene.EnsureKeys(b);
+        bool moved = _scene.AnchorWindows(b);
+        if (keys || moved) _boardStore?.Save(b);
+        if (moved) Toast("windows followed their code");
         _scene.Grid = Editing ? GridStep : 0;
         _scene.Picked.Clear();
         _history.Clear();
@@ -2630,6 +2636,8 @@ public sealed class SceneView : Control
             {
                 window.Line = Math.Max(0, a - 1);
                 window.EndLine = Math.Max(window.Line, b - 1);
+                // typed on purpose, so this is where the window belongs now
+                _scene.Reanchor(window);
                 if (_scene.ActiveBoard is { } board) _boardStore?.Save(board);
                 Saved("line range");
             }
@@ -2810,12 +2818,16 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is not { } board) return;
         var f = _scene.Data.Files[i];
         Remember();
-        board.Items.Add(new BoardItem
+        var window = new BoardItem
         {
             Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
             Line = 0, EndLine = -1, W = 620,
             X = _scene.CamX - 310, Y = _scene.CamY - 120,
-        });
+        };
+        // where it points, recorded now, so inserting above it later moves
+        // the range rather than the code under it
+        _scene.Reanchor(window);
+        board.Items.Add(window);
         _boardStore?.Save(board);
         _boards?.Rebuild();
         Focus();
@@ -3261,6 +3273,9 @@ public sealed class SceneView : Control
             {
                 // one wall follows the pointer and the other three stay put
                 _scene.ResizeEdge(_resizing, _resizeEdge, rx, ry);
+                // clipping moves a window on purpose, so its anchor moves
+                // with it - otherwise the next open would drag it back
+                if (_resizing.Kind == "file") _scene.Reanchor(_resizing);
             }
             else
             {

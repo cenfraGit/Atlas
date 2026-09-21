@@ -281,6 +281,12 @@ covered by `AnchorTests` and works.
 - [x] Up and down step the commits, which is what a list of commits down
       the side looks like it does. Not while a tour is running: those are
       its arrows.
+- [ ] Drawings still drift when code is inserted *inside* a window's range
+      rather than above it - the range follows the code, but a rectangle
+      over the fifth visible line stays over the fifth visible line. The
+      fix is the same ladder per item: an anchor on anything overlapping a
+      window, resolved the way the window's own is. Worth doing once
+      someone hits it; the common case is insertion above.
 - [ ] Show each file as it was *at that commit*, so the code under the
       marks is the code the commit changed rather than today's. The
       snapshot already exists (`ShowSnapshot`); what is missing is doing it
@@ -458,6 +464,23 @@ alongside `_runs` by the loader, and an entry in one without the other means
 `DrawCode` finds text with no syntax runs beside it and paints that whole
 file in a single colour. The search reads every file in the repo, so caching
 there would leave the map grey.
+
+**A line number is not a place either.** A board's file window stores
+`Line`/`EndLine`, and inserting twenty lines above line 100 leaves the window
+showing what used to be at 80-120 - different code, in the same place on the
+board, with every rectangle and stroke drawn over it now pointing at the
+wrong thing. A window carries the same anchor an annotation does (symbol,
+offset, context fingerprint) and `Scene.AnchorWindows` moves the *range* when
+a board opens, so the same code stays in the same place and the drawings need
+no anchors of their own. `Scene.Reanchor(window)` records a deliberate move -
+a clip, a typed range - or the next open drags it back. Covered by
+`WindowDriftTests`.
+
+**`Symbols.ForFile` caches a parse per path and nothing in the app used to
+invalidate it.** Re-anchoring exists because the file may have changed, so it
+must `Symbols.Forget` first - otherwise it resolves against the parse from
+before the edit, finds the symbol at its old line, and concludes nothing
+moved.
 
 **A path is not an identity.** Board windows, annotations and bookmarks
 reference files by path *and* a content fingerprint (`FileKeys`).

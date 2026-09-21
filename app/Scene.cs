@@ -1315,6 +1315,35 @@ public sealed class Scene : IDisposable
         return outLines;
     }
 
+    /// <summary>take items off a board, cutting any arrow tied to one of
+    /// them loose where it currently is.
+    ///
+    /// Every deletion goes through here. A tie left pointing at an item that
+    /// is gone falls back to the arrow's stored coordinates, and those are
+    /// from wherever the tie was first made - so deleting a box used to fling
+    /// its connectors back across the board.</summary>
+    public int Remove(Board board, IEnumerable<BoardItem> going)
+    {
+        var ids = going.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
+        if (ids.Count == 0) return 0;
+
+        foreach (var it in board.Items)
+        {
+            if (it.Kind != "arrow") continue;
+            bool cutFrom = it.From is { } f && ids.Contains(f);
+            bool cutTo = it.To is { } t && ids.Contains(t);
+            if (!cutFrom && !cutTo) continue;
+
+            var (a, b) = ArrowEnds(it);
+            if (cutFrom) { it.X = a.X; it.Y = a.Y; it.From = null; it.FromSide = -1; }
+            if (cutTo) { it.X2 = b.X; it.Y2 = b.Y; it.To = null; it.ToSide = -1; }
+        }
+
+        int went = board.Items.RemoveAll(i => ids.Contains(i.Id));
+        foreach (var id in ids) Picked.Remove(id);
+        return went;
+    }
+
     /// <summary>topmost item under a board-space point, or null.</summary>
     public BoardItem? ItemAt(float wx, float wy)
     {
@@ -1929,7 +1958,8 @@ public sealed class Scene : IDisposable
 
             if (it.Kind == "arrow")
             {
-                if (NearArrow(it, wx, wy, radius)) hit.Add(it);
+                var (a, b) = ArrowEnds(it);
+                if (NearSegment(a, b, wx, wy, radius)) hit.Add(it);
                 continue;
             }
 
@@ -1940,13 +1970,17 @@ public sealed class Scene : IDisposable
         return hit;
     }
 
-    static bool NearArrow(BoardItem it, float wx, float wy, float tol)
+    /// <summary>is the point within tol of the segment a-b. Takes the ends
+    /// rather than the arrow, because the ends of a tied arrow are not the
+    /// ones stored on it - reading X/Y here is what made the eraser work on
+    /// where an arrow used to be.</summary>
+    static bool NearSegment(SKPoint a, SKPoint b, float wx, float wy, float tol)
     {
-        float dx = it.X2 - it.X, dy = it.Y2 - it.Y;
+        float dx = b.X - a.X, dy = b.Y - a.Y;
         float len2 = dx * dx + dy * dy;
         if (len2 < 0.01f) return false;
-        float t = Math.Clamp(((wx - it.X) * dx + (wy - it.Y) * dy) / len2, 0, 1);
-        float px = it.X + dx * t, py = it.Y + dy * t;
+        float t = Math.Clamp(((wx - a.X) * dx + (wy - a.Y) * dy) / len2, 0, 1);
+        float px = a.X + dx * t, py = a.Y + dy * t;
         return (wx - px) * (wx - px) + (wy - py) * (wy - py) <= tol * tol;
     }
 
@@ -1959,12 +1993,7 @@ public sealed class Scene : IDisposable
         {
             if (it.Kind != "arrow") continue;
             var (a, b) = ArrowEnds(it);
-            float dx = b.X - a.X, dy = b.Y - a.Y;
-            float len2 = dx * dx + dy * dy;
-            if (len2 < 0.01f) continue;
-            float t = Math.Clamp(((wx - a.X) * dx + (wy - a.Y) * dy) / len2, 0, 1);
-            float px = a.X + dx * t, py = a.Y + dy * t;
-            if (Math.Abs(wx - px) < tol && Math.Abs(wy - py) < tol) return it;
+            if (NearSegment(a, b, wx, wy, tol)) return it;
         }
         return null;
     }

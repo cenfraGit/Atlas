@@ -38,10 +38,15 @@ public sealed class BoardItem
     /// <summary>ids of the items an arrow is tied to, either end. Null means
     /// that end is loose and X/Y (or X2/Y2) is where it is.
     ///
-    /// A tied end has no stored position worth trusting: it is wherever the
-    /// edge of that item is now. The coordinates are still kept up to date as
-    /// a fallback, so cutting the item an arrow was tied to leaves the arrow
-    /// where it was rather than collapsing it to the origin.</summary>
+    /// A tied end has no stored position: it is wherever the edge of that
+    /// item is now, worked out afresh every frame, which is why dragging a
+    /// box updates nothing. The coordinates underneath are whatever they were
+    /// when the tie was made and are stale from that moment on - ask
+    /// <see cref="Scene.ArrowEnds"/>, never X/Y, for where an arrow is.
+    ///
+    /// Deleting the item at one end cuts the tie and writes the end's current
+    /// position back (<see cref="Scene.Remove"/>), so the arrow stays where it
+    /// was drawn instead of snapping back to where it started life.</summary>
     [JsonPropertyName("from")] public string? From { get; set; }
     [JsonPropertyName("to")] public string? To { get; set; }
 

@@ -688,7 +688,7 @@ public sealed class SceneView : Control
             noteItems.Add(ContextActions.Item("Remove this window", () =>
             {
                 Remember();
-                board.Items.Remove(spot.Item);
+                _scene.Remove(board, [spot.Item]);
                 _boardStore?.Save(board);
                 _boards?.Rebuild();
                 InvalidateVisual();
@@ -1286,8 +1286,7 @@ public sealed class SceneView : Control
             // words - so it would be an invisible thing to trip over later
             if (it.Kind == "text" && string.IsNullOrWhiteSpace(text))
             {
-                board.Items.Remove(it);
-                _scene.Picked.Remove(it.Id);
+                _scene.Remove(board, [it]);
                 _boardStore?.Save(board);
             }
             Focus();
@@ -1542,8 +1541,7 @@ public sealed class SceneView : Control
         foreach (var it in hit)
         {
             int at = board.Items.IndexOf(it);
-            board.Items.Remove(it);
-            _scene.Picked.Remove(it.Id);
+            _scene.Remove(board, [it]);
 
             if (!_splitErase) continue;
 
@@ -2368,7 +2366,7 @@ public sealed class SceneView : Control
     {
         if (_scene.ActiveBoard is not { } board || _scene.Picked.Count == 0) return;
         Remember();
-        int n = board.Items.RemoveAll(i => _scene.Picked.Contains(i.Id));
+        int n = _scene.Remove(board, board.Items.Where(i => _scene.Picked.Contains(i.Id)).ToList());
         _scene.Picked.Clear();
         _boardStore?.Save(board);
         _boards?.Rebuild();

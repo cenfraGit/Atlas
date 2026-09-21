@@ -452,4 +452,86 @@ public class ConnectorTests
 
         Assert.Equal("b1", board.Items.Single(i => i.Kind == "arrow").From);
     }
+
+    // --- what happens to a tie when the thing it points at goes -----------
+
+    /// <summary>a tied end is not where the arrow says it is, so anything
+    /// that hunts for an arrow has to ask where it is drawn. The eraser did
+    /// not, and rubbed out the place an arrow used to be.</summary>
+    [Fact]
+    public void TheEraserFindsATiedArrowWhereItIsDrawn()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        var arrow = Arrow(from: "b1", x: 0, y: 0, x2: 400, y2: 0, fromSide: Scene.Right);
+        f.Board.Items.Add(box);
+        f.Board.Items.Add(arrow);
+
+        // the box moves, and with it the end tied to it
+        box.Y = 600;
+
+        var (a, b) = f.Scene.ArrowEnds(arrow);
+        float midX = (a.X + b.X) / 2, midY = (a.Y + b.Y) / 2;
+
+        Assert.Contains(arrow, f.Scene.ItemsNear(midX, midY, 8));
+        Assert.DoesNotContain(arrow, f.Scene.ItemsNear(200, 0, 8));   // where it was
+    }
+
+    /// <summary>deleting what an arrow points at leaves the arrow where it
+    /// was drawn. The tie falls back to the stored coordinates, and those are
+    /// from when the tie was made - so a connector used to snap back across
+    /// the board the moment you deleted the box it pointed at.</summary>
+    [Fact]
+    public void DeletingWhatAnArrowPointsAtLeavesItWhereItWas()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        var arrow = Arrow(from: "b1", x: 0, y: 0, x2: 400, y2: 0, fromSide: Scene.Right);
+        f.Board.Items.Add(box);
+        f.Board.Items.Add(arrow);
+
+        box.Y = 600;
+        var (before, _) = f.Scene.ArrowEnds(arrow);
+
+        f.Scene.Remove(f.Board, [box]);
+
+        Assert.Null(arrow.From);
+        Assert.Equal(-1, arrow.FromSide);
+        var (after, _) = f.Scene.ArrowEnds(arrow);
+        Assert.Equal(before.X, after.X, 2);
+        Assert.Equal(before.Y, after.Y, 2);
+    }
+
+    /// <summary>the other end is none of its business.</summary>
+    [Fact]
+    public void DeletingOneEndLeavesTheOtherTieAlone()
+    {
+        using var f = new Fixture();
+        var from = Box("b1", 0, 0);
+        var to = Box("b2", 400, 0);
+        var arrow = Arrow(from: "b1", to: "b2");
+        f.Board.Items.Add(from);
+        f.Board.Items.Add(to);
+        f.Board.Items.Add(arrow);
+
+        f.Scene.Remove(f.Board, [from]);
+
+        Assert.Null(arrow.From);
+        Assert.Equal("b2", arrow.To);
+    }
+
+    /// <summary>and an arrow going at the same time is not resurrected by
+    /// being written to on its way out.</summary>
+    [Fact]
+    public void RemovingABoxAndItsArrowTogetherTakesBoth()
+    {
+        using var f = new Fixture();
+        var box = Box("b1", 0, 0);
+        var arrow = Arrow(from: "b1");
+        f.Board.Items.Add(box);
+        f.Board.Items.Add(arrow);
+
+        Assert.Equal(2, f.Scene.Remove(f.Board, [box, arrow]));
+        Assert.Empty(f.Board.Items);
+    }
 }

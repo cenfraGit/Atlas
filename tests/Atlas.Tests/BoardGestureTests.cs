@@ -20,7 +20,10 @@ public class BoardGestureTests
     {
         var repo = SampleRepo.Build();
         var scene = new Scene(Scanner.Build(repo.Path));
-        var board = new Board { Id = "b", Name = "gestures" };
+
+        // through the store, so the board has a file to be written to
+        var store = BoardStore.Load(repo.Path);
+        var board = store.Create("gestures", "b");
 
         var note = new BoardItem
         {
@@ -34,6 +37,7 @@ public class BoardGestureTests
         scene.CamS = 1f;
 
         var view = new SceneView(scene);
+        view.AttachBoards(store, new BoardOverlay(store));
         var window = new Window { Width = W, Height = H, Content = view };
         window.Show();
         window.Measure(new Avalonia.Size(W, H));
@@ -130,6 +134,31 @@ public class BoardGestureTests
             Click(window, new Avalonia.Point(40, 40));
 
             Assert.False(view.CanUndo);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a stroke is written out the moment it is finished.
+    ///
+    /// The stroke branch set the dirty flag and returned before the save, so
+    /// a drawing lived in memory until some later gesture happened to write
+    /// the board. Ink is the one thing you make dozens of in a row.</summary>
+    [AvaloniaFact]
+    public void AStrokeIsOnDiskAsSoonAsItIsDrawn()
+    {
+        var (view, window, board, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            view.Focus();
+            window.KeyPress(Key.B, RawInputModifiers.None);      // brush on
+
+            window.MouseDown(new Avalonia.Point(200, 200), MouseButton.Left);
+            for (int i = 1; i <= 10; i++) window.MouseMove(new Avalonia.Point(200 + i * 10, 200 + i * 4));
+            window.MouseUp(new Avalonia.Point(300, 240), MouseButton.Left);
+
+            Assert.Contains(board.Items, i => i.Kind == "stroke");
+            Assert.Contains("\"stroke\"", File.ReadAllText(board.Path));
             scene.ActiveBoard = null;
         }
     }

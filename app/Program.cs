@@ -2756,7 +2756,12 @@ public sealed class SceneView : Control
                 Strokes.Reframe(drawn);
                 sb.Items.Add(drawn);
                 _boardDirty = true;
+                // a finished stroke is finished. This used to return before
+                // the save, so a drawing sat in memory until something else
+                // happened to write the board out
+                SaveBoardIfDirty();
             }
+            e.Pointer.Capture(null);
             InvalidateVisual();
             return;
         }

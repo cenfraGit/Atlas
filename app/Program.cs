@@ -95,6 +95,9 @@ public sealed class App : Application
             var eraserBar = new EraserBar();
             view.AttachEraserBar(eraserBar);
 
+            var grep = new GrepOverlay();
+            view.AttachGrep(grep);
+
             var editor = new InlineEditor();
             view.AttachEditor(editor);
 
@@ -118,6 +121,7 @@ public sealed class App : Application
             root.Children.Add(islands);
             root.Children.Add(commits);
             root.Children.Add(reviews);
+            root.Children.Add(grep);
             root.Children.Add(prompt);
             // over everything: it is inside an item, and an item is on the
             // canvas under all of these
@@ -554,6 +558,7 @@ public sealed class SceneView : Control
         Layers.Add("menu", () => _menuOpen, CloseMenu);
         Layers.Add("prompt", () => Reveal.Showing(_prompt), () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
+        Layers.Add("grep", () => Reveal.Showing(_grep), () => { _grep!.Close(); Focus(); });
         Layers.Add("boards", () => Reveal.Showing(_boards), () => _boards!.Close());
         Layers.Add("bookmarks", () => Reveal.Showing(_marks), () => _marks!.Close());
         Layers.Add("annotations", () => Reveal.Showing(_notes), () => _notes!.Close());
@@ -1759,6 +1764,139 @@ public sealed class SceneView : Control
         _prCommits = [];
         _commitAt = -1;
         _caption = "";
+        InvalidateVisual();
+    }
+
+    GrepOverlay? _grep;
+    CancellationTokenSource? _grepping;
+
+    public void AttachGrep(GrepOverlay panel)
+    {
+        _grep = panel;
+        panel.Requested += RunGrep;
+        panel.Picked += GoToMatch;
+    }
+
+    void OpenGrep()
+    {
+        if (_grep is null) return;
+        _grep.Open(GrepScope().Where);
+        InvalidateVisual();
+    }
+
+    /// <summary>what a search covers. On a board that is the files it has
+    /// windows onto - a board is a chosen subset of the repo, and searching
+    /// the whole repo from one would answer a question nobody asked.</summary>
+    (HashSet<string>? Only, string Where) GrepScope()
+    {
+        if (_scene.ActiveBoard is not { } board)
+            return (null, $"{_scene.Data.Files.Count} files");
+
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var it in board.Items)
+            if (it.Kind == "file" && it.File is { } p) paths.Add(p);
+        return (paths, paths.Count == 1 ? "1 file on this board" : $"{paths.Count} files on this board");
+    }
+
+    /// <summary>run it off the UI thread. Reading a repo's worth of files is
+    /// not a thing to do between two frames, and a search that has been
+    /// superseded by another keystroke stops rather than finishing.</summary>
+    void RunGrep(string query)
+    {
+        if (_grep is null) return;
+
+        _grepping?.Cancel();
+        var cts = new CancellationTokenSource();
+        _grepping = cts;
+
+        var (only, where) = GrepScope();
+        if (query.Length == 0) { _grep.Show([], query, where, false); return; }
+
+        _grep.Searching();
+        var scan = _scene.Data;
+        var scene = _scene;
+        Task.Run(() =>
+        {
+            // ReadLines is safe here: it reads a concurrent dictionary, or a
+            // file, or the commit snapshot - which is a plain dictionary
+            // built before the search. No Skia, and no libgit2
+            var found = Grep.Run(scan, query, scene.ReadLines, only, cancel: cts.Token);
+            if (cts.IsCancellationRequested) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (cts.IsCancellationRequested || _grep is null) return;
+                _grep.Show(found, query, where, found.Count >= Grep.Limit);
+                InvalidateVisual();
+            });
+        }, cts.Token);
+    }
+
+    /// <summary>how far to push the view down so the match lands below the
+    /// results, in world units.
+    ///
+    /// Centring it puts the line under the panel, which is the one place it
+    /// must not be: you walk the list to look at the matches, and the list
+    /// was sitting on top of every one of them.</summary>
+    float Uncovered(float scale)
+    {
+        if (_grep is not { } panel || !Reveal.Showing(panel)) return 0;
+        double covered = panel.Margin.Top + panel.Bounds.Height;
+        // negative: raising the camera's Y moves the world *up* the screen,
+        // and the line needs to come down. Half, because the camera centres -
+        // this moves the line from the middle of the window to the middle of
+        // what is left below the panel
+        return -(float)Math.Min(covered, Bounds.Height * 0.7) / 2 / Math.Max(scale, 0.0001f);
+    }
+
+    /// <summary>go and look at a match: the line framed, highlighted and
+    /// selected, on the map or inside the board window showing that file.</summary>
+    void GoToMatch(Found m)
+    {
+        int i = _scene.ResolveFile(m.Path, null);
+        if (i < 0) { Toast($"{m.Path} is not in this scan"); return; }
+
+        if (_scene.ActiveBoard is not null) { ShowMatchOnBoard(m, i); return; }
+
+        var f = _scene.Data.Files[i];
+        var target = BookmarkTargets.Resolve(_scene, new Bookmark
+        {
+            Name = m.Text, File = f.P,
+            Line = Math.Max(0, m.Line - 12),
+            EndLine = Math.Min(Math.Max(0, f.N - 1), m.Line + 12),
+        }, (float)Bounds.Width, (float)Bounds.Height);
+
+        _scene.Highlight = (i, m.Line, m.Line);
+        Select(i, m.Line, m.Line);
+        FlyTo(target.X, target.Y + Uncovered(target.S), target.S);
+        _caption = $"{f.P}:{m.Line + 1}";
+        InvalidateVisual();
+    }
+
+    void ShowMatchOnBoard(Found m, int fileIndex)
+    {
+        if (_scene.ActiveBoard is not { } board) return;
+
+        var window = board.Items.FirstOrDefault(
+            it => it.Kind == "file" && it.File is not null &&
+                  _scene.ResolveFile(it.File, it.Key) == fileIndex);
+        if (window is null) { Toast($"no window onto {m.Path} on this board"); return; }
+
+        var f = _scene.Data.Files[fileIndex];
+        var (from, to) = _scene.RangeOf(window, f);
+        int line = Math.Clamp(m.Line, from, to);
+
+        // a window scales its card, so a line's height on the board is not
+        // the file's line height
+        float k = window.W / f.W;
+        float y = window.Y + Scene.WinHeadH + (line - from + 0.5f) * _scene.Data.LineH * k;
+
+        _scene.Highlight = (fileIndex, m.Line, m.Line);
+        Select(fileIndex, m.Line, m.Line);
+        float s = Math.Max(_scene.CamS, 1f);
+        GlideTo(window.X + window.W / 2, y + Uncovered(s), s);
+        _caption = m.Line >= from && m.Line <= to
+            ? $"{m.Path}:{m.Line + 1}"
+            : $"{m.Path}:{m.Line + 1}   (outside this window's lines)";
         InvalidateVisual();
     }
 
@@ -3125,9 +3263,11 @@ public sealed class SceneView : Control
             return;
         }
 
+        // ctrl+F is find *in* files. Finding a file by name is "/", which is
+        // a different question and was what this used to do
         if (e.Key == Key.F && e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            OpenSearch?.Invoke();
+            OpenGrep();
             e.Handled = true;
             return;
         }
@@ -3147,6 +3287,7 @@ public sealed class SceneView : Control
         if (key == Key.Escape) return;
 
         // panels have no focus of their own; the canvas drives them
+        if (Reveal.Showing(_grep) && _grep!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_marks) && _marks!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_boards) && _boards!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_notes) && _notes!.HandleKey(key)) { InvalidateVisual(); return; }

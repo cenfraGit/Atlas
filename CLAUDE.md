@@ -280,6 +280,26 @@ covered by `AnchorTests` and works.
       that anything is happening, so it reads as broken until it appears.
       Needs a spinner, or the list up front and its contents filled in.
 
+### Finding things
+
+- [x] `ctrl+F` searches what the files *say* (`Grep.cs`, `GrepOverlay.cs`).
+      `/` still searches what they are *called*, which is a different
+      question - `ctrl+F` used to do that one. On a board the search covers
+      the files that board has windows onto, because a board is a chosen
+      subset and searching the whole repo from one answers nothing. Walking
+      the results flies to each match and highlights the line; the camera is
+      pushed down so the match lands below the results panel rather than
+      under it.
+- [x] The lines come from a provider rather than from disk, so the same code
+      searches the working copy, a commit's tree and a couple of arrays in a
+      test. It runs off the UI thread and takes a token, so a superseded
+      search stops.
+- [ ] Search as you type. It runs on Enter because a keystroke would
+      re-read every file that is not already loaded; it wants a cache of its
+      own, which `Scene.ReadLines` deliberately is not.
+- [ ] Regular expressions, and whole-word. Plain case-insensitive substring
+      for now.
+
 ### What counts as a file
 
 - [x] Inverted the scanner's rule: every text file is in, binaries are out by
@@ -405,6 +425,12 @@ diffable. Do not compute card positions in drawing code.
 zoom are a pure canvas transform with no geometry rebuild. Construction is
 budgeted to 14 cards per frame so flinging into unseen territory never blocks.
 If you add per-frame geometry work, you have broken this.
+
+**`Scene.ReadLines` does not cache, on purpose.** `_text` is filled in
+alongside `_runs` by the loader, and an entry in one without the other means
+`DrawCode` finds text with no syntax runs beside it and paints that whole
+file in a single colour. The search reads every file in the repo, so caching
+there would leave the map grey.
 
 **A path is not an identity.** Board windows, annotations and bookmarks
 reference files by path *and* a content fingerprint (`FileKeys`).

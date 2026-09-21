@@ -500,6 +500,41 @@ public sealed class Scene : IDisposable
     /// <summary>the file's text, if it has been read yet.</summary>
     public string[]? LinesOf(string relPath) => _text.GetValueOrDefault(relPath);
 
+    /// <summary>a file's lines for something other than drawing - the search
+    /// - taking whatever is already loaded and reading the rest.
+    ///
+    /// <b>Deliberately does not cache.</b> `_text` is filled in alongside
+    /// `_runs` by the loader, and an entry in one without the other means
+    /// `DrawCode` finds text with no syntax runs beside it and paints the
+    /// whole file in a single colour. A search that touched every file in
+    /// the repo would leave the map grey.
+    ///
+    /// Reads whatever the scene is showing, so searching a commit searches
+    /// that commit's tree rather than the working copy.</summary>
+    public string[] ReadLines(string relPath)
+    {
+        if (_text.TryGetValue(relPath, out var cached)) return cached;
+
+        string[] src;
+        if (TextSource is { } source) src = source(relPath) ?? [];
+        else
+        {
+            try
+            {
+                src = File.ReadAllLines(
+                    Path.Combine(Data.Root, relPath.Replace('/', Path.DirectorySeparatorChar)));
+            }
+            catch { return []; }
+        }
+
+        // the same expansion the loader does, so a column here is a column
+        // on screen
+        var tab = TabChar.ToString();
+        for (int i = 0; i < src.Length; i++)
+            if (src[i].IndexOf(TabChar) >= 0) src[i] = src[i].Replace(tab, "    ");
+        return src;
+    }
+
     /// <summary>a content fingerprint for a file, so whatever stores a
     /// reference to it can find it again after a rename. Reads the file if it
     /// has not been read yet - a few kilobytes, once, off the draw loop.</summary>

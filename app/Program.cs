@@ -208,6 +208,51 @@ public sealed class SceneView : Control
     double _flightT0;
     readonly Glide _glide = new();
     double _lastFrame = -1;
+
+    // the tail end of a pan, for throwing the canvas when it is let go
+    float _panVx, _panVy;
+    double _panAt = -1;
+
+    /// <summary>keep a running estimate of how fast the hand is moving.
+    ///
+    /// Averaged with the previous estimate rather than taken from the last
+    /// frame alone: one frame is a few milliseconds and its velocity is
+    /// mostly noise, and a pause at the end of a drag has to be able to bring
+    /// the number back down or every gesture ends in a throw.</summary>
+    void TrackPan(float dx, float dy)
+    {
+        double now = _clock.Elapsed.TotalSeconds;
+        double dt = _panAt < 0 ? 0 : now - _panAt;
+        _panAt = now;
+
+        if (dt <= 0 || dt > 0.12) { _panVx = _panVy = 0; return; }
+
+        const float Blend = 0.55f;
+        _panVx = _panVx * (1 - Blend) + (float)(dx / dt) * Blend;
+        _panVy = _panVy * (1 - Blend) + (float)(dy / dt) * Blend;
+    }
+
+    /// <summary>a drag let go with speed on it carries on. A drag that has
+    /// already stopped moving does not, which is what the staleness check is
+    /// for: resting the hand before letting go means you meant to stop.</summary>
+    void ThrowPan()
+    {
+        bool stale = _panAt < 0 || _clock.Elapsed.TotalSeconds - _panAt > 0.09;
+        if (!stale) _glide.Flick(_scene, _panVx, _panVy);
+
+        _panVx = _panVy = 0;
+        _panAt = -1;
+        if (_glide.Running)
+        {
+            // never throw the canvas somewhere it is not allowed to be
+            var (x, y, s) = (_scene.CamX, _scene.CamY, _scene.CamS);
+            _scene.CamX = _glide.X; _scene.CamY = _glide.Y;
+            _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
+            _glide.To(_scene.CamX, _scene.CamY, _glide.S);
+            _scene.CamX = x; _scene.CamY = y; _scene.CamS = s;
+            InvalidateVisual();
+        }
+    }
     readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
     // bench: (zoom, world-units of pan per frame, frame count)
@@ -479,6 +524,8 @@ public sealed class SceneView : Control
     /// and an armed tool is the last thing standing.</summary>
     public void BuildLayers()
     {
+        // innermost first: a menu opens over a panel, a prompt over the canvas
+        Layers.Add("menu", () => _menuOpen, CloseMenu);
         Layers.Add("prompt", () => _prompt is { IsVisible: true }, () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
         Layers.Add("boards", () => _boards is { IsVisible: true }, () => _boards!.Close());
@@ -534,7 +581,26 @@ public sealed class SceneView : Control
         DismissPrompt();
         _menu?.Close();
         _menu = new ContextMenu { ItemsSource = items, Placement = PlacementMode.Pointer };
+        // the menu is Avalonia's and closes itself when it is clicked away
+        // from, so the flag has to be told rather than inferred
+        _menu.Closed += (_, _) => { _menuOpen = false; Focus(); };
+        _menuOpen = true;
         _menu.Open(this);
+    }
+
+    /// <summary>true while the secondary-click menu is up.
+    ///
+    /// Avalonia owns that menu and handles Escape inside it, which is fine
+    /// until focus is somewhere it does not expect - the same way every
+    /// dialog used to strand itself before Layers existed. It is in the stack
+    /// now, innermost of all, so the window can always shut it.</summary>
+    bool _menuOpen;
+
+    void CloseMenu()
+    {
+        _menu?.Close();
+        _menuOpen = false;
+        Focus();
     }
 
     void ShowBoardMenu(Point p)
@@ -2358,6 +2424,8 @@ public sealed class SceneView : Control
         _clickCount = e.ClickCount;
         _drag = true;
         ApplyCursor();
+        _panVx = _panVy = 0;
+        _panAt = -1;
         _dragDist = 0;
         _axis = 0;
         _dragOrigin = e.GetPosition(this);
@@ -2385,6 +2453,9 @@ public sealed class SceneView : Control
         _drag = false;
         _axis = 0;
         ApplyCursor();
+
+        // a pan let go with speed on it keeps going
+        ThrowPan();
 
         _erasing = false;
         _scene.ShowAnchors = false;
@@ -2672,9 +2743,12 @@ public sealed class SceneView : Control
         }
         else
         {
-            _scene.CamX -= (float)(p.X - _last.X) / _scene.CamS;
-            _scene.CamY -= (float)(p.Y - _last.Y) / _scene.CamS;
+            float panX = -(float)(p.X - _last.X) / _scene.CamS;
+            float panY = -(float)(p.Y - _last.Y) / _scene.CamS;
+            _scene.CamX += panX;
+            _scene.CamY += panY;
             _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
+            TrackPan(panX, panY);
         }
         _last = p;
         InvalidateVisual();
@@ -2694,7 +2768,7 @@ public sealed class SceneView : Control
         // result back and put the camera where it was
         _scene.CamX = x; _scene.CamY = y; _scene.CamS = s;
         _scene.ClampCamera((float)Bounds.Width, (float)Bounds.Height);
-        _glide.To(_scene.CamX, _scene.CamY, _scene.CamS);
+        _glide.ToAtOnce(_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.CamX = camX; _scene.CamY = camY; _scene.CamS = camS;
         InvalidateVisual();
     }

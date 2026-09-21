@@ -180,6 +180,139 @@ public class GlideTests
         Assert.Equal(0, scene.CamX);
     }
 
+    // --- the flick ---------------------------------------------------------
+
+    [Fact]
+    public void AFlickCarriesTheCameraOn()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = Parked(repo);
+        var glide = new Glide();
+
+        glide.Flick(scene, vx: 2000, vy: 0);
+        Assert.True(glide.Running);
+
+        RunOut(glide, scene);
+        Assert.True(scene.CamX > 300, $"barely moved: {scene.CamX}");
+    }
+
+    [Fact]
+    public void AFasterFlickGoesFurther()
+    {
+        using var repo = SampleRepo.Build();
+
+        using var slow = Parked(repo);
+        var a = new Glide();
+        a.Flick(slow, 1000, 0);
+        RunOut(a, slow);
+
+        using var fast = Parked(repo);
+        var b = new Glide();
+        b.Flick(fast, 4000, 0);
+        RunOut(b, fast);
+
+        Assert.True(fast.CamX > slow.CamX * 2, $"{fast.CamX} should dwarf {slow.CamX}");
+    }
+
+    [Fact]
+    public void LettingGoWithoutMovingDoesNotThrow()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = Parked(repo);
+        var glide = new Glide();
+
+        // without a floor, every drag would end in a small unasked-for slide
+        glide.Flick(scene, vx: 10, vy: 10);
+
+        Assert.False(glide.Running);
+        Assert.Equal(0, scene.CamX);
+    }
+
+    [Fact]
+    public void AWildGestureIsCappedRatherThanObeyed()
+    {
+        using var repo = SampleRepo.Build();
+
+        using var hard = Parked(repo);
+        var a = new Glide();
+        a.Flick(hard, 100_000, 0);
+        RunOut(a, hard);
+
+        using var capped = Parked(repo);
+        var b = new Glide();
+        b.Flick(capped, Glide.FlickCeiling, 0);
+        RunOut(b, capped);
+
+        Assert.Equal(capped.CamX, hard.CamX, 1);
+    }
+
+    [Fact]
+    public void AFlickKeepsItsDirection()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = Parked(repo);
+        var glide = new Glide();
+
+        glide.Flick(scene, vx: -1500, vy: 2500);
+        RunOut(glide, scene);
+
+        Assert.True(scene.CamX < 0, "should have gone left");
+        Assert.True(scene.CamY > 0, "should have gone down");
+    }
+
+    [Fact]
+    public void AFlickDoesNotChangeTheZoom()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = Parked(repo, s: 3.5f);
+        var glide = new Glide();
+
+        glide.Flick(scene, 3000, 0);
+        RunOut(glide, scene);
+
+        Assert.Equal(3.5f, scene.CamS, 3);
+    }
+
+    [Fact]
+    public void AFlickCoastsLongerThanAWheelNotch()
+    {
+        using var repo = SampleRepo.Build();
+
+        using var flicked = Parked(repo);
+        var a = new Glide();
+        a.Flick(flicked, 3000, 0);
+        int flickFrames = RunOut(a, flicked);
+
+        using var wheeled = Parked(repo);
+        var b = new Glide();
+        b.ToAtOnce(flicked.CamX, 0, 1f);      // the same distance, asked for
+        int wheelFrames = RunOut(b, wheeled);
+
+        // the wheel answers a request; a flick carries momentum
+        Assert.True(flickFrames > wheelFrames,
+            $"flick settled in {flickFrames} frames, wheel in {wheelFrames}");
+    }
+
+    [Fact]
+    public void AWheelNotchAfterAFlickIsBackToTheQuickSpeed()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = Parked(repo);
+        var glide = new Glide();
+
+        glide.Flick(scene, 3000, 0);
+        glide.Step(scene, 1 / 60f);
+
+        // otherwise every scroll after a throw feels sluggish
+        glide.ToAtOnce(scene.CamX + 1000, scene.CamY, scene.CamS);
+        int frames = RunOut(glide, scene);
+
+        using var fresh = Parked(repo);
+        var plain = new Glide();
+        plain.To(1000, 0, 1f);
+        Assert.InRange(frames, 1, RunOut(plain, fresh) + 4);
+    }
+
     // --- zoom -------------------------------------------------------------
 
     [Fact]

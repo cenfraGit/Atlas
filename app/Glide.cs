@@ -39,7 +39,50 @@ public sealed class Glide
         Running = true;
     }
 
+    /// <summary>aim somewhere at the ordinary speed. A flick sets a slower one
+    /// and the next wheel notch has to take it back, or every scroll after a
+    /// throw feels sluggish.</summary>
+    public void ToAtOnce(float x, float y, float s)
+    {
+        _tau = Tau;
+        To(x, y, s);
+    }
+
     public void Stop() => Running = false;
+
+    /// <summary>how long a flick keeps going. Longer than a wheel notch: the
+    /// wheel is answering a request, a flick is carrying momentum, and the
+    /// two should not feel like the same motion.</summary>
+    public const float FlickTau = 0.34f;
+
+    /// <summary>below this, in world units a second, a release was a stop and
+    /// not a throw. Without it every drag ends in a small unasked-for slide.</summary>
+    public const float FlickFloor = 260f;
+
+    /// <summary>and above this it is a wild gesture rather than an intention.</summary>
+    public const float FlickCeiling = 9000f;
+
+    float _tau = Tau;
+
+    /// <summary>let go of a drag with some speed on it and the canvas carries
+    /// on, slowing down. Distance is velocity times the time constant, which
+    /// is what an exponential decay covers before it settles.</summary>
+    public void Flick(Scene scene, float vx, float vy)
+    {
+        float speed = MathF.Sqrt(vx * vx + vy * vy);
+        if (speed < FlickFloor) return;
+
+        if (speed > FlickCeiling)
+        {
+            vx *= FlickCeiling / speed;
+            vy *= FlickCeiling / speed;
+        }
+
+        _tau = FlickTau;
+        To(scene.CamX + vx * FlickTau, scene.CamY + vy * FlickTau, scene.CamS);
+    }
+
+
 
     /// <summary>one frame. Returns false once there is nothing left to do.</summary>
     public bool Step(Scene scene, float dt)
@@ -47,11 +90,11 @@ public sealed class Glide
         if (!Running) return false;
         if (dt <= 0) return true;
 
-        scene.CamX = Ease(scene.CamX, X, dt);
-        scene.CamY = Ease(scene.CamY, Y, dt);
+        scene.CamX = Ease(scene.CamX, X, dt, _tau);
+        scene.CamY = Ease(scene.CamY, Y, dt, _tau);
         // zoom eases geometrically: halving and doubling have to take the same
         // time, or zooming out feels slower than zooming in
-        scene.CamS = EaseZoom(scene.CamS, S, dt);
+        scene.CamS = EaseZoom(scene.CamS, S, dt, _tau);
 
         if (Settled(scene.CamX, X, scene.CamY, Y, scene.CamS, S))
         {

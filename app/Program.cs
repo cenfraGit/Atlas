@@ -554,10 +554,15 @@ public sealed class SceneView : Control
                     _scene.Selection is { } s && s.File == spot.File && s.To > s.From
                         ? $"Annotate lines {s.From + 1}-{s.To + 1}..."
                         : "Annotate this line...",
-                    () => AnnotateSelection(_scene.Selection is { } sel && sel.File == spot.File
-                        ? sel
-                        : (spot.File, spot.Line, spot.Line))),
+                    () => AnnotateSelection(Target(spot), local: false)),
             };
+
+            // the choice belongs where the note is made. A board of its own is
+            // usually explaining something, and half of what you write while
+            // explaining is about the explanation rather than about the code
+            if (_scene.ActiveBoard is not null && !_scene.BoardReadOnly)
+                noteItems.Add(ContextActions.Item("Annotate for this board only...",
+                    () => AnnotateSelection(Target(spot), local: true)));
             // named by what they do. spelling the note back at you made the
             // menu grow with the note and read like a paragraph
             var here = new List<Annotation>();
@@ -569,6 +574,10 @@ public sealed class SceneView : Control
                 var a = here[n];
                 var tag = here.Count > 1 ? $" {n + 1}" : "";
                 noteItems.Add(ContextActions.Item($"Edit annotation{tag}...", () => EditAnnotation(a)));
+                if (_scene.ActiveBoard is not null && !_scene.BoardReadOnly)
+                    noteItems.Add(ContextActions.Item(
+                        a.Global ? $"Keep annotation{tag} on this board" : $"Show annotation{tag} everywhere",
+                        () => SetAnnotationScope([a], local: a.Global)));
                 noteItems.Add(ContextActions.Item($"Delete annotation{tag}", () => DeleteAnnotation(a)));
             }
             noteItems.Add(ContextActions.Item("Change line range...", () => EditRange(spot.Item)));
@@ -656,7 +665,13 @@ public sealed class SceneView : Control
         return true;
     }
 
-    void AnnotateSelection((int File, int From, int To) target)
+    /// <summary>the picked range if it is on this file, else the one line.</summary>
+    (int File, int From, int To) Target((BoardItem Item, int File, int Line) spot) =>
+        _scene.Selection is { } sel && sel.File == spot.File
+            ? sel
+            : (spot.File, spot.Line, spot.Line);
+
+    void AnnotateSelection((int File, int From, int To) target, bool local = false)
     {
         if (_noteStore is null || _prompt is null || ReadOnlyHere()) return;
         var f = _scene.Data.Files[target.File];
@@ -664,17 +679,49 @@ public sealed class SceneView : Control
         if (lines is null) return;
         int line = Math.Clamp(target.From < 0 ? 0 : target.From, 0, lines.Length - 1);
 
-        _prompt.Ask($"annotate {f.P[(f.P.LastIndexOf('/') + 1)..]}:{line + 1}", "", text =>
+        var board = local ? _scene.ActiveBoard?.Id : null;
+        var where = board is null ? "annotate" : "annotate, this board only";
+
+        _prompt.Ask($"{where}  {f.P[(f.P.LastIndexOf('/') + 1)..]}:{line + 1}", "", text =>
         {
             var full = Path.Combine(_scene.Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
             int to = target.To < 0 ? line : Math.Clamp(target.To, line, lines.Length - 1);
             var a = Anchors.Create(f.P, full, lines, line, to, text);
+            a.Board = board;
             _noteStore.Annotations.Add(a);
             _noteStore.Save();
             _scene.Reanchor(f.P, full, lines);
             Saved($"annotation on {a.Symbol ?? f.P}");
             Focus();
         });
+    }
+
+    /// <summary>move annotations between showing everywhere and showing on
+    /// this board only. Several at once, because deciding that a run of notes
+    /// belongs to the board you are building is one decision.</summary>
+    void SetAnnotationScope(IEnumerable<Annotation> notes, bool local)
+    {
+        if (_noteStore is null || ReadOnlyHere()) return;
+
+        var board = _scene.ActiveBoard;
+        if (local && board is null) { Toast("open a board to keep a note on it"); return; }
+
+        int changed = 0;
+        foreach (var a in notes)
+        {
+            var want = local ? board!.Id : null;
+            if (a.Board == want) continue;
+            a.Board = want;
+            changed++;
+        }
+        if (changed == 0) return;
+
+        _noteStore.Save();
+        _notes?.Refresh();
+        Saved(local
+            ? $"{changed} note{(changed == 1 ? "" : "s")} kept on {board!.Name}"
+            : $"{changed} note{(changed == 1 ? "" : "s")} shown everywhere");
+        InvalidateVisual();
     }
 
     void BookmarkSelection((int File, int From, int To) target, string what)
@@ -1345,7 +1392,7 @@ public sealed class SceneView : Control
             items.Add(("pull requests", "P", () => OpenReviewPanel(branches: false)));
             items.Add(("branches", "G", () => OpenReviewPanel(branches: true)));
             items.Add(("boards", "O", () => _boards?.Show()));
-            items.Add(("notes", "L", () => _notes?.Open()));
+            items.Add(("notes", "L", OpenNotes));
             items.Add(("bookmarks", "B", () => _marks?.Open()));
             items.Add(("fit", "F", FitAll));
         }
@@ -1465,10 +1512,18 @@ public sealed class SceneView : Control
     {
         _noteStore = store;
         _notes = panel;
+        panel.ScopeRequested += (notes, local) => SetAnnotationScope(notes, local);
     }
 
-    /// <summary>the I key annotates the picked lines, or the middle of the view
-    /// when nothing is picked.</summary>
+    /// <summary>open the annotation list, telling it which board it is being
+    /// read from - "keep on this board" needs to know which one.</summary>
+    void OpenNotes()
+    {
+        if (_notes is null) return;
+        _notes.OnBoard = _scene.ActiveBoard is { } b && !_scene.BoardReadOnly ? (b.Id, b.Name) : null;
+        _notes.Open();
+    }
+
     /// <summary>notes are written on boards now. from the map, the useful
     /// move is to put the code on a board first.</summary>
     void Annotate()
@@ -2773,7 +2828,7 @@ public sealed class SceneView : Control
             case Key.I: Annotate(); break;
             case Key.E: SetEditing(!Editing); break;
             case Key.S: SetWheelZoom(!WheelZoom); break;
-            case Key.L: _notes?.Open(); break;
+            case Key.L: OpenNotes(); break;
             case Key.P: OpenReviewPanel(branches: false); break;
             case Key.R: ToggleRecording(); break;
             case Key.B: _marks?.Open(); break;

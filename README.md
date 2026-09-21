@@ -148,8 +148,21 @@ from the menu.
 surrounding code gives them their meaning. On a board, secondary click a line
 inside a file window and choose *Annotate this line*. The note then appears
 beside that code everywhere - including on the map, which shows notes but
-does not author them. `L` lists every annotation in the repo, worst anchor
-first, which is also where you repair one that has drifted.
+does not author them.
+
+An annotation is attached to the code, not to a line number, so it stays put
+when something is inserted above it and finds its way back after a rename.
+
+**Or keep it to one board.** *Annotate for this board only* writes a note
+that shows on the board you are building and nowhere else. "This is the hot
+path" is about the code and belongs everywhere; "this is step 2 of what I am
+explaining here" is about the board, and would be noise on the map and on
+everyone else's boards. A note can be moved between the two at any time.
+
+`L` lists every annotation in the repo whatever its scope, worst anchor
+first, which is where you repair one that has drifted - and where you select
+several and make them a board's own, or send them back to everywhere, in one
+go.
 
 **Leave yourself a way back.** `M` bookmarks the current view under a name.
 `B` lists bookmarks, `Enter` flies to one, `Delete` removes it. `R` starts

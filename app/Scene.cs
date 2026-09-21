@@ -495,7 +495,30 @@ public sealed class Scene : IDisposable
     /// <summary>the file's text, if it has been read yet.</summary>
     public string[]? LinesOf(string relPath) => _text.GetValueOrDefault(relPath);
 
-    public IReadOnlyList<(Annotation A, Anchor R)> AnchorsFor(string relPath) =>
+    /// <summary>the annotations to draw on this file, here.
+    ///
+    /// Global ones everywhere; a board's own only on that board. Filtered on
+    /// the way out rather than at anchor time, so changing a note's scope
+    /// costs nothing and needs no re-anchoring - where a note is attached and
+    /// where it is shown are different questions.</summary>
+    public IReadOnlyList<(Annotation A, Anchor R)> AnchorsFor(string relPath)
+    {
+        var all = AllAnchorsFor(relPath);
+        if (all.Count == 0) return all;
+
+        var board = ActiveBoard?.Id;
+        // nothing is local to a generated view, and the map is global only
+        if (board is null || BoardReadOnly)
+            return all.All(x => x.A.Global) ? all : all.Where(x => x.A.Global).ToList();
+
+        return all.All(x => x.A.Global || x.A.Board == board)
+            ? all
+            : all.Where(x => x.A.Global || x.A.Board == board).ToList();
+    }
+
+    /// <summary>every annotation on the file, whatever its scope. What the
+    /// list panel works from: you cannot repair a note you cannot see.</summary>
+    public IReadOnlyList<(Annotation A, Anchor R)> AllAnchorsFor(string relPath) =>
         _anchored.TryGetValue(relPath, out var list) ? list : [];
 
     public static SKColor ColorFor(AnchorKind kind) => kind switch

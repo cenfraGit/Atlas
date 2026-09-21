@@ -14,10 +14,19 @@ public sealed class AnnotationOverlay : Border
     readonly Scene _scene;
     readonly ListBox _list;
     readonly TextBlock _hint;
+    readonly Button _keep;
     List<Annotation> _rows = [];
 
     public event Action<Annotation>? Chosen;
     public event Action<Annotation>? EditRequested;
+
+    /// <summary>move every selected note between showing everywhere and
+    /// showing on the current board only.</summary>
+    public event Action<IReadOnlyList<Annotation>, bool>? ScopeRequested;
+
+    /// <summary>the board the list is being read from, for naming the button
+    /// and for saying which board a local note belongs to. Null on the map.</summary>
+    public (string Id, string Name)? OnBoard;
 
     public AnnotationOverlay(AnnotationStore store, Scene scene)
     {
@@ -43,11 +52,15 @@ public sealed class AnnotationOverlay : Border
             Background = Brushes.Transparent, BorderThickness = new Thickness(0),
             MaxHeight = 460, FontFamily = Ui.Mono, FontSize = 12,
             Foreground = Ui.Fore,
+            // several notes becoming a board's own is one decision, so it
+            // takes one gesture rather than one per note
+            SelectionMode = SelectionMode.Multiple,
         };
         _list.DoubleTapped += (_, _) => Commit();
 
         // the same buttons the boards panel grew: a key you have to know about
         // is not a way to delete something
+        _keep = Make("keep on this board", () => Scope(local: true));
         var buttons = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
@@ -56,6 +69,8 @@ public sealed class AnnotationOverlay : Border
             {
                 Make("go", Commit),
                 Make("edit", () => { if (Current is { } a) EditRequested?.Invoke(a); }),
+                _keep,
+                Make("show everywhere", () => Scope(local: false)),
                 Make("delete", Remove),
             },
         };
@@ -83,6 +98,25 @@ public sealed class AnnotationOverlay : Border
 
     Annotation? Current =>
         _list.SelectedIndex >= 0 && _list.SelectedIndex < _rows.Count ? _rows[_list.SelectedIndex] : null;
+
+    /// <summary>everything ticked, or just the one under the cursor.</summary>
+    List<Annotation> Selected()
+    {
+        var picked = _list.SelectedItems?.Count > 0
+            ? _list.SelectedItems.Cast<object>().Select(o => _list.Items.IndexOf(o))
+                .Where(i => i >= 0 && i < _rows.Count).Select(i => _rows[i]).ToList()
+            : [];
+        if (picked.Count == 0 && Current is { } one) picked.Add(one);
+        return picked;
+    }
+
+    void Scope(bool local)
+    {
+        var picked = Selected();
+        if (picked.Count == 0) return;
+        ScopeRequested?.Invoke(picked, local);
+        Rebuild();
+    }
 
     /// <summary>after an edit elsewhere, so the list is not showing old text.</summary>
     public void Refresh()
@@ -131,20 +165,30 @@ public sealed class AnnotationOverlay : Border
             };
             var name = a.File[(a.File.LastIndexOf('/') + 1)..];
             var where = a.Symbol is null ? name : $"{name}  {a.Symbol}";
-            return $"{tag}  {Trim(a.Text, 52)}   -  {where}";
+            // a note that only shows on one board has to say so, or the list
+            // is a list of notes you cannot find
+            var scope = a.Global ? "     " : "board";
+            return $"{tag} {scope}  {Trim(a.Text, 46)}   -  {where}";
         }).ToList();
 
         int bad = _rows.Count(a => Severity(KindOf(a)) <= 1);
+        int local = _rows.Count(a => !a.Global);
+
+        _keep.IsEnabled = OnBoard is not null;
+        _keep.Content = OnBoard is { } b ? $"keep on {Trim(b.Name, 18).TrimEnd()}" : "keep on this board";
+
         _hint.Text = _rows.Count == 0
             ? "no annotations yet.  write one on a board: right click a line of code"
-            : $"{_rows.Count} annotations, {bad} needing attention";
+            : $"{_rows.Count} annotations, {bad} needing attention, {local} kept to one board";
     }
 
     /// <summary>unresolved files have not been read yet, so treat them as fine
     /// rather than shouting orphan at something we simply have not looked at.</summary>
     AnchorKind KindOf(Annotation a)
     {
-        foreach (var (candidate, anchor) in _scene.AnchorsFor(a.File))
+        // every scope, not just what is visible here: you cannot repair a
+        // note the list refuses to show you
+        foreach (var (candidate, anchor) in _scene.AllAnchorsFor(a.File))
             if (ReferenceEquals(candidate, a)) return anchor.Kind;
         return AnchorKind.Symbol;
     }
@@ -161,6 +205,8 @@ public sealed class AnnotationOverlay : Border
             case Key.Delete: Remove(); return true;
             case Key.Down: Move(1); return true;
             case Key.Up: Move(-1); return true;
+            case Key.G: Scope(local: false); return true;
+            case Key.K: Scope(local: true); return true;
             default: return false;
         }
     }

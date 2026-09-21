@@ -31,6 +31,22 @@ public sealed class Annotation
     /// <summary>fingerprint of the anchored line and its neighbours, used to
     /// re-find the spot when the symbol was renamed or removed.</summary>
     [JsonPropertyName("context")] public string? Context { get; set; }
+
+    /// <summary>the board this note belongs to, or null for everywhere.
+    ///
+    /// An annotation is attached to code, so by default it shows wherever
+    /// that code does - on the map and in every board window onto the file.
+    /// That is right for "this method is the hot path" and wrong for "this is
+    /// step 2 of what this board is explaining", which is about the board and
+    /// would be noise anywhere else.
+    ///
+    /// The board's id *is* the scope rather than a separate flag beside one:
+    /// there is no such thing as local to nothing, and a pair of fields that
+    /// can disagree is a pair of fields that eventually will.</summary>
+    [JsonPropertyName("board")] public string? Board { get; set; }
+
+    /// <summary>shown everywhere, rather than on one board.</summary>
+    [JsonIgnore] public bool Global => Board is null;
 }
 
 public enum AnchorKind

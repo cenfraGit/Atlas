@@ -561,6 +561,11 @@ public sealed class SceneView : Control
         Layers.Add("tour", () => _tour is not null, EndTour);
         Layers.Add("tool", () => _armBrush || _armEraser || _armArrow || _armShape is not null, DisarmTools);
         Layers.Add("selection", HasSelection, ClearSelection);
+        // a board is a place you are in, so it is the last thing Escape peels
+        // off before the map. It was left out when dismissal moved here, and
+        // HandleKey refuses Escape outright, so Esc on a board did nothing at
+        // all - while the bar along the bottom said "back to map  esc"
+        Layers.Add("board", () => _scene.ActiveBoard is not null, LeaveBoard);
         Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
     }
 

@@ -38,6 +38,7 @@ public class BoardGestureTests
 
         var view = new SceneView(scene);
         view.AttachBoards(store, new BoardOverlay(store));
+        view.BuildLayers();
         var window = new Window { Width = W, Height = H, Content = view };
         window.Show();
         window.Measure(new Avalonia.Size(W, H));
@@ -160,6 +161,45 @@ public class BoardGestureTests
             Assert.Contains(board.Items, i => i.Kind == "stroke");
             Assert.Contains("\"stroke\"", File.ReadAllText(board.Path));
             scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>Escape goes back to the map.
+    ///
+    /// It stopped doing so when dismissal moved into the Escape stack and the
+    /// board was left out of it: HandleKey refuses Escape outright, so on a
+    /// board with nothing open the key did nothing whatever - while the bar
+    /// along the bottom went on saying "back to map  esc".</summary>
+    [AvaloniaFact]
+    public void EscapeGoesBackToTheMap()
+    {
+        var (view, _, _, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Assert.True(view.Escape());
+            Assert.Null(scene.ActiveBoard);
+        }
+    }
+
+    /// <summary>but not while something is picked: Escape takes the innermost
+    /// thing first, and a selection is inside the board.</summary>
+    [AvaloniaFact]
+    public void EscapeClearsASelectionBeforeItLeaves()
+    {
+        var (view, window, _, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            Click(window, Centre);
+            Assert.NotEmpty(scene.Picked);
+
+            Assert.True(view.Escape());
+            Assert.Empty(scene.Picked);
+            Assert.NotNull(scene.ActiveBoard);
+
+            Assert.True(view.Escape());
+            Assert.Null(scene.ActiveBoard);
         }
     }
 }

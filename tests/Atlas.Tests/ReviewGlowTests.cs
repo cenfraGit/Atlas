@@ -216,6 +216,80 @@ public class ReviewGlowTests
             }
         }
 
+        /// <summary>a wholly new file has every line marked, and at a strong
+        /// alpha that is a rectangle of one colour laid over the source -
+        /// unreadable exactly when the source has become readable, which is
+        /// what the gathered change view looked like for any added file.
+        ///
+        /// Measured as how far the picture moved. A tint shifts every pixel
+        /// a little; a wash drags them all toward one colour. Counting
+        /// distinct colours does not work here and was the first thing I
+        /// tried: alpha blending is injective, so a wash keeps every colour
+        /// distinct while making none of them legible.</summary>
+        [Fact]
+        public void AWhollyAddedFileIsTintedRatherThanWashedOut()
+        {
+            var (plain, repoA, _) = Reviewing(0, 0, zoom: 2.4f, focusLine: 30);
+            var (allNew, repoB, _) = Reviewing(
+                SampleRepo.LongFileLines, 0,
+                addedAt: Enumerable.Range(0, SampleRepo.LongFileLines), zoom: 2.4f, focusLine: 30);
+
+            using (repoA)
+            using (repoB)
+            using (plain)
+            using (allNew)
+            {
+                var before = Pixels(plain);
+                var after = Pixels(allNew);
+
+                // over the pixels that moved, not over the frame: most of
+                // the frame is empty canvas the tint never touches, and
+                // averaging those in hides the difference entirely
+                long total = 0;
+                int moved = 0;
+                for (int i = 0; i < before.Length; i++)
+                {
+                    int d = Math.Abs(before[i].Red - after[i].Red)
+                          + Math.Abs(before[i].Green - after[i].Green)
+                          + Math.Abs(before[i].Blue - after[i].Blue);
+                    if (d == 0) continue;
+                    total += d;
+                    moved++;
+                }
+
+                Assert.True(moved > 1000, $"only {moved} pixels changed at all");
+                double shift = total / (3.0 * moved);
+                Assert.True(shift < 40,
+                    $"marking every line moved each channel by {shift:0.0} of 255: that is a wash, not a tint");
+            }
+        }
+
+        /// <summary>and it is still obviously changed: the gutter stripe is
+        /// what carries the signal once the wash is only a tint.</summary>
+        [Fact]
+        public void AndStillObviouslyChanged()
+        {
+            var (plain, repoA, _) = Reviewing(0, 0, zoom: 2.4f, focusLine: 30);
+            var (allNew, repoB, _) = Reviewing(
+                SampleRepo.LongFileLines, 0,
+                addedAt: Enumerable.Range(0, SampleRepo.LongFileLines), zoom: 2.4f, focusLine: 30);
+
+            using (repoA)
+            using (repoB)
+            using (plain)
+            using (allNew)
+            {
+                var before = Pixels(plain);
+                var after = Pixels(allNew);
+
+                int moved = 0;
+                for (int i = 0; i < before.Length; i++) if (before[i] != after[i]) moved++;
+
+                Assert.True(moved > before.Length / 20,
+                    $"marking every line changed only {moved} pixels of {before.Length}");
+            }
+        }
+
         /// <summary>everything gone is the whole card, in red - which is the
         /// one time painting the lot is the honest picture.</summary>
         [Fact]

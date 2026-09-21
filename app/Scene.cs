@@ -908,6 +908,14 @@ public sealed class Scene : IDisposable
 
     /// <summary>added and removed lines inside one card.
     ///
+    /// A tint plus a stripe in the gutter, not a wash. A file that is wholly
+    /// new has every line marked, and at a strong alpha that is a solid
+    /// block of colour over the code - which is unreadable exactly when the
+    /// code has become readable, and is what the gathered change view looked
+    /// like for any added file. The stripe is what stays visible when the
+    /// tint is too faint to see; the tint is what tells you how far the
+    /// change reaches.
+    ///
     /// Both glow. A removal used to be a hairline with no light on it, which
     /// made a commit that deleted a hundred lines look like a commit that
     /// did nothing - the one case where the absence of code is the change.
@@ -917,6 +925,8 @@ public sealed class Scene : IDisposable
     void DrawReviewLines(SKCanvas canvas, FileRec f)
     {
         if (Review is null || !Review.ByPath.TryGetValue(f.P, out var change)) return;
+
+        float gutter = Math.Max(3f, f.W * 0.012f);
         using var fill = new SKPaint { IsAntialias = false };
         using var glow = new SKPaint
         {
@@ -928,14 +938,16 @@ public sealed class Scene : IDisposable
         {
             float y = Data.HeaderH + a * Data.LineH;
             float h = (b - a + 1) * Data.LineH;
-            glow.Color = AddCol.WithAlpha(70);
-            canvas.DrawRect(0, y, f.W, h, glow);
-            fill.Color = AddCol.WithAlpha(120);
+            glow.Color = AddCol.WithAlpha(56);
+            canvas.DrawRect(0, y, gutter * 2.5f, h, glow);
+            fill.Color = AddCol.WithAlpha(TintAlpha);
             canvas.DrawRect(0, y, f.W, h, fill);
+            fill.Color = AddCol;
+            canvas.DrawRect(0, y, gutter, h, fill);
         }
 
         // a deletion is a point in the new file, not a span of it, so it
-        // stays a line - but a lit one
+        // stays a line - but a lit one, with its own mark in the gutter
         foreach (var (a, b) in Runs(change.RemovedAt))
         {
             float y = Data.HeaderH + a * Data.LineH;
@@ -944,8 +956,14 @@ public sealed class Scene : IDisposable
             canvas.DrawRect(0, y - Data.LineH * 0.5f, f.W, h + Data.LineH, glow);
             fill.Color = DelCol;
             canvas.DrawRect(0, y - 0.6f, f.W, h, fill);
+            canvas.DrawRect(0, y - Data.LineH * 0.4f, gutter, h + Data.LineH * 0.8f, fill);
         }
     }
+
+    /// <summary>how strongly a changed line is washed. Low on purpose: this
+    /// is laid over syntax-coloured source, and anything heavier turns a
+    /// newly added file into a rectangle of one colour.</summary>
+    const byte TintAlpha = 42;
 
     /// <summary>frame every file a change set touched.</summary>
     public void FitChanges(float vw, float vh)

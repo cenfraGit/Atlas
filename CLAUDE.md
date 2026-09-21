@@ -56,8 +56,9 @@ change freely.
       they change that too, which is what a selection makes them mean anyway.
 - [x] Eraser modes (`shift+X`): a whole stroke, or a bite out of one leaving
       the surviving pieces as strokes in their own right.
-- [ ] Resizing a stroke. `Scene.Resizable` excludes strokes today because the
-      grip would have to scale every point.
+- [x] Resizing a stroke, by scaling every sample into the new box
+      (`Strokes.ScaleInto`). Maps from the current bounds so repeated drags
+      compose; the pen scales with the smaller axis, clamped at both ends.
 - [x] Shape primitives: ellipse, diamond and standalone labels. The three
       outlined shapes are one box with a different path traced round it; a
       label is words with no panel behind them, which is what makes it a
@@ -82,9 +83,13 @@ change freely.
       does nothing until you drag out the box; the button stays lit until the
       shape is drawn, and `Esc` cancels. Rectangles, ellipses, diamonds and
       labels; a note (`N`) still lands in the middle of the view.
-- [ ] Replay strokes from an `SKPicture` once boards hold hundreds of them.
-      Boards redraw every item every frame, which is fine at tens and not at
-      thousands; the map already solved this.
+- [x] Ink is recorded into an `SKPicture` and replayed. Measured first: a
+      thousand strokes cost 37ms a frame rebuilt every time, past the 60fps
+      budget on its own. The cache is keyed on a per-stroke signature
+      computed each frame - bounds, sample count, weight, colour - which is
+      O(strokes) not O(samples) and cannot be forgotten at a call site the
+      way an explicit invalidation can. `Scene.StrokeRebuilds` counts
+      re-recordings, which is what the tests assert on rather than a clock.
 
 ### Canvas and interaction
 
@@ -93,8 +98,10 @@ change freely.
       already holding reads as lag.
 - [x] Cursors outside edit mode: open and closed hands (`Cursors.cs`). CSS
       calls them grab and grabbing; Avalonia has neither, so they are drawn.
-- [ ] Kinetic flick: a fast drag released should carry on and slow down.
-      `Glide` is the mechanism; only the wheel uses it so far.
+- [x] Kinetic flick. A pan tracks a smoothed velocity and a release with
+      speed on it throws the canvas, on a longer time constant than a wheel
+      notch. A release more than 90ms after the last movement does not throw:
+      resting the hand means you meant to stop.
 
 ### Dialogs
 
@@ -102,8 +109,9 @@ change freely.
       so a dialog can no longer strand itself by losing focus. **Any new
       overlay must be registered in `BuildLayers` or it inherits the old
       bug.**
-- [ ] The same treatment for the secondary-click menu, which Avalonia owns and
-      which is not in the stack.
+- [x] The secondary-click menu is in the stack, innermost of all. Its flag is
+      cleared from the menu's own `Closed` event, since clicking away from it
+      closes it without anyone here being told.
 
 ### Annotations
 
@@ -144,8 +152,9 @@ covered by `AnchorTests` and works.
 
 ### Samples and fixtures
 
-- [ ] A third sample board that is deliberately messy - many items,
-      overlapping, a long file window - for exercising edit mode.
+- [x] A third sample board, "Everything at once": every kind of item,
+      overlapping, an empty frame over the lot, connectors with one end
+      loose. What breaks in edit mode breaks on a board like that.
 - [x] Sample annotations span the declaration Roslyn found, and point at
       methods rather than classes - a note is tinted across what it covers,
       and a nine hundred line class is not a thing a sentence is about.

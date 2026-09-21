@@ -78,49 +78,95 @@ public sealed class GitReview : IDisposable
         return _repo.Head.FriendlyName;
     }
 
-    /// <summary>branches with unmerged work first, then merged pull requests.
-    /// the branch you are about to review matters more than one that landed
-    /// months ago.</summary>
+    /// <summary>how far back a branch with no work of its own is shown. It has
+    /// no change set - that is what "no work of its own" means - so what it
+    /// can offer is its own recent history.</summary>
+    public const int RecentSpan = 25;
+
+    /// <summary>every branch, with work of its own first.
+    ///
+    /// The base branch used to be left out, along with anything fully merged
+    /// into it, on the grounds that neither has a change set. That is true
+    /// and it made the panel look broken: you open the list of branches and
+    /// the branch you are on is not in it. So every branch is listed, and a
+    /// branch with nothing ahead of the base shows its own recent history
+    /// instead - one rule, and the detail line says which case a row is.
+    ///
+    /// Ordered by work first, because the branch you are about to review
+    /// matters more than one that landed months ago.</summary>
     public List<ReviewTarget> Branches(int maxBranches = 40)
     {
         var targets = new List<ReviewTarget>();
         var baseName = BaseBranch();
         var baseTip = baseName is null ? null : _repo.Branches[baseName]?.Tip;
+        if (baseTip is null) return targets;
 
-        if (baseTip is not null)
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var ahead = new List<(Branch B, int By, DateTimeOffset When)>();
+        var level = new List<(Branch B, DateTimeOffset When)>();
+
+        foreach (var b in _repo.Branches)
         {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            var branches = new List<(Branch B, int Ahead, DateTimeOffset When)>();
+            if (b.Tip is null || b.FriendlyName.EndsWith("/HEAD")) continue;
+            // a local branch and its remote twin are the same review
+            var key = b.FriendlyName.StartsWith("origin/") ? b.FriendlyName[7..] : b.FriendlyName;
+            if (!seen.Add(key)) continue;
 
-            foreach (var b in _repo.Branches)
+            if (b.FriendlyName == baseName) { level.Add((b, b.Tip.Author.When)); continue; }
+            try
             {
-                if (b.Tip is null || b.FriendlyName.EndsWith("/HEAD")) continue;
-                if (b.FriendlyName == baseName) continue;
-                // a local branch and its remote twin are the same review
-                var key = b.FriendlyName.StartsWith("origin/") ? b.FriendlyName[7..] : b.FriendlyName;
-                if (!seen.Add(key)) continue;
-
-                try
-                {
-                    var div = _repo.ObjectDatabase.CalculateHistoryDivergence(b.Tip, baseTip);
-                    if (div.AheadBy is null or 0) continue;
-                    branches.Add((b, div.AheadBy.Value, b.Tip.Author.When));
-                }
-                catch { }
+                var div = _repo.ObjectDatabase.CalculateHistoryDivergence(b.Tip, baseTip);
+                if (div.AheadBy is null or 0) level.Add((b, b.Tip.Author.When));
+                else ahead.Add((b, div.AheadBy.Value, b.Tip.Author.When));
             }
-
-            foreach (var (b, ahead, _) in branches.OrderByDescending(x => x.When).Take(maxBranches))
-            {
-                var mergeBase = _repo.ObjectDatabase.FindMergeBase(b.Tip, baseTip);
-                targets.Add(new ReviewTarget(
-                    b.FriendlyName,
-                    $"{ahead} commit{(ahead == 1 ? "" : "s")} ahead of {baseName}",
-                    (mergeBase ?? baseTip).Sha,
-                    b.Tip.Sha));
-            }
+            catch { }
         }
 
+        foreach (var (b, by, _) in ahead.OrderByDescending(x => x.When).Take(maxBranches))
+        {
+            var mergeBase = _repo.ObjectDatabase.FindMergeBase(b.Tip, baseTip);
+            targets.Add(new ReviewTarget(
+                b.FriendlyName,
+                $"{by} commit{(by == 1 ? "" : "s")} ahead of {baseName}",
+                (mergeBase ?? baseTip).Sha,
+                b.Tip.Sha));
+        }
+
+        // the base branch heads the rest: it is the one everything else is
+        // measured against, so it is the one worth finding first
+        var rest = level
+            .OrderByDescending(x => x.B.FriendlyName == baseName)
+            .ThenByDescending(x => x.When);
+
+        foreach (var (b, _) in rest.Take(Math.Max(0, maxBranches - targets.Count)))
+            targets.Add(RecentOf(b, b.FriendlyName == baseName
+                ? "the base branch"
+                : $"nothing ahead of {baseName}"));
+
         return targets;
+    }
+
+    /// <summary>a branch shown as its own last few commits rather than as a
+    /// difference from somewhere else.</summary>
+    ReviewTarget RecentOf(Branch b, string why)
+    {
+        var tip = b.Tip!;
+        var walk = _repo.Commits.QueryBy(new CommitFilter
+        {
+            IncludeReachableFrom = tip,
+            SortBy = CommitSortStrategies.Topological,
+        }).Take(RecentSpan + 1).ToList();
+
+        // the whole branch when it is shorter than the span. The root commit
+        // itself is the far end of the range and so is not in the diff, which
+        // is the same thing every other target here does
+        var from = walk.Count > RecentSpan ? walk[RecentSpan] : walk[^1];
+        int span = Math.Min(walk.Count - 1, RecentSpan);
+
+        return new ReviewTarget(
+            b.FriendlyName,
+            $"{why}; last {span} commit{(span == 1 ? "" : "s")}",
+            from.Sha, tip.Sha);
     }
 
     /// <summary>merge commits that name a pull request, newest first.</summary>

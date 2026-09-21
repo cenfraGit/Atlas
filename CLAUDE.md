@@ -139,6 +139,11 @@ covered by `AnchorTests` and works.
 
 ### Review mode
 
+- [x] `G` lists every branch. The base and anything fully merged into it
+      have no change set, and leaving them out made the panel look broken -
+      you open the list of branches and the one you are on is not in it. A
+      branch with nothing ahead of the base is shown as its own recent
+      history instead, and the detail line says which case a row is.
 - [ ] The gathered change view (`C`) has never been driven by hand - the logic
       is tested, the wiring is not. Needs a look on a repo with real merge
       commits.

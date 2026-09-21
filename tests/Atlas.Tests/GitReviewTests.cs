@@ -96,11 +96,19 @@ public class GitReviewTests : IClassFixture<GitFixture>
     public void AnUnmergedBranchIsOfferedForReview()
     {
         using var git = Open();
-        var wip = Assert.Single(git.Branches());
+        var wip = git.Branches().Single(t => t.Label == "wip");
 
-        Assert.Equal("wip", wip.Label);
         Assert.Equal(_git.WipTipSha, wip.HeadSha);
         Assert.Contains("1 commit ahead of main", wip.Detail);
+    }
+
+    /// <summary>a branch with work of its own is what you came to review, so
+    /// it is not buried under branches that have none.</summary>
+    [Fact]
+    public void ABranchWithWorkComesFirst()
+    {
+        using var git = Open();
+        Assert.Equal("wip", git.Branches()[0].Label);
     }
 
     [Fact]
@@ -122,11 +130,54 @@ public class GitReviewTests : IClassFixture<GitFixture>
         Assert.All(git.MergedPrs(), t => Assert.Equal("merged", t.Detail));
     }
 
+    /// <summary>the base branch has no change set - that is what being the
+    /// base means - and leaving it out made the panel look broken: you open
+    /// the list of branches and the branch you are on is not in it.</summary>
     [Fact]
-    public void TheBaseBranchIsNotOfferedAsSomethingToReview()
+    public void EveryBranchIsListed()
     {
         using var git = Open();
-        Assert.DoesNotContain(git.Branches(), t => t.Label == "main");
+        var labels = git.Branches().Select(t => t.Label).ToList();
+
+        Assert.Contains("main", labels);
+        Assert.Contains("wip", labels);
+        Assert.Contains("feature", labels);
+    }
+
+    [Fact]
+    public void TheBaseBranchLeadsTheOnesWithNoWorkOfTheirOwn()
+    {
+        using var git = Open();
+        var rest = git.Branches().SkipWhile(t => t.Detail.Contains("ahead of")).ToList();
+
+        Assert.Equal("main", rest[0].Label);
+        Assert.Contains("the base branch", rest[0].Detail);
+    }
+
+    /// <summary>a branch with nothing ahead of the base cannot be shown as a
+    /// difference from it, so it is shown as its own recent history - and the
+    /// detail line has to say so rather than implying a change set.</summary>
+    [Fact]
+    public void AMergedBranchIsShownAsItsOwnHistory()
+    {
+        using var git = Open();
+        var feature = git.Branches().Single(t => t.Label == "feature");
+
+        Assert.Contains("nothing ahead of main", feature.Detail);
+        Assert.Contains("last", feature.Detail);
+        Assert.Equal(_git.FeatureTipSha, feature.HeadSha);
+    }
+
+    [Fact]
+    public void AHistoryRangeIsShorterThanTheBranchWhenTheBranchIsShort()
+    {
+        using var git = Open();
+        var main = git.Branches().Single(t => t.Label == "main");
+
+        // the fixture has four commits, not twenty five, and the detail must
+        // say what is really in the range rather than the span it asked for
+        Assert.DoesNotContain($"last {GitReview.RecentSpan} ", main.Detail);
+        Assert.NotEmpty(git.CommitsOf(main));
     }
 
     [Fact]

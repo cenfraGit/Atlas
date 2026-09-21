@@ -10,7 +10,9 @@ namespace Atlas.Tests;
 [Collection("render")]
 public class CursorPreview
 {
-    const int Size = 48;
+    // the real one, so a change to the cursor's size cannot leave the
+    // preview measuring a bitmap the app never draws
+    const int Size = Cursors.Size;
 
     static SKBitmap Draw(bool closed)
     {
@@ -18,7 +20,7 @@ public class CursorPreview
         using var canvas = new SKCanvas(bmp);
         canvas.Clear(SKColors.Transparent);
         using var path = Cursors.PathFor(closed);
-        using var edge = new SKPaint { Color = new SKColor(0x10, 0x14, 0x1c, 230), Style = SKPaintStyle.Stroke, StrokeWidth = 2.0f, StrokeJoin = SKStrokeJoin.Round, IsAntialias = true };
+        using var edge = new SKPaint { Color = new SKColor(0x10, 0x14, 0x1c, 230), Style = SKPaintStyle.Stroke, StrokeWidth = Cursors.EdgeWidth, StrokeJoin = SKStrokeJoin.Round, IsAntialias = true };
         using var fill = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
         canvas.DrawPath(path, edge);
         canvas.DrawPath(path, fill);
@@ -47,7 +49,11 @@ public class CursorPreview
             using var bmp = Draw(closed);
             var (ink, bounds) = Measure(bmp);
 
-            Assert.True(ink > 150, $"{(closed ? "closed" : "open")} hand has only {ink} pixels");
+            // a fist covers about a fifth of its bitmap and an open hand a
+            // little more; well under this and the silhouette has collapsed
+            // into a smudge
+            Assert.True(ink > Size * Size / 6,
+                $"{(closed ? "closed" : "open")} hand has only {ink} pixels");
             Assert.True(bounds.Left >= 1 && bounds.Top >= 1, "the outline is clipped at the top left");
             Assert.True(bounds.Right <= Size - 2 && bounds.Bottom <= Size - 2,
                 "the outline is clipped at the bottom right");

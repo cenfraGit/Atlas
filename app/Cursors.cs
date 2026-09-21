@@ -12,10 +12,23 @@ namespace Atlas;
 /// built once and kept: a Cursor allocates a native handle.
 ///
 /// White fill with a dark outline, because the canvas is nearly black and a
-/// plain black cursor disappears into it.</summary>
+/// plain black cursor disappears into it.
+///
+/// The first pair were drawn at 48px and filled it, which put a hand on
+/// screen half again the size of every other cursor the system draws. A
+/// cursor is not an illustration: it is read at a glance, out of the corner
+/// of the eye, and the only thing that has to survive is the silhouette. So
+/// these are 32px with a margin, which is what the classic grab hands were.</summary>
 public static class Cursors
 {
-    const int Size = 48;
+    /// <summary>the bitmap's edge, in pixels. Public so a preview renders at
+    /// the size the cursor is actually used at rather than a guess.</summary>
+    public const int Size = 32;
+
+    /// <summary>the hands are laid out in this many units and scaled to
+    /// <see cref="Size"/>, so the drawing reads as proportions rather than as
+    /// pixel coordinates that have to be redone to change the size.</summary>
+    const float Grid = 32f;
 
     static Cursor? _open, _closed;
 
@@ -24,7 +37,19 @@ public static class Cursors
 
     /// <summary>the hand's outline, so it can be drawn somewhere other than a
     /// cursor - there is no way to look at a cursor bitmap once it is one.</summary>
-    public static SKPath PathFor(bool closed) => closed ? ClosedHand() : OpenHand();
+    public static SKPath PathFor(bool closed)
+    {
+        using var unit = closed ? ClosedHand() : OpenHand();
+        var scaled = new SKPath();
+        unit.Transform(SKMatrix.CreateScale(Size / Grid, Size / Grid), scaled);
+        return scaled;
+    }
+
+    /// <summary>thin enough to stay a line at this size. Two pixels round a
+    /// 20px hand is a hand with a border; one and a bit is a hand that can be
+    /// told apart from the canvas behind it, which is all the outline is
+    /// there to do.</summary>
+    public const float EdgeWidth = 1.4f;
 
     static Cursor Build(bool closed)
     {
@@ -36,9 +61,9 @@ public static class Cursors
 
             using var edge = new SKPaint
             {
-                Color = new SKColor(0x10, 0x14, 0x1c, 230),
+                Color = new SKColor(0x10, 0x14, 0x1c, 235),
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = 2.0f,
+                StrokeWidth = EdgeWidth,
                 StrokeJoin = SKStrokeJoin.Round,
                 IsAntialias = true,
             };
@@ -52,9 +77,11 @@ public static class Cursors
             canvas.DrawPath(path, fill);
         }
 
-        // the hot spot is the middle of the palm: what you grab is what is
-        // under the centre of the hand, not under a fingertip
-        return new Cursor(ToAvalonia(bitmap), new PixelPoint(Size / 2, Size / 2));
+        // the hot spot is where the fingers meet the palm, not the middle of
+        // the bitmap: that is the part of a hand you would say is pointing at
+        // something, and it is where the classic grab cursors put it
+        return new Cursor(ToAvalonia(bitmap),
+            new PixelPoint((int)(Size * 0.5f), (int)(Size * 0.5f)));
     }
 
     /// <summary>a palm with four fingers up and a thumb out to the side.
@@ -69,11 +96,13 @@ public static class Cursors
     {
         var parts = new List<SKPath>
         {
-            Palm(top: 24f, bottom: 40f),
-            Finger(14.5f, 12f, 28f),
-            Finger(20.5f, 8.5f, 28f),
-            Finger(26.5f, 9.5f, 28f),
-            Finger(32f, 13f, 28f),
+            Palm(top: 15f, bottom: 26f),
+            // the middle finger longest and the little one shortest, because
+            // a hand with four equal fingers reads as a comb
+            Finger(12.0f, 9.0f, 19f),
+            Finger(15.4f, 7.2f, 19f),
+            Finger(18.8f, 8.0f, 19f),
+            Finger(21.8f, 10.5f, 19f),
             Thumb(open: true),
         };
         return Union(parts);
@@ -84,12 +113,12 @@ public static class Cursors
     {
         var parts = new List<SKPath>
         {
-            Palm(top: 21f, bottom: 40f),
+            Palm(top: 16f, bottom: 26f),
             // knuckles rather than fingers: a fist is shorter and squarer
-            Finger(14.5f, 18f, 26f),
-            Finger(20.5f, 16.5f, 26f),
-            Finger(26.5f, 17f, 26f),
-            Finger(32f, 19f, 26f),
+            Finger(12.0f, 13.0f, 20f),
+            Finger(15.4f, 12.2f, 20f),
+            Finger(18.8f, 12.5f, 20f),
+            Finger(21.8f, 14.0f, 20f),
             Thumb(open: false),
         };
         return Union(parts);
@@ -111,14 +140,14 @@ public static class Cursors
     static SKPath Palm(float top, float bottom)
     {
         var p = new SKPath();
-        p.AddRoundRect(new SKRect(11f, top, 36f, bottom), 8f, 8f);
+        p.AddRoundRect(new SKRect(9.5f, top, 23f, bottom), 4.5f, 4.5f);
         return p;
     }
 
     static SKPath Finger(float cx, float top, float bottom)
     {
         var p = new SKPath();
-        p.AddRoundRect(new SKRect(cx - 2.6f, top, cx + 2.6f, bottom), 2.6f, 2.6f);
+        p.AddRoundRect(new SKRect(cx - 1.5f, top, cx + 1.5f, bottom), 1.5f, 1.5f);
         return p;
     }
 
@@ -126,9 +155,9 @@ public static class Cursors
     {
         var p = new SKPath();
         var box = open
-            ? new SKRect(6f, 26f, 13.5f, 36f)      // out to the side
-            : new SKRect(8f, 24f, 15f, 33f);       // tucked across the fist
-        p.AddRoundRect(box, 3.5f, 3.5f);
+            ? new SKRect(6f, 16.5f, 11f, 23f)      // out to the side
+            : new SKRect(8.5f, 17.5f, 14f, 22.5f); // tucked across the fist
+        p.AddRoundRect(box, 2.4f, 2.4f);
         return p;
     }
 

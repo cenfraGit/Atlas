@@ -164,6 +164,10 @@ tour stop does not.
       so a dialog can no longer strand itself by losing focus. **Any new
       overlay must be registered in `BuildLayers` or it inherits the old
       bug.**
+- [x] The board itself is a layer. It was left out when dismissal moved
+      here, and HandleKey refuses Escape outright, so Esc on a board did
+      nothing at all while the bar still offered "back to map  esc".
+      **A place you can be inside needs a layer, not just a dialog.**
 - [x] The secondary-click menu is in the stack, innermost of all. Its flag is
       cleared from the menu's own `Closed` event, since clicking away from it
       closes it without anyone here being told.

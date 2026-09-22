@@ -291,6 +291,10 @@ covered by `AnchorTests` and works.
       windows, or hangs off the bottom of one, follows only the line under
       that corner. Good enough for a mark on a method; wrong for a frame
       drawn round two of them.
+- [ ] The scan is never refreshed while Atlas is open, so a file that
+      grows has a stale card height on the map and a stale `N` everywhere
+      that has not read it. `LinesIn` papers over the case that mattered;
+      a rescan when a file changes is the real answer.
 - [ ] Only shapes grow. A note over a method keeps its height, because a
       note's height is its words - which is right, but it means a note
       cannot be used to bracket something the way a rectangle can.
@@ -489,6 +493,15 @@ all three passes in order on open: windows first, then what is pinned to
 them, then `PinLoose` picks up anything from a board made before this - where
 it is now, since there is no record of where it was meant to be. Covered by
 `PinnedItemTests`.
+
+**`FileRec.N` is the line count from the scan, and a scan is taken once.**
+Edit a file while Atlas is open - or open it on a repo another session is
+pushing to - and the scan is short. Clamping a window to that number showed
+part of the file and refused to be dragged further, which reads as a limit
+rather than as staleness. `Scene.LinesIn` prefers the loaded text, then the
+length last read, then the scan; `Scene.NoteLength` refreshes it once when a
+clip handle is grabbed, because `RangeOf` is asked on every frame and a read
+there would be sixty a second. Covered by `StaleScanTests`.
 
 **A line number is not a place either.** A board's file window stores
 `Line`/`EndLine`, and inserting twenty lines above line 100 leaves the window

@@ -2480,7 +2480,7 @@ public sealed class SceneView : Control
         var items = new List<MenuItem>
         {
             ContextActions.Item("No fill", () => SetFill(picked, BoardItem.NoFill)),
-            ContextActions.Item("Match the border", () => SetFill(picked, null)),
+            ContextActions.Item("Match the border", () => SetFill(picked, BoardItem.BorderFill)),
             ContextActions.Separator(),
         };
         items.AddRange(Colours.Select(c => ContextActions.Item(c.Name, () => SetFill(picked, c.Hex))));
@@ -3022,6 +3022,8 @@ public sealed class SceneView : Control
             // at. On a file window this is the clip handle
             if (_scene.EdgeAt(wx, wy) is { } wall)
             {
+                // how long the file is now, once, before the dragging starts
+                _scene.NoteLength(wall.Item);
                 _resizing = wall.Item;
                 _resizeEdge = wall.Edge;
                 _drag = true;
@@ -3626,6 +3628,10 @@ public sealed class SceneView : Control
                 case Key.B: ArmBrush(); return;
                 case Key.X: ArmEraser(); return;
                 // one pair of keys, whichever tool is armed
+                // the bar says "file  A", and it opens the picker - which on
+                // a board adds a window. The key fell through to the map's
+                // A, which refuses outright while a board is open
+                case Key.A: OpenSearch?.Invoke(); return;
                 case Key.OemCloseBrackets: StepTool(1); return;
                 case Key.OemOpenBrackets: StepTool(-1); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;

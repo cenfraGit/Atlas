@@ -4,12 +4,11 @@ namespace Atlas.Tests;
 
 /// <summary>how solid a colour is, stored in the colour.
 ///
-/// A shape's outline is drawn at part opacity unless its colour says
-/// otherwise, which makes one read as a frame round code rather than a box
-/// in front of it - right for a frame, wrong when you want a line. "Solid"
-/// and "soft" rewrite the alpha of the stored colour rather than setting a
-/// flag beside it, because a flag and a colour can disagree about whether
-/// something is invisible and one string cannot.</summary>
+/// Eight hex digits are AARRGGBB and six are RRGGBB, so a colour can carry
+/// its own opacity; one that does not gets whatever the thing drawing it
+/// normally uses. "Solid", "soft" and a typed hex rewrite that one string
+/// rather than setting a flag beside it, because a flag and a colour can
+/// disagree about whether something is invisible and one string cannot.</summary>
 public class ColourOpacityTests
 {
     static readonly SKColor Fallback = new(0x5f, 0xd3, 0xf3);
@@ -146,15 +145,19 @@ public class ColourOpacityTests
             return n;
         }
 
+        /// <summary>a border is solid unless it asks not to be. A colour
+        /// with no opacity in it is drawn as itself; one that names a low
+        /// alpha blends into what is behind and reaches its own colour
+        /// almost nowhere.</summary>
         [Fact]
-        public void ASolidBorderIsDrawnInItsActualColour()
+        public void ABorderIsSolidUnlessItAsksNotToBe()
         {
-            int soft = Ink("#5fd3f3");
-            int solid = Ink("#ff5fd3f3");
+            int plain = Ink("#5fd3f3");
+            int faint = Ink("#405fd3f3");
 
-            Assert.True(solid > 300, $"a solid border only reached its colour on {solid} pixels");
-            Assert.True(solid > soft * 4,
-                $"soft drew {soft} pixels of full colour and solid {solid}: they look the same");
+            Assert.True(plain > 300, $"a plain border only reached its colour on {plain} pixels");
+            Assert.True(plain > faint * 4,
+                $"faint drew {faint} pixels of full colour and plain {plain}: they look the same");
         }
     }
 }

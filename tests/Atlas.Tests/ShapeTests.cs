@@ -341,9 +341,18 @@ public class ShapeTests
     static readonly SKColor Border = new(0x5f, 0xd3, 0xf3);
 
     [Fact]
-    public void AShapeWithNoFillChoiceIsAWashOfItsBorder()
+    /// <summary>a shape with no fill chosen is empty. It used to be a wash
+    /// of its border, and a shape is usually drawn round something - so the
+    /// wash was one more thing between you and the code.</summary>
+    public void AShapeWithNoFillChoiceIsEmpty() =>
+        Assert.Equal(0, Scene.FillOf(Shape("shape"), Border).Alpha);
+
+    /// <summary>the wash is still there for anyone who wants it.</summary>
+    [Fact]
+    public void AskingForTheBordersColourGivesAWashOfIt()
     {
         var it = Shape("shape");
+        it.Fill = BoardItem.BorderFill;
         var fill = Scene.FillOf(it, Border);
 
         Assert.Equal(Border.Red, fill.Red);
@@ -549,8 +558,10 @@ public class ShapeTests
             var board = new Board { Id = "b", Name = "shapes" };
             board.Items.Add(new BoardItem
             {
+                // a fill on purpose: these measure the area each shape
+                // covers, and the default is empty now
                 Id = "s", Kind = kind, X = -150, Y = -150, W = 300, H = 300,
-                Color = "#5fd3f3", Text = "",
+                Color = "#5fd3f3", Text = "", Fill = BoardItem.BorderFill,
             });
 
             using var scene = new Scene(Scanner.Build(repo.Path))

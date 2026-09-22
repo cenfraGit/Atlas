@@ -172,6 +172,48 @@ public class BoardGestureTests
         }
     }
 
+    /// <summary>A adds a file to the board, which is what the toolbar's
+    /// "file  A" button does.
+    ///
+    /// The key fell through to the map's A, which refuses outright while a
+    /// board is open - so the button worked and the key it advertised did
+    /// nothing.</summary>
+    [AvaloniaFact]
+    public void AOpensTheFilePickerOnABoard()
+    {
+        var (view, _, _, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            int asked = 0;
+            view.OpenSearch = () => asked++;
+
+            view.HandleKey(Key.A);
+
+            Assert.Equal(1, asked);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and on the map it still means "add what I am looking at",
+    /// which is a different thing and the reason the two were confused.</summary>
+    [AvaloniaFact]
+    public void AOnTheMapDoesNotOpenThePicker()
+    {
+        var (view, _, _, _, scene, repo) = Board();
+        using (repo)
+        using (scene)
+        {
+            scene.ActiveBoard = null;
+            int asked = 0;
+            view.OpenSearch = () => asked++;
+
+            view.HandleKey(Key.A);
+
+            Assert.Equal(0, asked);
+        }
+    }
+
     static void Drag(Window window, Avalonia.Point from, Avalonia.Point to)
     {
         window.MouseDown(from, MouseButton.Left);

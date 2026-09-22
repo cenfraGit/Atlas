@@ -629,3 +629,98 @@ public class GrowingShapeTests
         }
     }
 }
+
+/// <summary>the scan is taken once; the file keeps changing.
+///
+/// `FileRec.N` is the line count from that scan. Edit the file while Atlas
+/// is open - or open Atlas on a repo another session is pushing to - and it
+/// is short. A window clamped to that number shows part of the file and
+/// refuses to be dragged any further, which reads as a limit rather than a
+/// stale number.</summary>
+[Collection("render")]
+public class StaleScanTests
+{
+    const string Path = "app/Long.cs";
+
+    static string Lines(int n)
+    {
+        var lf = ((char)10).ToString();
+        var t = new System.Text.StringBuilder();
+        for (int i = 0; i < n; i++) t.Append("// line ").Append(i).Append(lf);
+        return t.ToString();
+    }
+
+    [Fact]
+    public void AWindowShowsTheFileAsItIsNowNotAsItWasScanned()
+    {
+        using var repo = SampleRepo.Build();
+        repo.File(Path, Lines(100));
+
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        var board = new Board { Id = "b", Name = "stale" };
+        scene.ActiveBoard = board;
+
+        var window = new BoardItem
+        {
+            Id = "w", Kind = "file", File = Path, Key = scene.KeyFor(Path),
+            X = 0, Y = 0, W = 620, Line = 0, EndLine = -1,
+        };
+        board.Items.Add(window);
+
+        var f = scene.Data.Files[scene.IndexOfPath(Path)];
+        Assert.Equal(100, f.N);
+        Assert.Equal(99, scene.RangeOf(window, f).To);
+
+        // the file grows under us, and the scan still says a hundred
+        repo.File(Path, Lines(400));
+        Assert.Equal(100, f.N);
+        scene.ReadLines(Path);                       // not cached, so ask again below
+
+        Assert.Equal(400, scene.LinesIn(f));            // a count
+        Assert.Equal(399, scene.RangeOf(window, f).To);  // the last index
+
+        scene.ActiveBoard = null;
+    }
+
+    /// <summary>and the clip handle can reach the new end, rather than
+    /// stopping at the line the scan happened to record.</summary>
+    [Fact]
+    public void ClippingCanReachTheRealEndOfTheFile()
+    {
+        using var repo = SampleRepo.Build();
+        repo.File(Path, Lines(100));
+
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        var board = new Board { Id = "b", Name = "stale" };
+        scene.ActiveBoard = board;
+
+        var window = new BoardItem
+        {
+            Id = "w", Kind = "file", File = Path, Key = scene.KeyFor(Path),
+            X = 0, Y = 0, W = 620, Line = 0, EndLine = 50,
+        };
+        board.Items.Add(window);
+
+        repo.File(Path, Lines(400));
+
+        // what grabbing the handle does: ask how long the file is now
+        scene.NoteLength(window);
+        scene.ClipTo(window, Scene.Bottom, 1_000_000);
+
+        Assert.Equal(399, window.EndLine);
+        scene.ActiveBoard = null;
+    }
+
+    /// <summary>with nothing loaded the scan is all there is, and that is
+    /// fine - it self-corrects the moment the text arrives.</summary>
+    [Fact]
+    public void TheScanIsUsedWhenNothingHasBeenRead()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+
+        var f = scene.Data.Files.First(x => x.P == SampleRepo.LongFile);
+        Assert.Null(scene.LinesOf(f.P));
+        Assert.Equal(f.N, scene.LinesIn(f));
+    }
+}

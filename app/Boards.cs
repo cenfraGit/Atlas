@@ -73,16 +73,21 @@ public sealed class BoardItem
     /// what is picked. 0 means the default.</summary>
     [JsonPropertyName("weight")] public float Weight { get; set; }
 
-    /// <summary>a shape's interior. Null means a wash of the border colour,
-    /// which is what a shape looked like before there was a choice.
-    /// <see cref="NoFill"/> - the string "none", as SVG spells it - means
-    /// genuinely empty.
+    /// <summary>a shape's interior. Null and <see cref="NoFill"/> - the
+    /// string "none", as SVG spells it - are both empty: one was never
+    /// chosen and the other was chosen, and they draw the same.
+    /// <see cref="BorderFill"/> is a wash of the border's colour.
     ///
     /// One field rather than a colour plus a "transparent" flag, because the
     /// two could disagree and only one of them could win.</summary>
     [JsonPropertyName("fill")] public string? Fill { get; set; }
 
     public const string NoFill = "none";
+
+    /// <summary>a wash of the border's own colour. Used to be what null
+    /// meant; now null means empty, because a shape is usually drawn round
+    /// something and the wash was one more thing between you and it.</summary>
+    public const string BorderFill = "border";
 
     /// <summary>the window this item is pinned over, if it is sitting on
     /// one. A rectangle drawn across a file window is about the code under

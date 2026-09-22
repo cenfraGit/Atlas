@@ -329,6 +329,7 @@ public sealed class Scene : IDisposable
         foreach (var p in _bars.Values) p.Dispose();
         _bars.Clear();
         _text.Clear();
+        _counted.Clear();
         _runs.Clear();
         _anchored.Clear();
         _loading.Clear();
@@ -537,6 +538,8 @@ public sealed class Scene : IDisposable
         var tab = TabChar.ToString();
         for (int i = 0; i < src.Length; i++)
             if (src[i].IndexOf(TabChar) >= 0) src[i] = src[i].Replace(tab, "    ");
+
+        _counted[relPath] = src.Length;
         return src;
     }
 
@@ -1480,10 +1483,30 @@ public sealed class Scene : IDisposable
     const char TabChar = (char)9;
 
     /// <summary>the line range a window shows, clamped to the file.</summary>
+    /// <summary>how many lines the file has *now*.
+    ///
+    /// `FileRec.N` is from the scan, and a scan is taken once. Edit the file
+    /// while Atlas is open - or open Atlas on a repo another session is
+    /// pushing to - and it is short. A window clamped to that count shows
+    /// part of the file and refuses to be dragged any further, which looks
+    /// like a limit rather than a stale number. The loaded text is the
+    /// truth whenever there is any.</summary>
+    public int LinesIn(FileRec f) =>
+        LinesOf(f.P)?.Length ?? (_counted.TryGetValue(f.P, out var n) ? n : f.N);
+
+    /// <summary>how long a file was the last time anything read it.
+    ///
+    /// `ReadLines` deliberately keeps no text - caching it there would leave
+    /// the map grey - but the *count* is one integer and is what stops a
+    /// window being clamped to a stale scan. Refilled whenever a board opens,
+    /// because that is when every window's file is read anyway.</summary>
+    readonly ConcurrentDictionary<string, int> _counted = [];
+
     public (int From, int To) RangeOf(BoardItem it, FileRec f)
     {
-        int from = Math.Clamp(it.Line, 0, Math.Max(0, f.N - 1));
-        int to = it.EndLine >= from ? Math.Min(it.EndLine, Math.Max(0, f.N - 1)) : Math.Max(0, f.N - 1);
+        int last = Math.Max(0, LinesIn(f) - 1);
+        int from = Math.Clamp(it.Line, 0, last);
+        int to = it.EndLine >= from ? Math.Min(it.EndLine, last) : last;
         return (from, to);
     }
 
@@ -1570,15 +1593,17 @@ public sealed class Scene : IDisposable
     /// <summary>Lighter than it was. A border of 2 sat beside text of 18
     /// and looked like a border; beside text of 6, which is what the
     /// defaults are now, it looked like a frame round a stamp.</summary>
-    public const float DefaultBorder = 1.25f;
+    public const float DefaultBorder = 1f;
 
     public static float LineWidth(BoardItem it, float fallback = DefaultBorder) =>
         it.Weight > 0 ? it.Weight : fallback;
 
     public static SKColor FillOf(BoardItem it, SKColor border)
     {
-        if (it.Fill is null) return border.WithAlpha(16);
-        if (it.Fill == BoardItem.NoFill) return SKColors.Transparent;
+        // empty by default. A shape is usually drawn round something, and
+        // a wash over it was one more thing between you and the code
+        if (it.Fill is null || it.Fill == BoardItem.NoFill) return SKColors.Transparent;
+        if (it.Fill == BoardItem.BorderFill) return border.WithAlpha(16);
         return Tinted(it.Fill, border, 52);
     }
 
@@ -1964,7 +1989,10 @@ public sealed class Scene : IDisposable
                 shapeFill.Color = FillOf(it, col);
                 // 150 unless the colour named its own opacity, which is
                 // how a border is made solid
-                shapeEdge.Color = Tinted(it.Color, col, 150);
+                // solid unless the colour asks for otherwise. A part
+                // opacity default made every shape look like a frame round
+                // the code rather than a line drawn on the board
+                shapeEdge.Color = Tinted(it.Color, col, 255);
                 shapeEdge.StrokeWidth = LineWidth(it);
                 DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
                 DrawShapeText(canvas, it, box);
@@ -2731,6 +2759,18 @@ public sealed class Scene : IDisposable
     /// Dragging the top down therefore moves the item's Y with it, or the
     /// lines that remain would slide up the screen as you dragged - which
     /// reads as scrolling rather than clipping.</summary>
+    /// <summary>read a window's file so its length is current, once, at the
+    /// start of a gesture. Dragging a clip handle asks `LinesIn` on every
+    /// pointer move and a read there would be sixty a second; asking once
+    /// when the handle is grabbed is what lets it reach the real end of a
+    /// file that has grown since the scan.</summary>
+    public void NoteLength(BoardItem window)
+    {
+        if (window.Kind != "file" || window.File is null) return;
+        int i = ResolveFile(window.File, window.Key);
+        if (i >= 0) ReadLines(Data.Files[i].P);
+    }
+
     public void ClipTo(BoardItem it, int edge, float wy)
     {
         if (it.File is null) return;
@@ -2742,7 +2782,7 @@ public sealed class Scene : IDisposable
         float step = Data.LineH * (it.W / f.W);
         if (step <= 0) return;
 
-        int last = Math.Max(0, f.N - 1);
+        int last = Math.Max(0, LinesIn(f) - 1);
         if (edge == Top)
         {
             int moved = (int)MathF.Round((wy - it.Y) / step);

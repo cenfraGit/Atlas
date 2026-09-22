@@ -98,6 +98,24 @@ public sealed class BoardItem
     /// was between two lines.</summary>
     [JsonPropertyName("dy")] public float Dy { get; set; }
 
+    /// <summary>where the bottom edge sits relative to the *end* of the
+    /// declaration the top is anchored to, in lines. Null when there is no
+    /// second anchor. Only shapes carry one.
+    ///
+    /// Without it a rectangle drawn round a method keeps its height while
+    /// the method grows, and stops being a rectangle round that method.
+    ///
+    /// Relative to the declaration's end rather than a fingerprint of the
+    /// closing line, because that fingerprint is made of the line and its
+    /// neighbours - and the line above a closing brace is exactly what
+    /// changes when something is added inside. Roslyn knows where the
+    /// declaration ends now; that is the thing to ask.</summary>
+    [JsonPropertyName("endOffset")] public int? EndOffset { get; set; }
+
+    /// <summary>and the remainder, so a box that stopped halfway through a
+    /// line goes back to halfway through it.</summary>
+    [JsonPropertyName("endDy")] public float EndDy { get; set; }
+
     /// <summary>an anchor into a file: the declaration the line sits in, how
     /// far down that declaration it is, and a fingerprint of the line and
     /// its neighbours. The same three an annotation carries, and resolved by

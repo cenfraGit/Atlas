@@ -2484,6 +2484,11 @@ public sealed class SceneView : Control
             ContextActions.Separator(),
         };
         items.AddRange(Colours.Select(c => ContextActions.Item(c.Name, () => SetFill(picked, c.Hex))));
+        items.Add(ContextActions.Separator());
+        items.Add(ContextActions.Item("Hex...", () => AskHex(
+            "fill colour: rrggbb, or aarrggbb for opacity",
+            picked.Count == 1 ? picked[0].Fill : null,
+            hex => SetFill(picked, hex))));
         return items;
     }
 
@@ -2536,14 +2541,74 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
-    List<MenuItem> Palette(List<BoardItem> picked) =>
-        Colours.Select(c => ContextActions.Item(c.Name, () =>
+    /// <summary>the border's colour, and how solid it is.
+    ///
+    /// A shape's outline is drawn at part opacity unless its colour says
+    /// otherwise, which is what makes one look like a frame round code
+    /// rather than a box in front of it - good for a frame, wrong when you
+    /// want a line. Solid and soft rewrite the stored colour's alpha, so
+    /// there is one field rather than a colour plus a flag that can
+    /// disagree with it.</summary>
+    List<MenuItem> Palette(List<BoardItem> picked)
+    {
+        var items = Colours.Select(c => ContextActions.Item(c.Name, () =>
+            SetColour(picked, Keeping(picked, c.Hex)))).ToList();
+
+        items.Add(ContextActions.Separator());
+        items.Add(ContextActions.Item("Solid", () => SetOpacity(picked, 255)));
+        items.Add(ContextActions.Item("Soft", () => SetOpacity(picked, 150)));
+        items.Add(ContextActions.Item("Faint", () => SetOpacity(picked, 60)));
+        items.Add(ContextActions.Item("Hex...", () => AskHex(
+            "border colour: rrggbb, or aarrggbb for opacity",
+            picked.Count == 1 ? picked[0].Color : null,
+            hex => SetColour(picked, hex))));
+        return items;
+    }
+
+    /// <summary>a new colour keeps the opacity the old one asked for, so
+    /// picking a different swatch does not quietly make a solid border
+    /// see-through again.</summary>
+    string Keeping(List<BoardItem> picked, string hex)
+    {
+        var had = picked.FirstOrDefault(i => Scene.HasOpacity(i.Color))?.Color;
+        if (had is null) return hex;
+        var alpha = Convert.ToByte(had.TrimStart('#')[..2], 16);
+        return Scene.WithOpacity(hex, SkiaSharp.SKColors.White, alpha);
+    }
+
+    void SetColour(List<BoardItem> picked, string? hex)
+    {
+        if (hex is null) return;
+        Remember();
+        foreach (var it in picked) it.Color = hex;
+        if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
+        Saved("colour");
+        InvalidateVisual();
+    }
+
+    void SetOpacity(List<BoardItem> picked, byte alpha)
+    {
+        Remember();
+        foreach (var it in picked)
+            it.Color = Scene.WithOpacity(it.Color, Scene.DefaultShape, alpha);
+        if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
+        Saved(alpha == 255 ? "solid" : "see-through");
+        InvalidateVisual();
+    }
+
+    /// <summary>ask for a colour by hand. Anything that is not one is
+    /// refused rather than silently ignored - a typo that turns a border
+    /// invisible is worse than being told.</summary>
+    void AskHex(string label, string? current, Action<string> use)
+    {
+        if (_prompt is null) return;
+        _prompt.Ask(label, current ?? "", typed =>
         {
-            Remember();
-            foreach (var it in picked) it.Color = c.Hex;
-            if (_scene.ActiveBoard is { } b) _boardStore?.Save(b);
-            Saved("colour");
-        })).ToList();
+            if (Scene.NormaliseHex(typed) is { } hex) use(hex);
+            else Toast($"\"{typed}\" is not a colour");
+            Focus();
+        });
+    }
 
     readonly List<BoardItem> _clipboard = [];
     readonly History _history = new();

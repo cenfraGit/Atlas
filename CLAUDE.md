@@ -281,10 +281,19 @@ covered by `AnchorTests` and works.
 - [x] Up and down step the commits, which is what a list of commits down
       the side looks like it does. Not while a tour is running: those are
       its arrows.
+- [x] A shape's bottom edge is anchored too, so a rectangle drawn round a
+      method is still round it after something is added inside. Relative to
+      the *declaration's end* rather than a fingerprint of the closing
+      line: that fingerprint is the line and its neighbours, and the line
+      above a closing brace is exactly what changes. Roslyn knows where the
+      declaration ends now; that is the thing to ask.
 - [ ] A drawing is pinned by its top left corner, so one that spans two
       windows, or hangs off the bottom of one, follows only the line under
       that corner. Good enough for a mark on a method; wrong for a frame
       drawn round two of them.
+- [ ] Only shapes grow. A note over a method keeps its height, because a
+      note's height is its words - which is right, but it means a note
+      cannot be used to bracket something the way a rectangle can.
 - [ ] Show each file as it was *at that commit*, so the code under the
       marks is the code the commit changed rather than today's. The
       snapshot already exists (`ShowSnapshot`); what is missing is doing it
@@ -462,6 +471,15 @@ alongside `_runs` by the loader, and an entry in one without the other means
 `DrawCode` finds text with no syntax runs beside it and paints that whole
 file in a single colour. The search reads every file in the repo, so caching
 there would leave the map grey.
+
+**How solid a colour is lives in the colour.** Eight hex digits are
+AARRGGBB and six are RRGGBB; `Scene.Tinted` takes a colour that named its own
+alpha at its word and gives one that did not whatever the thing drawing it
+normally uses - 150 for a shape's border, which is what makes one read as a
+frame round code rather than a box in front of it. "Solid", "soft" and a
+typed hex all rewrite that one string rather than setting a flag beside it,
+because a flag and a colour can disagree about whether something is
+invisible. Covered by `ColourOpacityTests`.
 
 **A drawing over a window belongs to the code, not to the board.** A
 rectangle, note, stroke or loose arrow let go of on top of a file window is

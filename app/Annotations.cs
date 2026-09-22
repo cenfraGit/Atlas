@@ -181,6 +181,15 @@ public static class Anchors
     /// annotation does. A window records a range of line *numbers*, and a
     /// line number stops meaning the same thing the moment somebody inserts
     /// above it - which is the whole reason this ladder exists.</summary>
+    /// <summary>the lines a named declaration covers now, or null when it
+    /// is gone. The name carries its arity, as Symbols writes it.</summary>
+    public static (int Start, int End)? SpanOf(string fullPath, string symbol)
+    {
+        foreach (var s in Symbols.ForFile(fullPath))
+            if (s.Name == symbol) return (s.StartLine, s.EndLine);
+        return null;
+    }
+
     public static (string? Symbol, int Offset) CaptureAt(string fullPath, int line)
     {
         var sym = Symbols.Innermost(Symbols.ForFile(fullPath), line);

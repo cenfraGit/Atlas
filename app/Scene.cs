@@ -89,6 +89,11 @@ public sealed class Scene : IDisposable
     /// competes with it on every single line.</summary>
     public static readonly SKColor GutterCol = new(0x45, 0x63, 0x77);
 
+    /// <summary>what a shape is drawn in when it has no colour of its own.
+    /// Public so changing only the opacity of an uncoloured one has
+    /// something to change the opacity *of*.</summary>
+    public static readonly SKColor DefaultShape = new(0x5f, 0xd3, 0xf3);
+
     static readonly SKColor[] KindColor =
     [
         SKColors.Transparent,
@@ -687,6 +692,22 @@ public sealed class Scene : IDisposable
         it.Offset = offset;
         it.Context = Anchors.ContextOf(lines, line);
         it.Dy = it.Y - (top + (line - from) * step);
+
+        // a shape gets its bottom edge anchored as well, so a rectangle
+        // drawn round a method is still round that method after something
+        // is added inside it. Only shapes: a note's height is its words and
+        // a stroke's is its ink, so neither has a height to stretch
+        it.EndOffset = null;
+        it.EndDy = 0;
+        if (!IsShape(it.Kind) || symbol is null) return;
+        if (Anchors.SpanOf(full, symbol) is not { } span) return;
+
+        float bottom = it.Y + LastHeight(it);
+        int end = Math.Clamp(from + (int)MathF.Floor((bottom - top) / step), 0, Math.Max(0, lines.Length - 1));
+        if (end <= line) return;                 // too short to have two ends
+
+        it.EndOffset = end - span.End;
+        it.EndDy = bottom - (top + (end - from) * step);
     }
 
     /// <summary>move everything pinned to a window back onto its code.
@@ -720,11 +741,29 @@ public sealed class Scene : IDisposable
 
             float step = LineStepIn(host, f);
             var (from, _) = RangeOf(host, f);
-            float want = host.Y + WinHeadH + (at.Line - from) * step + it.Dy;
+            float top = host.Y + WinHeadH;
+            float want = top + (at.Line - from) * step + it.Dy;
             float dy = want - it.Y;
-            if (Math.Abs(dy) < 0.01f) continue;
 
-            Move(it, 0, dy);
+            // and the bottom, for a shape that was drawn round something
+            // that has since grown. The closing line has no declaration of
+            // its own, so it is matched on its fingerprint nearest to where
+            // the top landed - which is why the top is resolved first
+            float height = 0;
+            if (it.EndOffset is int endOffset && IsShape(it.Kind) && it.Symbol is not null &&
+                Anchors.SpanOf(full, it.Symbol) is { } span)
+            {
+                int endLine = Math.Clamp(span.End + endOffset, at.Line, Math.Max(0, lines.Length - 1));
+                if (endLine > at.Line)
+                    height = top + (endLine - from) * step + it.EndDy - want;
+            }
+
+            bool moves = Math.Abs(dy) >= 0.01f;
+            bool grows = height > 1 && Math.Abs(height - LastHeight(it)) >= 0.01f;
+            if (!moves && !grows) continue;
+
+            if (moves) Move(it, 0, dy);
+            if (grows) it.H = height;
             changed = true;
         }
         return changed;
@@ -1540,7 +1579,7 @@ public sealed class Scene : IDisposable
     {
         if (it.Fill is null) return border.WithAlpha(16);
         if (it.Fill == BoardItem.NoFill) return SKColors.Transparent;
-        return ParseColor(it.Fill, border).WithAlpha(52);
+        return Tinted(it.Fill, border, 52);
     }
 
     /// <summary>"shape" is the rectangle, and stays that name because boards
@@ -1789,6 +1828,44 @@ public sealed class Scene : IDisposable
     public static SKColor ParseColor(string? hex, SKColor fallback) =>
         hex is not null && SKColor.TryParse(hex, out var c) ? c : fallback;
 
+    /// <summary>whether a stored colour said how opaque it is.
+    ///
+    /// Eight hex digits are AARRGGBB, six are RRGGBB. A colour that named
+    /// its own alpha is taken at its word; one that did not gets whatever
+    /// the thing drawing it normally uses.</summary>
+    public static bool HasOpacity(string? hex) =>
+        hex is not null && hex.TrimStart('#').Length == 8;
+
+    /// <summary>a stored colour at the opacity it asked for, or at the
+    /// default for where it is being drawn.
+    ///
+    /// This is how "solid or see-through" is stored: in the colour, rather
+    /// than in a flag beside it. A flag and a colour can disagree about
+    /// whether something is invisible; one string cannot.</summary>
+    public static SKColor Tinted(string? hex, SKColor fallback, byte alpha)
+    {
+        var c = ParseColor(hex, fallback);
+        return HasOpacity(hex) ? c : c.WithAlpha(alpha);
+    }
+
+    /// <summary>the same colour at a named opacity, as a string to store.</summary>
+    public static string WithOpacity(string? hex, SKColor fallback, byte alpha)
+    {
+        var c = ParseColor(hex, fallback);
+        return $"#{alpha:x2}{c.Red:x2}{c.Green:x2}{c.Blue:x2}";
+    }
+
+    /// <summary>what someone typed, as a colour this can store - or null if
+    /// it is not one. Accepts rgb, rrggbb and aarrggbb, with or without the
+    /// hash, because all four are things people paste.</summary>
+    public static string? NormaliseHex(string? typed)
+    {
+        var t = typed?.Trim().TrimStart('#');
+        if (t is null || (t.Length != 3 && t.Length != 6 && t.Length != 8)) return null;
+        foreach (var ch in t) if (!Uri.IsHexDigit(ch)) return null;
+        return "#" + t.ToLowerInvariant();
+    }
+
     /// <summary>the grid cell to draw at this zoom. A single fixed cell either
     /// turns to mush when you zoom out or leaves nothing to align to when you
     /// zoom in, so the cell steps through a 1-2-5 ladder - the same one a
@@ -1885,7 +1962,9 @@ public sealed class Scene : IDisposable
                 var col = ParseColor(it.Color, new SKColor(0x5f, 0xd3, 0xf3));
                 var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + ItemHeight(it));
                 shapeFill.Color = FillOf(it, col);
-                shapeEdge.Color = col.WithAlpha(150);
+                // 150 unless the colour named its own opacity, which is
+                // how a border is made solid
+                shapeEdge.Color = Tinted(it.Color, col, 150);
                 shapeEdge.StrokeWidth = LineWidth(it);
                 DrawShape(canvas, it.Kind, box, shapeFill, shapeEdge);
                 DrawShapeText(canvas, it, box);
@@ -1915,7 +1994,7 @@ public sealed class Scene : IDisposable
                 float h = LastHeight(it);
                 float size = SizeOf(it), step = LineStep(size);
                 var accent = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
-                noteEdge.Color = accent;
+                noteEdge.Color = Tinted(it.Color, accent, 255);
                 noteEdge.StrokeWidth = LineWidth(it);
                 noteText.Color = accent.WithAlpha(235);
                 noteText.TextSize = size;
@@ -2139,7 +2218,7 @@ public sealed class Scene : IDisposable
         {
             if (it.Kind != "arrow") continue;
 
-            line.Color = ParseColor(it.Color, new SKColor(0xff, 0xd1, 0x66));
+            line.Color = Tinted(it.Color, new SKColor(0xff, 0xd1, 0x66), 255);
             line.StrokeWidth = LineWidth(it, ArrowShaft);
             var (p1, p2) = ArrowEnds(it);
             canvas.DrawLine(p1, p2, line);

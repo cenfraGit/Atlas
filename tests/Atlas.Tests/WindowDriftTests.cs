@@ -441,3 +441,191 @@ public class PinnedItemTests
         }
     }
 }
+
+/// <summary>a rectangle drawn round a method stays round that method when
+/// the method grows.
+///
+/// Pinning the top alone moves it down intact, so the method gets taller
+/// and the rectangle stops enclosing it - which is not what "round that
+/// method" means. The bottom edge is anchored as well.</summary>
+[Collection("render")]
+public class GrowingShapeTests
+{
+    const string Path = "app/Growing.cs";
+
+    static string Source(int bodyLines)
+    {
+        var lf = ((char)10).ToString();
+        var t = new System.Text.StringBuilder();
+        t.Append("namespace Demo;").Append(lf).Append(lf);
+        t.Append("public class Growing").Append(lf).Append('{').Append(lf);
+        t.Append("    public void Wrapped()").Append(lf).Append("    {").Append(lf);
+        for (int i = 0; i < bodyLines; i++) t.Append("        Step(").Append(i).Append(");").Append(lf);
+        t.Append("    }").Append(lf).Append(lf);
+        t.Append("    public void After() { }").Append(lf);
+        t.Append('}').Append(lf);
+        return t.ToString();
+    }
+
+    static int LineOf(Scene scene, string needle, int from = 0)
+    {
+        var lines = scene.ReadLines(Path);
+        for (int i = from; i < lines.Length; i++)
+            if (lines[i].Contains(needle, StringComparison.Ordinal)) return i;
+        return -1;
+    }
+
+    static (Scene Scene, Board Board, BoardItem Window, BoardItem Box, TempDir Repo) Round(int body)
+    {
+        var repo = SampleRepo.Build();
+        repo.File(Path, Source(body));
+
+        var scene = new Scene(Scanner.Build(repo.Path));
+        var board = new Board { Id = "b", Name = "growing" };
+        scene.ActiveBoard = board;
+
+        var f = scene.Data.Files[scene.IndexOfPath(Path)];
+        var window = new BoardItem
+        {
+            Id = "w", Kind = "file", File = Path, Key = scene.KeyFor(Path),
+            X = 0, Y = 0, W = 620, Line = 0, EndLine = -1,
+        };
+        board.Items.Add(window);
+        scene.Reanchor(window);
+
+        float step = scene.LineStepIn(window, f);
+        int first = LineOf(scene, "public void Wrapped()");
+        int last = LineOf(scene, "    }", first);
+
+        // a box from the declaration to the closing brace
+        var box = new BoardItem
+        {
+            Id = "box", Kind = "shape", X = 5, W = 600,
+            Y = window.Y + Scene.WinHeadH + first * step,
+            H = (last - first + 1) * step,
+        };
+        board.Items.Add(box);
+        scene.PinOver(box);
+
+        return (scene, board, window, box, repo);
+    }
+
+    [Fact]
+    public void BothEndsAreAnchored()
+    {
+        var (scene, _, _, box, repo) = Round(3);
+        using (repo)
+        using (scene)
+        {
+            Assert.NotNull(box.Context);
+            Assert.NotNull(box.EndOffset);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>the thing asked for: lines go in inside the method, and the
+    /// box gets taller by exactly as much.</summary>
+    [Fact]
+    public void TheBoxGrowsWithTheMethod()
+    {
+        var (scene, board, window, box, repo) = Round(3);
+        using (repo)
+        using (scene)
+        {
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            float before = box.H;
+            float top = box.Y;
+
+            repo.File(Path, Source(13));                // ten more lines inside
+            Assert.True(scene.AnchorBoard(board));
+
+            Assert.Equal(top, box.Y, 0.5);              // the declaration has not moved
+            Assert.Equal(before + 10 * step, box.H, 0.5);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>and it still covers the method from its declaration to its
+    /// closing brace, which is the property that matters.</summary>
+    [Fact]
+    public void TheBoxStillCoversTheWholeMethod()
+    {
+        var (scene, board, window, box, repo) = Round(3);
+        using (repo)
+        using (scene)
+        {
+            repo.File(Path, Source(13));
+            scene.AnchorBoard(board);
+
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            var (from, _) = scene.RangeOf(window, f);
+            float top = window.Y + Scene.WinHeadH;
+
+            int firstCovered = from + (int)MathF.Round((box.Y - top) / step);
+            int lastCovered = from + (int)MathF.Round((box.Y + box.H - top) / step) - 1;
+
+            int decl = LineOf(scene, "public void Wrapped()");
+            int close = LineOf(scene, "    }", decl);
+
+            Assert.Equal(decl, firstCovered);
+            Assert.Equal(close, lastCovered);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a note's height is its words and a stroke's is its ink, so
+    /// neither has a height for this to stretch.</summary>
+    [Theory]
+    [InlineData("note")]
+    [InlineData("text")]
+    public void OnlyShapesGetASecondAnchor(string kind)
+    {
+        var (scene, board, window, _, repo) = Round(3);
+        using (repo)
+        using (scene)
+        {
+            var it = new BoardItem
+            {
+                Id = "n", Kind = kind, W = 200, H = 60, Text = "words",
+                X = 5, Y = window.Y + Scene.WinHeadH + 20,
+            };
+            board.Items.Add(it);
+            scene.PinOver(it);
+
+            Assert.NotNull(it.Context);
+            Assert.Null(it.EndOffset);
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a box too short to have two distinct ends gets one anchor,
+    /// and keeps the height it was given.</summary>
+    [Fact]
+    public void AThinBoxKeepsItsHeight()
+    {
+        var (scene, board, window, _, repo) = Round(3);
+        using (repo)
+        using (scene)
+        {
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            float step = scene.LineStepIn(window, f);
+            var thin = new BoardItem
+            {
+                Id = "thin", Kind = "shape", W = 300, H = step * 0.5f,
+                X = 5, Y = window.Y + Scene.WinHeadH + 4 * step,
+            };
+            board.Items.Add(thin);
+            scene.PinOver(thin);
+            Assert.Null(thin.EndOffset);
+
+            float before = thin.H;
+            repo.File(Path, Source(13));
+            scene.AnchorBoard(board);
+
+            Assert.Equal(before, thin.H);
+            scene.ActiveBoard = null;
+        }
+    }
+}

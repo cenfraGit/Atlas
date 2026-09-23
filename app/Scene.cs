@@ -2555,15 +2555,22 @@ public sealed class Scene : IDisposable
             // a bar on each wall that can be dragged, drawn as a bar
             // rather than a square because it moves one edge rather than
             // two. On a file window these are the clip handles, and they
-            // are the only handles it has
+            // are the only handles it has, so they stay long; on anything
+            // else a bar across 40% of the wall read as a second border.
+            // Only the drawing is short - the whole wall still grabs
+            bool clip = it.Kind == "file";
+            float t = (clip ? 3 : 2) * sc;
+            float hw = clip ? it.W * 0.2f : Math.Min(9 * sc, it.W * 0.2f);
+            float hh = clip ? h * 0.2f : Math.Min(9 * sc, h * 0.2f);
+            float cx = it.X + it.W / 2, cy = it.Y + h / 2;
             foreach (var wall in EdgesOf(it))
             {
                 var bar = wall switch
                 {
-                    Top => new SKRect(it.X + it.W * 0.3f, it.Y - 3 * sc, it.X + it.W * 0.7f, it.Y + 3 * sc),
-                    Bottom => new SKRect(it.X + it.W * 0.3f, it.Y + h - 3 * sc, it.X + it.W * 0.7f, it.Y + h + 3 * sc),
-                    Left => new SKRect(it.X - 3 * sc, it.Y + h * 0.3f, it.X + 3 * sc, it.Y + h * 0.7f),
-                    _ => new SKRect(it.X + it.W - 3 * sc, it.Y + h * 0.3f, it.X + it.W + 3 * sc, it.Y + h * 0.7f),
+                    Top => new SKRect(cx - hw, it.Y - t, cx + hw, it.Y + t),
+                    Bottom => new SKRect(cx - hw, it.Y + h - t, cx + hw, it.Y + h + t),
+                    Left => new SKRect(it.X - t, cy - hh, it.X + t, cy + hh),
+                    _ => new SKRect(it.X + it.W - t, cy - hh, it.X + it.W + t, cy + hh),
                 };
                 canvas.DrawRect(bar, grip);
             }

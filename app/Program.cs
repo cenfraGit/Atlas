@@ -1606,6 +1606,7 @@ public sealed class SceneView : Control
             items.Add(("next commit", "]", () => { StepCommit(1); RebuildChangeBoard(); }));
             items.Add(("commits", "H", ToggleCommits));
             items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
+            items.Add((_showRemoved ? "hide removed" : "show removed", "R", ToggleRemoved));
             items.Add(("back to the map", "C", LeaveBoard));
         }
         else if (_scene.ActiveBoard is not null)
@@ -2184,7 +2185,7 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is not null) return;
 
         var label = _commitAt < 0 ? _target?.Label ?? "changes" : _prCommits[_commitAt].Subject;
-        var board = ChangeBoard.Build(set, _scene, label);
+        var board = ChangeBoard.Build(set, _scene, label, _showRemoved);
         if (board.Items.Count == 0)
         {
             Toast("none of these changes are on the map");
@@ -2228,13 +2229,27 @@ public sealed class SceneView : Control
         _scene.CamS = 1f;
     }
 
+    /// <summary>whether the change view shows the lines a change removed, in
+    /// red between the pieces of each file. On by default: it is the half of
+    /// a diff the map cannot show.</summary>
+    bool _showRemoved = true;
+
+    void ToggleRemoved()
+    {
+        _showRemoved = !_showRemoved;
+        // stay where you are: this is looking at the same change another way
+        RebuildChangeBoard(frame: false);
+        Toast(_showRemoved ? "removed lines shown" : "removed lines hidden");
+        RefreshHints();
+    }
+
     /// <summary>after stepping to another commit, gather that one instead.</summary>
-    void RebuildChangeBoard()
+    void RebuildChangeBoard(bool frame = true)
     {
         if (!_scene.BoardReadOnly || _scene.Review is not { } set) return;
 
         var label = _commitAt < 0 ? _target?.Label ?? "changes" : _prCommits[_commitAt].Subject;
-        var board = ChangeBoard.Build(set, _scene, label);
+        var board = ChangeBoard.Build(set, _scene, label, _showRemoved);
 
         // an empty board is shown rather than refused. Leaving the previous
         // commit's windows up because this one touched nothing on the map is
@@ -2249,7 +2264,7 @@ public sealed class SceneView : Control
             return;
         }
 
-        ShowFirstChange(board, set);
+        if (frame) ShowFirstChange(board, set);
         _caption = $"{label}  [changed code]";
         InvalidateVisual();
     }
@@ -3666,6 +3681,7 @@ public sealed class SceneView : Control
                 // copying off a generated board onto one of your own is fine
                 case Key.C when _ctrl: CopyPicked(PickedItems()); return;
                 case Key.C: LeaveBoard(); return;
+                case Key.R: ToggleRemoved(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
                 case Key.H: ToggleCommits(); return;

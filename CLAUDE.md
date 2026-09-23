@@ -338,14 +338,41 @@ covered by `AnchorTests` and works.
 - [x] The gathered change view is lit the way the map is: zoomed out past
       readable text a window is veiled and its changed runs glow, drawn by
       the same `DrawGlowBands`. Close in it keeps the tint, as the map does.
-- [ ] Show the lines a change *removed*, as text, not only a red line
-      where they were. The big one for review. Every line to y mapping -
-      anchors, picks, highlights, clip handles, search - assumes a window's
-      rows are the file's lines, so ghost rows cannot simply be inserted
-      into the real ones. Plan first: probably a read-only rendering where
-      the removed text is laid out between the surviving lines only in the
-      change view, whose windows nothing is pinned to. Needs the removed
-      text from the diff, which `GitReview` currently throws away.
+- [x] The change view shows what a change *removed*, as text, where it
+      was. Two ways were weighed. Rows inside one window that are not the
+      file's lines would have meant teaching a row map to the ~25 places
+      that turn a line into a y - code, gutter, glow, highlight, search
+      marks, picks, annotation tints and callouts, window height - and every
+      future window feature would have had to remember it, failing silently
+      when it did not. Instead `ChangeBoard` cuts each file at its removals
+      into a stack of ordinary cropped windows with a `"removed"` item
+      between them, touching, in one column. Nothing that draws a window
+      changed; the header at each cut reads like a diff's hunk line.
+      - `GitReview.ReadHunks` keeps the text (`FileChange.RemovedText`: one
+        `RemovedBlock` per run, with the new-file line that sits where it
+        was and the old-file line it started at). `RemovedAt` stays for the
+        map.
+      - A `"removed"` item stores its height, a window line per old line, so
+        nothing off the draw loop measures text. It draws old numbers in its
+        gutter and the old lines in muted red, and becomes a solid red band
+        at the zoom a window becomes bars.
+      - A file the change deleted - which the scan cannot know - is one
+        block of its old text, with a header naming it.
+      - `R` in the change view hides the removed text and puts each file
+        back to one whole window, without moving the camera. On by default.
+- [ ] Syntax colours for removed text. It is one muted red today; colouring
+      it means tokenising the old lines under the `Highlighter` lock, off
+      the UI thread, like any file.
+- [ ] ctrl+F does not search removed text: the scope is the files the
+      board's windows show, and a removed block is not a file.
+- [ ] The segment headers are sized for a zoomed out view, so close in each
+      cut costs about three lines of height. A continuation segment could
+      draw a thin one - but `WinHeadH` is assumed in about eight places.
+- [ ] The thin red removal marker still draws at each cut, beside the block
+      that now shows the same thing. Worth leaving off when the text is
+      shown, and keeping when `R` hides it.
+- [ ] Removed text on the map: a peek of the old lines when hovering a red
+      marker, since a card cannot make room for them.
 - [ ] The debug readout in the top left sits under the "map" back button on
       a board, so both are unreadable.
 - [x] The gathered view rebuilds whenever the change set does. Picking a
@@ -386,8 +413,9 @@ covered by `AnchorTests` and works.
       libgit2's handle is not thread safe and the bracket keys reach for
       the same one; a background read needs that handle owned by one place.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
-      is of what is there now, so it cannot be shown at all. It should
-      appear somewhere - probably at the folder that lost it.
+      is of what is there now. The change view shows it now, as its old
+      text; the map still has nowhere to put it - probably at the folder
+      that lost it.
 - [ ] The mode islands sit behind a side panel, so in review mode - where
       the commits panel is always open - the wheel-mode indicator cannot be
       seen at all. `S` toasts now, which covers it, but the islands should

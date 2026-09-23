@@ -1607,6 +1607,8 @@ public sealed class Scene : IDisposable
         // business and the clamp only ever got in the way
         if (IsShape(it.Kind)) return it.H > 0 ? it.H : 40;
         if (it.Kind == "image") return Math.Max(20, it.H > 0 ? it.H : it.W * 0.6f);
+        // made at the height its lines need; nothing to measure
+        if (it.Kind == "removed") return it.H;
         if (it.Kind == "note")
             return Math.Max(it.H > 0 ? it.H : 0,
                 NotePad * 2 + Math.Max(1, WrapNote(it).Count) * LineStep(SizeOf(it)));
@@ -2058,6 +2060,11 @@ public sealed class Scene : IDisposable
                 DrawLabel(canvas, it);
                 continue;
             }
+            if (it.Kind == "removed")
+            {
+                DrawRemoved(canvas, it, code);
+                continue;
+            }
             if (it.Kind == "image")
             {
                 float ih = ItemHeight(it);
@@ -2172,6 +2179,69 @@ public sealed class Scene : IDisposable
         DrawPickedItems(canvas, board);
         DrawRubberband(canvas);
 
+        canvas.Restore();
+    }
+
+    /// <summary>lines a change deleted, drawn between the windows either side
+    /// of where they were (<see cref="ChangeBoard"/>). <c>Text</c> is the old
+    /// lines, <c>Line</c> the old file's line the first of them was on, and
+    /// the height was set when it was made, a file window's line apart.
+    ///
+    /// It switches to a solid band at the zoom a window switches from text to
+    /// bars, so the two read as one file at any distance - and zoomed out a
+    /// solid band is what a removal looks like on the map.</summary>
+    void DrawRemoved(SKCanvas canvas, BoardItem it, SKPaint code)
+    {
+        var lines = (it.Text ?? "").Split('\n');
+        // a block whose file is not in the scan is a whole deleted file, and
+        // has a header saying which, since there is no window above it
+        float head = it.File is not null && ResolveFile(it.File, null) < 0 ? WinHeadH : 0;
+        float step = (it.H - head) / Math.Max(1, lines.Length);
+        // one card unit of a window is this many board units
+        float k = step / Data.LineH;
+        var box = new SKRect(it.X, it.Y, it.X + it.W, it.Y + it.H);
+
+        using var fill = new SKPaint { Color = DelCol.WithAlpha(215), IsAntialias = false };
+        if (CamS * k < T_TEXT)
+        {
+            canvas.DrawRect(new SKRect(box.Left, box.Top + head, box.Right, box.Bottom), fill);
+            return;
+        }
+
+        fill.Color = new SKColor(0x2a, 0x10, 0x14);
+        canvas.DrawRect(box, fill);
+
+        canvas.Save();
+        canvas.ClipRect(box);
+        if (head > 0)
+        {
+            fill.Color = new SKColor(0x5a, 0x1c, 0x22);
+            canvas.DrawRect(it.X, it.Y, it.W, head, fill);
+            using var title = new SKPaint { Color = new SKColor(0xf0, 0xc0, 0xc0), Typeface = _mono, TextSize = 14, IsAntialias = true };
+            canvas.DrawText($"{it.File}   (deleted)", it.X + 8, it.Y + 18, title);
+        }
+        canvas.Translate(it.X, it.Y + head);
+        canvas.Scale(k);
+        float w = it.W / k;
+
+        // a bar down the left, where a window has its change stripe
+        fill.Color = DelCol;
+        canvas.DrawRect(0, 0, Math.Max(3f, w * 0.012f), lines.Length * Data.LineH, fill);
+
+        // the old file's numbers: these lines are not in the new one
+        int last = it.Line + lines.Length;
+        float gutter = GutterFor(last);
+        float numRight = 6 + gutter - _charW;
+        for (int li = 0; li < lines.Length; li++)
+        {
+            float baseline = (li + 1) * Data.LineH - 0.6f;
+            var num = (it.Line + li + 1).ToString();
+            code.Color = new SKColor(0x8a, 0x4a, 0x50);
+            canvas.DrawText(num, numRight - num.Length * _charW, baseline, code);
+            if (lines[li].Length == 0) continue;
+            code.Color = new SKColor(0xf0, 0xa0, 0xa0);
+            canvas.DrawText(lines[li].Replace("\t", "    "), 6 + gutter, baseline, code);
+        }
         canvas.Restore();
     }
 

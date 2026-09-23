@@ -212,6 +212,7 @@ your team gets everything you wrote.
 | `4` | label on a board |
 | `ctrl+V` (board) | paste an image from the clipboard |
 | `C` | gather the changed code onto one view (while reviewing) |
+| `R` | in that view: show or hide the removed lines, in red where they were |
 | `]` `[` | next / previous commit while reviewing |
 | click a line | pick it (at reading zoom; on a board, while editing) |
 | shift-click | extend the picked range |

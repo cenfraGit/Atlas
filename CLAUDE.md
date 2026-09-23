@@ -57,10 +57,14 @@ at once. Tick an item off in the same commit that lands it, and delete ticked
 items once a few have built up. Add to this list whenever a message raises
 something that is not being done immediately.
 
-**Nothing on disk needs preserving.** There are no real Atlas projects yet, so
-`.atlas/` and `data/scan.json` can change shape freely - rename a field,
-delete the files, regenerate them. Do not add compatibility shims for formats
-nobody has.
+**Real boards exist now.** Atlas is in use, so `.atlas/` has boards and
+annotations nobody wants to redraw. Changing a format is still allowed when
+it buys robustness - but an old board must still open where it was, and the
+way to know is to load one and compare against the previous commit, not to
+reason about it. That is how the end-anchor change found it was collapsing
+old windows. A fallback of one `??` for a field older boards lack is fine; a
+parallel code path for an old format is not. `data/scan.json` is still free
+to change shape.
 
 ### Boards as a diagramming surface
 
@@ -181,18 +185,67 @@ a test that was checked to fail against the old code first.
       and the fly-to for an annotation, which had one and ignored it.
 - [x] `.atlas/` is written with LF - see the storage contract.
 
-### Presentation boards
+### Board tours
 
-Not started, and not next. A board that is a sequence rather than a
-surface: slides you step through with the arrow keys, for walking someone
-through how a change was made or how a part of the system works. Each
-slide is a camera position and a set of items, so much of it already
-exists - `Tour` steps between bookmarks and `Flight` does the movement
-between them. The open questions are whether a slide is a board, a group
-of boards, or a saved view of one board, and what a slide does that a
-tour stop does not.
+Replaces "presentation boards", and answers its open question: a slide is a
+saved view of one board. Today a tour is a list of *map* bookmarks, played
+with Space and the arrows, with `Flight` easing position and zoom between
+stops. None of that knows about boards, and nothing lets you see, order or
+prune the stops.
 
-- [ ] Presentation boards: slides, stepped with the arrows.
+- [ ] Stops on a board: frame the view, capture it (position and zoom),
+      move, capture again. Stored in the board's own json so a tour travels
+      with the board it walks through.
+- [ ] Play steps between them with `Flight`, like slides - the easing that
+      already exists for bookmarks.
+- [ ] A side panel listing the stops: reorder by dragging, delete, click one
+      to fly there. Registered in `BuildLayers` like every other overlay.
+- [ ] Tours only on boards. Remove tours *and* bookmarks from the map: a
+      bookmark is a one-stop tour, and something to focus on belongs on a
+      board. `Bookmarks.cs`, `BookmarkOverlay.cs` and the `B`/tour keys on
+      the map go.
+
+### Boards panel
+
+- [ ] Show what is being dragged while it is dragged - a ghost of the row
+      and where it would land. Today nothing moves until the drop.
+- [ ] Escape cancels a drag in progress.
+- [ ] Groups can be reordered by dragging, and keep that order, rather than
+      sorting alphabetically.
+- [ ] Group headers look like headers. They read as a board row shifted
+      left.
+
+### Copy, paste and search on boards
+
+- [x] ctrl+C and ctrl+V, for every kind of item. The copy listed fields by
+      hand and dropped everything added since; it clones through json now.
+      Arrows copied with their ends stay tied to the copies; alone, they
+      become loose lines in the shape they were drawn.
+- [x] ctrl+F reaches every window onto a file, not only the first one made.
+      A match is listed once per window showing its line.
+- [x] Wall handles are drawn small; a file window keeps its long clip bars.
+
+### Anchoring, under a run of edits
+
+`EditScenarioTests` makes eleven edits in a row and re-anchors after each,
+because a rule that survives one edit can still drift on the second.
+
+- [x] A cropped window's end is anchored, to the end of the declaration it
+      sits in, so a method that grows is still shown to its closing brace.
+- [x] A shape's bottom follows the declaration it is in, not the one its
+      top is in, so a box round two methods grows with the second.
+- [x] The fingerprint is a hash per line, so adding a line right next to a
+      marked one no longer breaks it.
+- [ ] Old single-hash fingerprints in `annotations.json` are never
+      rewritten - nothing re-anchors an annotation and saves it. They still
+      match whole, as before, but miss the per-line tolerance until the
+      annotation is made again.
+- [ ] Snapping drawings to a character grid over file windows was proposed
+      as a way to make pinning reliable. Not done: the failures the scenario
+      test found were about which *line* is which after an edit, and a grid
+      only changes where inside a line something sits - that part (`Dy`) has
+      never been the problem. Revisit only if a drawing is found landing a
+      fraction of a line off.
 
 ### Canvas and interaction
 
@@ -269,6 +322,19 @@ covered by `AnchorTests` and works.
       line one of a three thousand line file.
 - [ ] The gathered change view still has not been driven by hand on a repo
       with real merge commits.
+- [x] The gathered change view is lit the way the map is: zoomed out past
+      readable text a window is veiled and its changed runs glow, drawn by
+      the same `DrawGlowBands`. Close in it keeps the tint, as the map does.
+- [ ] Show the lines a change *removed*, as text, not only a red line
+      where they were. The big one for review. Every line to y mapping -
+      anchors, picks, highlights, clip handles, search - assumes a window's
+      rows are the file's lines, so ghost rows cannot simply be inserted
+      into the real ones. Plan first: probably a read-only rendering where
+      the removed text is laid out between the surviving lines only in the
+      change view, whose windows nothing is pinned to. Needs the removed
+      text from the diff, which `GitReview` currently throws away.
+- [ ] The debug readout in the top left sits under the "map" back button on
+      a board, so both are unreadable.
 - [x] The gathered view rebuilds whenever the change set does. Picking a
       commit in the panel used to leave the previous commit's windows up,
       so only the files both commits happened to touch appeared to change.
@@ -513,6 +579,16 @@ a board opens, so the same code stays in the same place and the drawings need
 no anchors of their own. `Scene.Reanchor(window)` records a deliberate move -
 a clip, a typed range - or the next open drags it back. Covered by
 `WindowDriftTests`.
+
+The *end* of a range is anchored separately (`EndSymbol`, `EndOffset`,
+`Anchors.CaptureEnd`), measured from the end of the declaration it sits in:
+a window cropped to a method keeps showing its closing brace as the method
+grows, and a box round two methods grows with the second. And a fingerprint
+is one hash per line, matched partially - the line itself must match, and
+across a whole file half its neighbours too - because the edit that happens
+most is one right next to the line that was marked. Covered by
+`EditScenarioTests`, which is the test to extend: it makes a run of edits,
+and one edit at a time is how both of these went unnoticed.
 
 **`Symbols.ForFile` caches a parse per path and nothing in the app used to
 invalidate it.** Re-anchoring exists because the file may have changed, so it

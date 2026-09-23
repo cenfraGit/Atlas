@@ -754,7 +754,7 @@ public sealed class SceneView : Control
         {
             items.Add(ContextActions.Item("Bring to front", BringToFront));
             items.Add(ContextActions.Item("Send to back", SendToBack));
-            items.Add(ContextActions.Item("Copy", () => CopyPicked(picked)));
+            items.Add(ContextActions.Item("Copy  ctrl+C", () => CopyPicked(picked)));
             items.Add(ContextActions.Item(picked.Count > 1 ? "Remove these" : "Remove", DeletePicked));
         }
 
@@ -766,7 +766,7 @@ public sealed class SceneView : Control
         items.Add(ContextActions.Item("Add image...", AddImageFromDisk));
         items.Add(ContextActions.Item("Paste image (ctrl+V)", PasteImage));
         if (_clipboard.Count > 0)
-            items.Add(ContextActions.Item($"Paste {_clipboard.Count}", () => Paste(p)));
+            items.Add(ContextActions.Item($"Paste {_clipboard.Count}  ctrl+V", () => Paste(p)));
         items.Add(ContextActions.Item("Back to the map", LeaveBoard));
         OpenMenu(items);
     }
@@ -2611,6 +2611,12 @@ public sealed class SceneView : Control
     }
 
     readonly List<BoardItem> _clipboard = [];
+
+    /// <summary>where the pointer last was, which is where ctrl+V pastes.</summary>
+    Point _pointer;
+
+    List<BoardItem> PickedItems() =>
+        _scene.ActiveBoard?.Items.Where(i => _scene.Picked.Contains(i.Id)).ToList() ?? [];
     readonly History _history = new();
 
     /// <summary>whether a gesture has left anything to undo. For the tests:
@@ -2664,41 +2670,79 @@ public sealed class SceneView : Control
         Saved("redo");
     }
 
+    /// <summary>copy by round trip through json, so every field comes along.
+    /// the copy used to list fields by hand and dropped whatever was added
+    /// after it was written: a stroke's ink, an arrow's ties, fill, weight,
+    /// size, a window's anchor.</summary>
     void CopyPicked(List<BoardItem> picked)
     {
+        if (picked.Count == 0) return;
         _clipboard.Clear();
+        var ids = picked.Select(i => i.Id).ToHashSet();
         foreach (var it in picked)
-            _clipboard.Add(new BoardItem
+        {
+            var copy = System.Text.Json.JsonSerializer.Deserialize<BoardItem>(
+                System.Text.Json.JsonSerializer.Serialize(it))!;
+            // a tie to something left behind becomes a loose end where the
+            // line is drawn now, or the copy would point back at the original
+            if (copy.Kind == "arrow")
             {
-                Id = it.Id, Kind = it.Kind, File = it.File, Line = it.Line, EndLine = it.EndLine,
-                Text = it.Text, X = it.X, Y = it.Y, W = it.W, H = it.H, Color = it.Color,
-            });
+                var (a, b) = _scene.ArrowEnds(it);
+                if (copy.From is not null && !ids.Contains(copy.From)) { copy.From = null; copy.X = a.X; copy.Y = a.Y; }
+                if (copy.To is not null && !ids.Contains(copy.To)) { copy.To = null; copy.X2 = b.X; copy.Y2 = b.Y; }
+            }
+            _clipboard.Add(copy);
+        }
+        // replaces whatever is on the system clipboard, so a screenshot taken
+        // before this copy does not win the next ctrl+V
+        TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync($"{picked.Count} atlas item(s)");
         Toast($"copied {picked.Count}");
     }
 
-    /// <summary>a copied file window is a reference, not a copy of the code.</summary>
-    void Paste(Point at)
+    /// <summary>a copied file window is a reference, not a copy of the code.
+    /// the pasted set keeps its shape, with its top left corner at the point.</summary>
+    public void Paste(Point at)
     {
-        if (_scene.ActiveBoard is not { } board || _clipboard.Count == 0) return;
+        if (_scene.ActiveBoard is not { } board || _scene.BoardReadOnly || _clipboard.Count == 0) return;
         Remember();
         var (wx, wy) = WorldAt(at);
-        float ox = _clipboard.Min(i => i.X), oy = _clipboard.Min(i => i.Y);
+        var boxes = _clipboard.Select(_scene.BoundsOf).ToList();
+        float dx = wx - boxes.Min(r => r.Left), dy = wy - boxes.Min(r => r.Top);
 
-        _scene.Picked.Clear();
+        var fresh = _clipboard.ToDictionary(i => i.Id, _ => BookmarkStore.NewId());
+        var pasted = new List<BoardItem>();
         foreach (var it in _clipboard)
         {
-            var copy = new BoardItem
-            {
-                Id = BookmarkStore.NewId(), Kind = it.Kind, File = it.File,
-                Line = it.Line, EndLine = it.EndLine, Text = it.Text,
-                X = wx + (it.X - ox), Y = wy + (it.Y - oy),
-                W = it.W, H = it.H, Color = it.Color,
-            };
-            board.Items.Add(copy);
+            var copy = System.Text.Json.JsonSerializer.Deserialize<BoardItem>(
+                System.Text.Json.JsonSerializer.Serialize(it))!;
+            copy.Id = fresh[it.Id];
+            if (copy.From is not null) copy.From = fresh[copy.From];
+            if (copy.To is not null) copy.To = fresh[copy.To];
+            Scene.Move(copy, dx, dy);
+            pasted.Add(copy);
+        }
+
+        // added before pinning, so a drawing pasted along with its window
+        // pins to the new window rather than the one it was copied off
+        board.Items.AddRange(pasted);
+        _scene.Picked.Clear();
+        foreach (var copy in pasted)
+        {
+            _scene.PinOver(copy);
             _scene.Picked.Add(copy.Id);
         }
         _boardStore?.Save(board);
-        Saved($"pasted {_clipboard.Count}");
+        InvalidateVisual();
+        Saved($"pasted {pasted.Count}");
+    }
+
+    /// <summary>ctrl+V: an image on the system clipboard, else what was
+    /// copied here.</summary>
+    void PasteAny()
+    {
+        if (_scene.ActiveBoard is null || _scene.BoardReadOnly) return;
+        if (_clipboard.Count > 0 && !ClipboardImage.Has()) { Paste(_pointer); return; }
+        PasteImage();
     }
 
     void EditRange(BoardItem window)
@@ -3280,6 +3324,7 @@ public sealed class SceneView : Control
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         var p = e.GetPosition(this);
+        _pointer = p;
         if (_scene.ActiveBoard is null) UpdateHoverLine(p);
 
         if (!_drag) return;
@@ -3595,6 +3640,8 @@ public sealed class SceneView : Control
             // could not be switched between zoom and scroll once you were in
             switch (key)
             {
+                // copying off a generated board onto one of your own is fine
+                case Key.C when _ctrl: CopyPicked(PickedItems()); return;
                 case Key.C: LeaveBoard(); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
@@ -3621,7 +3668,8 @@ public sealed class SceneView : Control
                     RefreshBoardBar();
                     Toast(SnapToGrid ? "snap on" : "snap off");
                     return;
-                case Key.V when _ctrl: PasteImage(); return;
+                case Key.C when _ctrl: CopyPicked(PickedItems()); return;
+                case Key.V when _ctrl: PasteAny(); return;
                 case Key.Z when _ctrl: Undo(); return;
                 case Key.Y when _ctrl: Redo(); return;
                 case Key.Y: AddArrow(); return;

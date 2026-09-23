@@ -180,6 +180,17 @@ public static class ClipboardImage
     [System.Runtime.InteropServices.DllImport("kernel32.dll")]
     static extern nuint GlobalSize(nint handle);
 
+    /// <summary>whether there is an image, or a file from explorer, to paste.
+    /// asking does not need the clipboard open.</summary>
+    public static bool Has()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        const uint CfHdrop = 15;
+        uint png = RegisterClipboardFormat("PNG");
+        return IsClipboardFormatAvailable(CfDib) || IsClipboardFormatAvailable(CfDibV5)
+            || IsClipboardFormatAvailable(CfHdrop) || png != 0 && IsClipboardFormatAvailable(png);
+    }
+
     public static SKBitmap? Read()
     {
         if (!OperatingSystem.IsWindows()) return null;

@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace Atlas;
 
@@ -70,6 +71,18 @@ public sealed class BoardOverlay : Border
         };
         _list.DoubleTapped += (_, _) => Commit();
         _list.SelectionChanged += (_, _) => { DropHeaders(); Reflect(); };
+
+        // a heading lights up while it is pressed - that says a drag of the
+        // group has begun - but not merely hovered, which made headings look
+        // like buttons
+        _list.ContainerPrepared += (_, e) =>
+            e.Container.Classes.Set("header", e.Index < _rows.Count && _rows[e.Index].IsHeader);
+        _list.Styles.Add(new Avalonia.Styling.Style(x => x.OfType<ListBoxItem>().Class("header")
+            .Class(":pointerover").Not(y => y.Class(":pressed"))
+            .Template().OfType<Avalonia.Controls.Presenters.ContentPresenter>().Name("PART_ContentPresenter"))
+        {
+            Setters = { new Avalonia.Styling.Setter(Avalonia.Controls.Presenters.ContentPresenter.BackgroundProperty, Brushes.Transparent) },
+        });
         _list.AddHandler(PointerPressedEvent, OnPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _list.AddHandler(PointerMovedEvent, OnMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _list.AddHandler(PointerReleasedEvent, OnReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);

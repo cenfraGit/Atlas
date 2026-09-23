@@ -192,4 +192,45 @@ public class BoardPanelTests
         r.Panel.HandleKey(Key.Down);                    // over the alpha heading
         Assert.Equal("a1", Assert.Single(r.Panel.Selected).Name);
     }
+
+    static Avalonia.Media.IBrush? Behind(Rig r, int row)
+    {
+        var list = r.Panel.GetVisualDescendants().OfType<ListBox>().Single();
+        var item = (ListBoxItem)list.ContainerFromIndex(row)!;
+        return item.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>()
+            .First(p => p.Name == "PART_ContentPresenter").Background;
+    }
+
+    static bool Clear(Avalonia.Media.IBrush? b) =>
+        b is null || b is Avalonia.Media.ISolidColorBrush { Color.A: 0 };
+
+    /// <summary>a heading does not light up on hover - that made headings
+    /// look like buttons - but a board row still does.</summary>
+    [AvaloniaFact]
+    public void HoveringAHeadingDoesNotLightItUp()
+    {
+        using var r = Open();
+        int heading = RowOf(r, "[alpha]"), board = RowOf(r, "a2");
+
+        r.Window.MouseMove(Centre(r, heading));
+        Assert.True(Clear(Behind(r, heading)), "a hovered heading was lit");
+
+        r.Window.MouseMove(Centre(r, board));
+        Assert.False(Clear(Behind(r, board)), "a hovered board row was not");
+    }
+
+    /// <summary>pressing one does light it up: that is the sign a drag of
+    /// the group has begun.</summary>
+    [AvaloniaFact]
+    public void PressingAHeadingLightsItUp()
+    {
+        using var r = Open();
+        int heading = RowOf(r, "[alpha]");
+
+        r.Window.MouseMove(Centre(r, heading));
+        r.Window.MouseDown(Centre(r, heading), MouseButton.Left);
+
+        Assert.False(Clear(Behind(r, heading)), "a pressed heading was not lit");
+        r.Window.MouseUp(Centre(r, heading), MouseButton.Left);
+    }
 }

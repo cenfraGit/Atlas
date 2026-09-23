@@ -1078,7 +1078,43 @@ public sealed class SceneView : Control
         Cursor = _armBrush || _armEraser || _armShape is not null || _armArrow
                 ? new Cursor(StandardCursorType.Cross)
             : panning ? (_drag ? Cursors.Closed : Cursors.Open)
-            : new Cursor(StandardCursorType.DragMove);
+            : new Cursor(HandleCursor ?? StandardCursorType.DragMove);
+    }
+
+    /// <summary>the resize cursor for the handle under the pointer, or null
+    /// when it is not over one. Worked out on hover and left alone during a
+    /// drag, so a resize keeps the cursor it started with.</summary>
+    public StandardCursorType? HandleCursor { get; private set; }
+
+    /// <summary>which resize cursor, if any, the pointer earns where it is.
+    ///
+    /// The handles moved the pointer's meaning without saying so: the cursor
+    /// stayed the move cross over a corner, so there was no telling a grab
+    /// that would resize from one that would drag. Asked in the order a press
+    /// resolves in - corner, then wall - so the cursor says what a press does.</summary>
+    void HoverHandles(Point p)
+    {
+        StandardCursorType? want = null;
+        bool armed = _armBrush || _armEraser || _armShape is not null || _armArrow;
+        if (Editing && !_spaceDown && !armed && !_scene.BoardReadOnly)
+        {
+            var (wx, wy) = WorldAt(p);
+            if (_scene.GripAt(wx, wy) is { } grip)
+                want = grip.Corner switch
+                {
+                    Scene.GripLeft | Scene.GripTop => StandardCursorType.TopLeftCorner,
+                    Scene.GripTop => StandardCursorType.TopRightCorner,
+                    Scene.GripLeft => StandardCursorType.BottomLeftCorner,
+                    _ => StandardCursorType.BottomRightCorner,
+                };
+            else if (_scene.EdgeAt(wx, wy) is { } wall)
+                want = wall.Edge is Scene.Top or Scene.Bottom
+                    ? StandardCursorType.SizeNorthSouth
+                    : StandardCursorType.SizeWestEast;
+        }
+        if (want == HandleCursor) return;
+        HandleCursor = want;
+        ApplyCursor();
     }
 
     void Select(int fileIndex, int from, int to)
@@ -3482,6 +3518,7 @@ public sealed class SceneView : Control
         var p = e.GetPosition(this);
         _pointer = p;
         if (_scene.ActiveBoard is null) UpdateHoverLine(p);
+        else if (!_drag) HoverHandles(p);
 
         if (!_drag) return;
         _dragDist += Math.Abs(p.X - _last.X) + Math.Abs(p.Y - _last.Y);

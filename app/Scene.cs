@@ -1238,7 +1238,6 @@ public sealed class Scene : IDisposable
     void DrawReviewBlocks(SKCanvas canvas)
     {
         float min = 9f / CamS;
-        float minRun = 3.5f / CamS;
         using var silhouette = new SKPaint { IsAntialias = false };
         using var fill = new SKPaint { IsAntialias = false };
         using var glow = new SKPaint
@@ -1273,30 +1272,40 @@ public sealed class Scene : IDisposable
 
             // a card forced up to the minimum size has to stretch its line
             // positions with it, or every band lands in the top corner
-            float k = h / Math.Max(1f, f.H);
-            float Top(int line) => y + (Data.HeaderH + line * Data.LineH) * k;
-
-            void Bands(IEnumerable<int> lines, SKColor col, bool thin)
-            {
-                foreach (var (a, b) in Runs(lines))
-                {
-                    float top = Top(a);
-                    float bottom = thin ? top : Top(b) + Data.LineH * k;
-                    if (bottom - top < minRun) bottom = top + minRun;
-
-                    glow.Color = col.WithAlpha(120);
-                    canvas.DrawRect(x - min * 0.3f, top - minRun, w + min * 0.6f,
-                        bottom - top + minRun * 2, glow);
-                    fill.Color = col;
-                    canvas.DrawRect(x, top, w, bottom - top, fill);
-                }
-            }
-
-            // removals last: they are points rather than spans, and a
-            // deletion inside a block of additions has to stay visible
-            Bands(change.AddedLines, AddCol, thin: false);
-            foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
+            DrawGlowBands(canvas, change, x, y, w, h / Math.Max(1f, f.H), 1f / CamS, fill, glow);
         }
+    }
+
+    /// <summary>the changed runs of one card as solid lit bands, which is
+    /// what the map looks like zoomed out. <paramref name="k"/> stretches
+    /// card-local line positions; <paramref name="px"/> is one screen pixel
+    /// in the canvas's current units, so the floors hold at any zoom.</summary>
+    void DrawGlowBands(SKCanvas canvas, FileChange change, float x, float y, float w, float k, float px,
+        SKPaint fill, SKPaint glow)
+    {
+        float min = 9f * px, minRun = 3.5f * px;
+        float Top(int line) => y + (Data.HeaderH + line * Data.LineH) * k;
+
+        void Bands(IEnumerable<int> lines, SKColor col, bool thin)
+        {
+            foreach (var (a, b) in Runs(lines))
+            {
+                float top = Top(a);
+                float bottom = thin ? top : Top(b) + Data.LineH * k;
+                if (bottom - top < minRun) bottom = top + minRun;
+
+                glow.Color = col.WithAlpha(120);
+                canvas.DrawRect(x - min * 0.3f, top - minRun, w + min * 0.6f,
+                    bottom - top + minRun * 2, glow);
+                fill.Color = col;
+                canvas.DrawRect(x, top, w, bottom - top, fill);
+            }
+        }
+
+        // removals last: they are points rather than spans, and a
+        // deletion inside a block of additions has to stay visible
+        Bands(change.AddedLines, AddCol, thin: false);
+        foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
     }
 
     /// <summary>close in the code is readable, so a changed file gets an outline
@@ -2083,8 +2092,26 @@ public sealed class Scene : IDisposable
             }
             // the same glow the map uses, in the same card-local coordinates.
             // Without it the gathered change view shows the right code and no
-            // indication of what about it changed, which is most of the point
-            if (Review is not null && Review.ByPath.ContainsKey(f.P)) DrawReviewLines(canvas, f);
+            // indication of what about it changed, which is most of the point.
+            // Too far out to read, it is the map's zoomed out look as well -
+            // dark, with the changes lit - rather than full bright bars with a
+            // tint over them nobody could see
+            if (Review is not null && Review.ByPath.TryGetValue(f.P, out var changed))
+            {
+                if (drewText) DrawReviewLines(canvas, f);
+                else
+                {
+                    float px = 1f / (CamS * k);
+                    using var fill = new SKPaint { IsAntialias = false };
+                    using var glow = new SKPaint
+                    {
+                        IsAntialias = true,
+                        MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 7f * px),
+                    };
+                    canvas.DrawRect(0, 0, f.W, f.H, _veil);
+                    DrawGlowBands(canvas, changed, 0, 0, f.W, 1f, px, fill, glow);
+                }
+            }
             DrawBoardPicks(canvas, f, i);
             canvas.Restore();
             canvas.Restore();

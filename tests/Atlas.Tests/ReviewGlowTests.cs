@@ -377,6 +377,42 @@ public class ReviewGlowTests
                     $"wiping a file out lit {Lit(whole)} and deleting two lines lit {Lit(part)}");
         }
 
+        /// <summary>the gathered change view, zoomed out, looks like the map
+        /// zoomed out: the window dark, the changed runs lit. It used to keep
+        /// its full bright bars with a faint tint over them, which at that
+        /// distance is no sign of change at all.</summary>
+        [Fact]
+        public void AChangeWindowTooFarOutToReadIsDarkWithTheChangesLit()
+        {
+            var (scene, repo, f) = Reviewing(6, 0, addedAt: [100, 101, 102, 103, 104, 105]);
+            using (repo)
+            using (scene)
+            {
+                var board = new Board { Id = "c", Name = "changes" };
+                board.Items.Add(new BoardItem { Id = "w", Kind = "file", File = f.P, Line = 0, EndLine = -1, X = 0, Y = 0, W = 620 });
+                scene.ActiveBoard = board;
+                scene.BoardReadOnly = true;
+                scene.CamX = 310;
+                scene.CamY = 300;
+                scene.CamS = 0.12f;
+                scene.Tier = Scene.TierFor(scene.CamS);
+
+                var with = Pixels(scene);
+                int lit = with.Count(c => c.Green > 150 && c.Green > c.Red + 60);
+
+                var set = scene.Review;
+                scene.Review = null;
+                var without = Pixels(scene);
+                scene.Review = set;
+
+                static double Mean(SKColor[] px) => px.Average(c => c.Red + c.Green + c.Blue);
+                Assert.True(lit > 0, "no changed run was lit");
+                Assert.True(Mean(with) < Mean(without),
+                    $"the window was no darker for being in review: {Mean(with):F1} against {Mean(without):F1}");
+                scene.ActiveBoard = null;
+            }
+        }
+
         [Fact]
         public void CloseInTheChangedLinesAreLitAndTheRestIsNot()
         {

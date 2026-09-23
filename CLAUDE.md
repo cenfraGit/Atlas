@@ -634,6 +634,14 @@ them, then `PinLoose` picks up anything from a board made before this - where
 it is now, since there is no record of where it was meant to be. Covered by
 `PinnedItemTests`.
 
+**Every gesture that changes what a drawing covers re-pins it on release.**
+A pin records the line under an item and, for a shape, where its bottom
+sits; reopening the board puts the item back from that record. Only a move
+re-pinned: a resize by corner or wall, and dragging an arrow's end, left the
+record from when the item was drawn, so reopening put the old size or the
+old end back. A new gesture that reshapes an item re-pins it when it is let
+go, or it has the same bug. Covered by `ResizeRepinTests`.
+
 **`FileRec.N` is the line count from the scan, and a scan is taken once.**
 Edit a file while Atlas is open - or open it on a repo another session is
 pushing to - and the scan is short. Clamping a window to that number showed

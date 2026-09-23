@@ -3432,6 +3432,15 @@ public sealed class SceneView : Control
             e.Pointer.Capture(null);
             return;
         }
+        // an arrow whose end was dragged: its start is what it is pinned by,
+        // so a loose one is pinned again where it now starts, and one tied at
+        // both ends goes where its ties take it and needs no pin at all
+        if (_arrowEnd is { } bent)
+        {
+            if (bent.From is null || bent.To is null) _scene.PinOver(bent);
+            else bent.Host = null;
+            _boardDirty = true;
+        }
         _arrowEnd = null;
 
         if (_band) { _band = false; FadeRubberband(); }
@@ -3440,6 +3449,15 @@ public sealed class SceneView : Control
         // so this is where it gains a window - or loses one, by being
         // dragged off onto bare canvas
         if (_dragItem is not null) RepinPicked();
+        // and a resize changes what a drawing covers as much as a move does.
+        // It was left out, so the anchors stayed as they were when the box
+        // was drawn, and reopening the board put the old size back. A file
+        // window records its own crop as it goes, and pins nothing of its own
+        if (_resizing is { Kind: not "file" } resized)
+        {
+            _scene.PinOver(resized);
+            _boardDirty = true;
+        }
 
         _dragItem = null;
         _resizing = null;

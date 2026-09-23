@@ -1691,6 +1691,7 @@ public sealed class SceneView : Control
             items.Add(("previous commit", "[", () => StepCommit(-1)));
             items.Add(("next commit", "]", () => StepCommit(1)));
             items.Add(("commits", "H", ToggleCommits));
+            items.Add((_showRemoved ? "hide removed" : "show removed", "R", ToggleRemoved));
             items.Add(("changed code", "C", ToggleChangeBoard));
             items.Add(("leave review", "esc", LeaveReview));
         }
@@ -1818,20 +1819,33 @@ public sealed class SceneView : Control
         _prCommits = _git.CommitsOf(target);
         _commitAt = -1;
 
-        // draw the repo as it was at the branch head. without this a branch
-        // older than a restructure changes paths that no longer exist, and
-        // lights up nothing at all
-        //
+        var whole = _git.Whole(target);
+        ShowTree(target, whole);
+        _commitsPanel?.Show(target.Label, _prCommits);
+        ShowChanges(whole);
+    }
+
+    /// <summary>draw the repo as it was at the target's head. Without this a
+    /// branch older than a restructure changes paths that no longer exist,
+    /// and lights up nothing at all.
+    ///
+    /// With removed lines shown, each changed file's text has what the whole
+    /// change took out put back where it was, so the cards contain it: the
+    /// snapshot is temporary anyway, thrown away when review ends. Built once
+    /// for the whole change - stepping through the commits keeps it, rather
+    /// than rebuilding a layout that would shift under you at every step.</summary>
+    void ShowTree(ReviewTarget target, ChangeSet? whole)
+    {
+        if (_git is null) return;
         // the same rule the working tree is filtered by, toggle included
         var snapshot = _git.Snapshot(target.HeadSha, path => Scanner.Wanted(path, _scanOptions));
-        if (snapshot is not null && snapshot.Count > 0)
-        {
-            var data = Scanner.BuildFrom(_scene.Data.Root, snapshot);
-            _scene.ShowSnapshot(data, path => snapshot.GetValueOrDefault(path));
-        }
+        if (snapshot is null || snapshot.Count == 0) return;
 
-        _commitsPanel?.Show(target.Label, _prCommits);
-        ShowChanges(_git.Whole(target));
+        var (text, splices) = _showRemoved && whole is not null
+            ? Splice.All(snapshot, whole)
+            : (snapshot, new Dictionary<string, Splice>());
+        var data = Scanner.BuildFrom(_scene.Data.Root, text);
+        _scene.ShowSnapshot(data, path => text.GetValueOrDefault(path), splices);
     }
 
     /// <summary>show or hide the commit list. It is a full height strip down
@@ -1858,6 +1872,8 @@ public sealed class SceneView : Control
     void ShowChanges(ChangeSet? set)
     {
         if (set is null) return;
+        // into the rows of the spliced text, if the removed lines are in it
+        set = Splice.Remap(set, _scene.Splices, whole: _commitAt < 0);
         _scene.Review = set;
         _scene.Highlight = null;
 
@@ -2145,7 +2161,7 @@ public sealed class SceneView : Control
         // a window scales its card, so a line's height on the board is not
         // the file's line height
         float k = window.W / f.W;
-        float y = window.Y + Scene.HeadOf(window) + (line - from + 0.5f) * _scene.Data.LineH * k;
+        float y = window.Y + Scene.WinHeadH + (line - from + 0.5f) * _scene.Data.LineH * k;
 
         _scene.Highlight = (fileIndex, m.Line, m.Line);
         Select(fileIndex, m.Line, m.Line);
@@ -2342,11 +2358,18 @@ public sealed class SceneView : Control
 
     void ToggleRemoved()
     {
+        if (_git is null || _target is null) return;
         _showRemoved = !_showRemoved;
-        // stay where you are: this is looking at the same change another way
-        RebuildChangeBoard(frame: false);
+        // the text itself changes, so the tree is drawn again - with the
+        // camera left where it is: this is the same change, seen another way
+        float x = _scene.CamX, y = _scene.CamY, s = _scene.CamS;
+        ShowTree(_target, _git.Whole(_target));
+        ShowChanges(_commitAt < 0 ? _git.Whole(_target) : _git.OfCommit(_prCommits[_commitAt]));
+        if (_scene.BoardReadOnly) RebuildChangeBoard(frame: false);
+        else (_scene.CamX, _scene.CamY, _scene.CamS) = (x, y, s);
         Toast(_showRemoved ? "removed lines shown" : "removed lines hidden");
         RefreshHints();
+        InvalidateVisual();
     }
 
     /// <summary>after stepping to another commit, gather that one instead.</summary>
@@ -3773,6 +3796,7 @@ public sealed class SceneView : Control
                 case Key.Down when _tour is null: StepCommit(1); return;
                 case Key.Up when _tour is null: StepCommit(-1); return;
                 case Key.H: ToggleCommits(); return;
+                case Key.R when !_scene.BoardReadOnly: ToggleRemoved(); return;
             }
         }
 

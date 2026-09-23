@@ -18,13 +18,10 @@ namespace Atlas;
 /// the change landed in. The changed lines glow, so finding them inside a
 /// whole file is no harder than finding them on the map.
 ///
-/// What a change removed is shown too, where it was: the file is cut at each
-/// removal into a stack of cropped windows, with the old lines in a red block
-/// between them. Every window in the stack is an ordinary one, so glow, line
-/// numbers, annotations and search work on it untouched - the alternative,
-/// rows inside one window that are not the file's lines, would have had to be
-/// taught to every one of those. A header at each cut reads like a diff's
-/// hunk line.</summary>
+/// What a change removed is in the windows too, where it was, because the
+/// review's text has it put back (<see cref="Splice"/>) - the same text the
+/// map's cards are drawn from. A file the change deleted has no card and no
+/// window, so it is shown as a red block of its old text.</summary>
 public static class ChangeBoard
 {
     /// <summary>a run of lines worth showing, in zero-based file lines.</summary>
@@ -83,80 +80,47 @@ public static class ChangeBoard
 
     /// <summary>build the board. Files come out biggest churn first, so the
     /// heart of the change is the first thing read. With
-    /// <paramref name="removed"/> off, each file is one whole window again.</summary>
+    /// <paramref name="removed"/> off, a deleted file is left out, the way
+    /// removed lines are left out of the text.</summary>
     public static Board Build(ChangeSet set, Scene scene, string name, bool removed = true)
     {
         var board = new Board { Id = "changes", Name = name };
 
-        var stacks = new List<List<(BoardItem Item, float H)>>();
+        var windows = new List<(BoardItem Item, float H)>();
         foreach (var change in set.Files)
         {
             int i = scene.IndexOfPath(change.Path);
-            var parts = i >= 0
-                ? Stack(change, scene, scene.Data.Files[i], removed)
-                // not in the scan because the change deleted it: the whole
-                // old file, as one block. Anything else the caption reports
-                : removed ? Deleted(change, scene) : [];
-            if (parts.Count == 0) continue;
-            stacks.Add(parts);
-            // files, not windows: one file cut ten times is still one file
-            if (stacks.Count >= MaxWindows) break;
-        }
-
-        Pack(stacks, board);
-        return board;
-    }
-
-    /// <summary>one file, cut wherever lines were removed, with the removed
-    /// lines between the pieces.</summary>
-    static List<(BoardItem Item, float H)> Stack(FileChange change, Scene scene, FileRec file, bool removed)
-    {
-        var parts = new List<(BoardItem, float)>();
-        int n = Math.Max(1, file.N);
-        float step = scene.Data.LineH * (WindowW / file.W);
-
-        void Window(int from, int to)
-        {
-            var item = new BoardItem
+            if (i >= 0)
             {
-                Id = BoardStore.NewId(), Kind = "file", File = change.Path,
-                Line = from, EndLine = to, W = WindowW,
-                Continued = parts.Count > 0,
-            };
-            parts.Add((item, scene.ItemHeight(item)));
-        }
-
-        int next = 0;
-        if (removed)
-            foreach (var group in change.RemovedText.GroupBy(b => Math.Clamp(b.At, 0, n)).OrderBy(g => g.Key))
-            {
-                if (group.Key > next) Window(next, group.Key - 1);
-                var lines = group.SelectMany(b => b.Lines).ToList();
-                parts.Add(Block(change.Path, group.First().OldLine, lines, step, 0));
-                next = Math.Max(next, group.Key);
+                var item = new BoardItem
+                {
+                    Id = BoardStore.NewId(), Kind = "file", File = change.Path,
+                    Line = 0, EndLine = Math.Max(0, scene.Data.Files[i].N - 1), W = WindowW,
+                };
+                windows.Add((item, scene.ItemHeight(item)));
             }
-        if (next <= n - 1) Window(next, n - 1);
-        return parts;
+            // not in the scan because the change deleted it: the whole old
+            // file, as one block. Anything else the caption reports
+            else if (removed && Deleted(change, scene) is { } block) windows.Add(block);
+            if (windows.Count >= MaxWindows) break;
+        }
+
+        Pack(windows, board);
+        return board;
     }
 
     /// <summary>a file the change deleted, which the scan cannot know about.
     /// It gets a header, since there is no window above it to say what it is.</summary>
-    static List<(BoardItem Item, float H)> Deleted(FileChange change, Scene scene)
+    static (BoardItem Item, float H)? Deleted(FileChange change, Scene scene)
     {
         var lines = change.RemovedText.SelectMany(b => b.Lines).ToList();
-        if (change.Added > 0 || lines.Count == 0) return [];
+        if (change.Added > 0 || lines.Count == 0) return null;
         float cardW = scene.Data.Files.Count > 0 ? scene.Data.Files[0].W : 240;
-        float step = scene.Data.LineH * (WindowW / cardW);
-        return [Block(change.Path, 0, lines, step, Scene.WinHeadH)];
-    }
-
-    static (BoardItem Item, float H) Block(string path, int oldLine, List<string> lines, float step, float head)
-    {
-        float h = head + lines.Count * step;
+        float h = Scene.WinHeadH + lines.Count * scene.Data.LineH * (WindowW / cardW);
         return (new BoardItem
         {
-            Id = BoardStore.NewId(), Kind = "removed", File = path,
-            Line = oldLine, Text = string.Join("\n", lines), W = WindowW, H = h,
+            Id = BoardStore.NewId(), Kind = "removed", File = change.Path,
+            Line = 0, Text = string.Join("\n", lines), W = WindowW, H = h,
         }, h);
     }
 
@@ -176,6 +140,16 @@ public static class ChangeBoard
             if (i < 0) continue;
 
             var file = scene.Data.Files[i];
+            // the whole change's removals are rows in the text now rather than
+            // positions in the change, and are as much a change to land on
+            if (scene.Splices.TryGetValue(item.File, out var spliced) && spliced.RemovedRows.Count > 0)
+            {
+                var both = new FileChange(change.Path, change.Added, change.Removed);
+                both.AddedLines.AddRange(change.AddedLines);
+                both.AddedLines.AddRange(spliced.RemovedRows);
+                both.RemovedAt.AddRange(change.RemovedAt);
+                change = both;
+            }
             var hunks = HunksOf(change, file.N);
             if (hunks.Count == 0) continue;
 
@@ -188,7 +162,7 @@ public static class ChangeBoard
             // windows are scaled to a fixed width, so a file's own line
             // height is not the height of a line on the board
             float k = window.W / file.W;
-            float y = window.Y + Scene.HeadOf(window) + (first - window.Line) * scene.Data.LineH * k;
+            float y = window.Y + Scene.WinHeadH + (first - window.Line) * scene.Data.LineH * k;
             return (window.X + window.W / 2, y);
         }
         return null;
@@ -196,28 +170,22 @@ public static class ChangeBoard
 
     /// <summary>columns, each window going to whichever is shortest. The same
     /// shape the scanner uses for a folder, and for the same reason: it
-    /// keeps a tall thing from pushing everything beside it down. A file's
-    /// stack goes into a column whole, its pieces touching, so it still
-    /// reads as one file.</summary>
-    static void Pack(List<List<(BoardItem Item, float H)>> stacks, Board board)
+    /// keeps a tall thing from pushing everything beside it down.</summary>
+    static void Pack(List<(BoardItem Item, float H)> windows, Board board)
     {
-        if (stacks.Count == 0) return;
+        if (windows.Count == 0) return;
 
-        int cols = Math.Clamp((int)Math.Ceiling(Math.Sqrt(stacks.Count)), 1, 5);
+        int cols = Math.Clamp((int)Math.Ceiling(Math.Sqrt(windows.Count)), 1, 5);
         var colH = new float[cols];
 
-        foreach (var stack in stacks)
+        foreach (var (item, h) in windows)
         {
             int c = 0;
             for (int i = 1; i < cols; i++) if (colH[i] < colH[c]) c = i;
-            foreach (var (item, h) in stack)
-            {
-                item.X = c * (WindowW + Gap);
-                item.Y = colH[c];
-                colH[c] += h;
-                board.Items.Add(item);
-            }
-            colH[c] += Gap;
+            item.X = c * (WindowW + Gap);
+            item.Y = colH[c];
+            colH[c] += h + Gap;
+            board.Items.Add(item);
         }
     }
 }

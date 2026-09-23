@@ -346,47 +346,41 @@ covered by `AnchorTests` and works.
 - [x] The gathered change view is lit the way the map is: zoomed out past
       readable text a window is veiled and its changed runs glow, drawn by
       the same `DrawGlowBands`. Close in it keeps the tint, as the map does.
-- [x] The change view shows what a change *removed*, as text, where it
-      was. Two ways were weighed. Rows inside one window that are not the
-      file's lines would have meant teaching a row map to the ~25 places
-      that turn a line into a y - code, gutter, glow, highlight, search
-      marks, picks, annotation tints and callouts, window height - and every
-      future window feature would have had to remember it, failing silently
-      when it did not. Instead `ChangeBoard` cuts each file at its removals
-      into a stack of ordinary cropped windows with a `"removed"` item
-      between them, touching, in one column. Nothing that draws a window
-      changed; the header at each cut reads like a diff's hunk line.
+- [x] What a change *removed* is shown as text, where it was - on the map
+      and in the change view alike. Review mode already draws a temporary
+      scan of the commit's tree, so each changed file's text in it gets the
+      whole change's removed lines put back (`Splice`), and the cards
+      really contain them. Nothing that draws a card or a window needed to
+      know about rows that are not lines; only the numbers are translated -
+      the change set's lines to rows (`Splice.Remap`) and the gutter's rows
+      to the numbers a reader expects (`Splice.Numbers`, old numbers on the
+      removed rows). Removed rows are tinted and lit red like added ones
+      green, and syntax coloured for free, since they are tokenised with the
+      file; ctrl+F finds them too.
       - `GitReview.ReadHunks` keeps the text (`FileChange.RemovedText`: one
         `RemovedBlock` per run, with the new-file line that sits where it
-        was and the old-file line it started at). `RemovedAt` stays for the
-        map.
-      - A `"removed"` item stores its height, a window line per old line, so
-        nothing off the draw loop measures text. It draws old numbers in its
-        gutter and the old lines in muted red, and becomes a solid red band
-        at the zoom a window becomes bars.
-      - A file the change deleted - which the scan cannot know - is one
-        block of its old text, with a header naming it.
-      - `R` in the change view hides the removed text and puts each file
-        back to one whole window, without moving the camera. On by default.
-- [ ] Syntax colours for removed text. It is one muted red today; colouring
-      it means tokenising the old lines under the `Highlighter` lock, off
-      the UI thread, like any file.
-- [ ] ctrl+F does not search removed text: the scope is the files the
-      board's windows show, and a removed block is not a file.
-- [x] Only the first piece of a file has a header. The rest are
-      `BoardItem.Continued` - never stored, so a piece copied onto your own
-      board gets its header back - and carry straight on under the red
-      block. Every place that assumed a header height asks `Scene.HeadOf`.
-- [x] The thin red marker is left out of a window whose file has its
-      removed text on the board, and comes back when `R` hides it.
-- [x] Zooming into the change view was slow because a board window drew
-      every line of its range every frame - 25ms for a whole file, and the
-      same before the stacks existed. Windows and removed blocks off screen
-      are skipped now, and a window draws only the lines in view, glow
-      included: about a millisecond. See "A board window draws what is on
-      screen".
-- [ ] Removed text on the map: a peek of the old lines when hovering a red
-      marker, since a card cannot make room for them.
+        was and the old-file line it started at).
+      - Built once, for the whole change. Stepping to one commit keeps it
+        rather than rebuilding a layout that would shift at every step: that
+        commit's removals show as thin markers, and the whole change's rows
+        stay faintly red so they never pass for current code.
+      - The change view's windows are whole files again; the text has the
+        removed lines in it. It was cut into a stack of windows with red
+        blocks between them for a day - a row map in one window had been
+        rejected as touching ~25 line-to-position sites - and splicing the
+        review text made both unnecessary. A file the change deleted has no
+        card and no window, so it is still a `"removed"` block of its old
+        text, with a header naming it.
+      - `R` on the review map or in the change view puts the text back as it
+        is, without moving the camera. On by default.
+- [x] The change view's glow did not glow: it was drawn inside a window's
+      clip, which cut off the halo that spills past the edge on the map. It
+      is drawn after the clip is lifted, each run trimmed to the window's
+      lines instead.
+- [ ] Annotations and picking on spliced rows: a review's text has rows the
+      file does not, and anything that records a line number there is
+      counting rows. Annotating is not offered in review mode today; if it
+      is, it wants the unspliced line.
 - [ ] The debug readout in the top left sits under the "map" back button on
       a board, so both are unreadable.
 - [x] The gathered view rebuilds whenever the change set does. Picking a

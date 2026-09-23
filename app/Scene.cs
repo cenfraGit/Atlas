@@ -150,6 +150,11 @@ public sealed class Scene : IDisposable
     /// <summary>when set, the map is showing a pull request or a commit.</summary>
     public ChangeSet? Review;
 
+    /// <summary>files whose snapshot text has the review's removed lines put
+    /// back in (<see cref="Splice"/>), by path. Set with the snapshot and
+    /// cleared with it: the rows it describes exist only in that text.</summary>
+    public IReadOnlyDictionary<string, Splice> Splices { get; private set; } = new Dictionary<string, Splice>();
+
     /// <summary>line under the cursor while reading code.</summary>
     public (int File, int Line)? HoverLine;
 
@@ -287,11 +292,13 @@ public sealed class Scene : IDisposable
 
     /// <summary>show the repo as it was at a commit. annotations are left alone:
     /// they belong to the working tree, not to somebody else's branch.</summary>
-    public void ShowSnapshot(Scan data, Func<string, string[]?> textSource)
+    public void ShowSnapshot(Scan data, Func<string, string[]?> textSource,
+        IReadOnlyDictionary<string, Splice>? splices = null)
     {
         _liveData ??= Data;
         Data = data;
         TextSource = textSource;
+        Splices = splices ?? new Dictionary<string, Splice>();
         OnSnapshot = true;
         DropCaches();
         Rebuild();
@@ -319,6 +326,7 @@ public sealed class Scene : IDisposable
         Data = _liveData;
         _liveData = null;
         TextSource = null;
+        Splices = new Dictionary<string, Splice>();
         OnSnapshot = false;
         DropCaches();
         Rebuild();
@@ -712,7 +720,7 @@ public sealed class Scene : IDisposable
         if (step <= 0) return;
 
         var (from, to) = RangeOf(host, f);
-        float top = host.Y + HeadOf(host);
+        float top = host.Y + WinHeadH;
         int line = Math.Clamp(from + (int)MathF.Floor((it.Y - top) / step), 0, Math.Max(0, lines.Length - 1));
 
         var full = Path.Combine(Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
@@ -782,7 +790,7 @@ public sealed class Scene : IDisposable
 
             float step = LineStepIn(host, f);
             var (from, _) = RangeOf(host, f);
-            float top = host.Y + HeadOf(host);
+            float top = host.Y + WinHeadH;
             float want = top + (at.Line - from) * step + it.Dy;
             float dy = want - it.Y;
 
@@ -1000,7 +1008,13 @@ public sealed class Scene : IDisposable
                 if (Review is not null)
                 {
                     if (Review.ByPath.ContainsKey(f.P)) DrawReviewLines(canvas, f);
-                    else canvas.DrawRect(0, 0, f.W, f.H, _dim);
+                    else
+                    {
+                        canvas.DrawRect(0, 0, f.W, f.H, _dim);
+                        // old lines the whole change took out are still in
+                        // the card; faintly red, so they never pass for code
+                        if (Splices.ContainsKey(f.P)) DrawReviewLines(canvas, f);
+                    }
                 }
 
                 DrawPicks(canvas, f, i);
@@ -1117,13 +1131,16 @@ public sealed class Scene : IDisposable
         float x0 = 6 + gutter;
 
         LinesDrawn += Math.Max(0, to - from);
+        // spliced text numbers its rows as the file does, old numbers on the
+        // removed ones, rather than counting rows
+        var numbers = Splices.TryGetValue(f.P, out var sp) ? sp.Numbers : null;
         for (int li = from; li < to; li++)
         {
             float baseline = Data.HeaderH + (li + 1) * Data.LineH - 0.6f;
 
             // drawn before the empty-line skip: a blank line is still a line
             // and still has a number, and a gap in the column reads as a bug
-            var num = (li + 1).ToString();
+            var num = (numbers is not null && li < numbers.Length ? numbers[li] : li + 1).ToString();
             code.Color = GutterCol;
             canvas.DrawText(num, numRight - num.Length * _charW, baseline, code);
 
@@ -1319,7 +1336,8 @@ public sealed class Scene : IDisposable
 
             // a card forced up to the minimum size has to stretch its line
             // positions with it, or every band lands in the top corner
-            DrawGlowBands(canvas, change, x, y, w, h / Math.Max(1f, f.H), 1f / CamS, fill, glow);
+            DrawGlowBands(canvas, change, x, y, w, h / Math.Max(1f, f.H), 1f / CamS, fill, glow,
+                removedRows: Splices.GetValueOrDefault(change.Path)?.RemovedRows);
         }
     }
 
@@ -1328,7 +1346,7 @@ public sealed class Scene : IDisposable
     /// card-local line positions; <paramref name="px"/> is one screen pixel
     /// in the canvas's current units, so the floors hold at any zoom.</summary>
     void DrawGlowBands(SKCanvas canvas, FileChange change, float x, float y, float w, float k, float px,
-        SKPaint fill, SKPaint glow, int lo = 0, int hi = int.MaxValue, bool marks = true)
+        SKPaint fill, SKPaint glow, int lo = 0, int hi = int.MaxValue, IReadOnlyList<int>? removedRows = null)
     {
         float min = 9f * px, minRun = 3.5f * px;
         float Top(int line) => y + (Data.HeaderH + line * Data.LineH) * k;
@@ -1354,7 +1372,8 @@ public sealed class Scene : IDisposable
         // removals last: they are points rather than spans, and a
         // deletion inside a block of additions has to stay visible
         Bands(change.AddedLines, AddCol, thin: false);
-        if (marks) foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
+        if (removedRows is not null) Bands(removedRows, DelCol, thin: false);
+        foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
     }
 
     /// <summary>close in the code is readable, so a changed file gets an outline
@@ -1390,9 +1409,12 @@ public sealed class Scene : IDisposable
     ///
     /// Drawn as runs rather than per line, so a block of two hundred added
     /// lines is one rectangle and one blur instead of two hundred of each.</summary>
-    void DrawReviewLines(SKCanvas canvas, FileRec f, int lo = 0, int hi = int.MaxValue, bool marks = true)
+    void DrawReviewLines(SKCanvas canvas, FileRec f, int lo = 0, int hi = int.MaxValue)
     {
-        if (Review is null || !Review.ByPath.TryGetValue(f.P, out var change)) return;
+        if (Review is null) return;
+        var change = Review.ByPath.GetValueOrDefault(f.P);
+        var spliced = Splices.GetValueOrDefault(f.P);
+        if (change is null && spliced is null) return;
 
         float gutter = Math.Max(3f, f.W * 0.012f);
         using var fill = new SKPaint { IsAntialias = false };
@@ -1402,25 +1424,38 @@ public sealed class Scene : IDisposable
             MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Data.LineH * 1.6f),
         };
 
-        foreach (var (ra, rb) in Runs(change.AddedLines))
+        void Rows(IEnumerable<int> rows, SKColor col, byte tint, bool lit)
         {
-            if (rb < lo || ra > hi) continue;
-            int a = Math.Max(ra, lo), b = Math.Min(rb, hi);
-            float y = Data.HeaderH + a * Data.LineH;
-            float h = (b - a + 1) * Data.LineH;
-            glow.Color = AddCol.WithAlpha(56);
-            canvas.DrawRect(0, y, gutter * 2.5f, h, glow);
-            fill.Color = AddCol.WithAlpha(TintAlpha);
-            canvas.DrawRect(0, y, f.W, h, fill);
-            fill.Color = AddCol;
-            canvas.DrawRect(0, y, gutter, h, fill);
+            foreach (var (ra, rb) in Runs(rows))
+            {
+                if (rb < lo || ra > hi) continue;
+                int a = Math.Max(ra, lo), b = Math.Min(rb, hi);
+                float y = Data.HeaderH + a * Data.LineH;
+                float h = (b - a + 1) * Data.LineH;
+                if (lit)
+                {
+                    glow.Color = col.WithAlpha(56);
+                    canvas.DrawRect(0, y, gutter * 2.5f, h, glow);
+                }
+                fill.Color = col.WithAlpha(tint);
+                canvas.DrawRect(0, y, f.W, h, fill);
+                fill.Color = lit ? col : col.WithAlpha(120);
+                canvas.DrawRect(0, y, gutter, h, fill);
+            }
         }
+
+        // the whole change's removed lines, back in the text. Lit when this
+        // file is part of what is being looked at, faint when stepping has
+        // moved on to a commit that did not touch it
+        if (spliced is not null) Rows(spliced.RemovedRows, DelCol, change is null ? (byte)22 : TintAlpha, change is not null);
+        if (change is null) return;
+        Rows(change.AddedLines, AddCol, TintAlpha, true);
 
         // one thin line per place something was taken out, lit so it can be
         // seen, and never a block: the code between two removals is code
         // that is still there and must stay readable
         float thin = Math.Max(1f, Data.LineH * 0.35f);
-        foreach (var at in marks ? Marks(change.RemovedAt) : [])
+        foreach (var at in Marks(change.RemovedAt))
         {
             if (at < lo || at - 1 > hi) continue;
             float y = Data.HeaderH + at * Data.LineH;
@@ -1541,9 +1576,6 @@ public sealed class Scene : IDisposable
     /// against it, and two copies of a number like this drift.</summary>
     public const float WinHeadH = 26;
 
-    /// <summary>a window's header height: none for a piece that carries on
-    /// from the window above it (<see cref="BoardItem.Continued"/>).</summary>
-    public static float HeadOf(BoardItem it) => it.Continued ? 0 : WinHeadH;
     const char LF = (char)10;
     const char TabChar = (char)9;
 
@@ -1632,7 +1664,7 @@ public sealed class Scene : IDisposable
         if (i < 0) return 64;
         var f = Data.Files[i];
         var (from, to) = RangeOf(it, f);
-        return HeadOf(it) + (to - from + 1) * Data.LineH * (it.W / f.W);
+        return WinHeadH + (to - from + 1) * Data.LineH * (it.W / f.W);
     }
 
     /// <summary>the outlined shapes. They share everything but the path they
@@ -2052,12 +2084,6 @@ public sealed class Scene : IDisposable
         // a method and was 25ms a frame for the change view's whole files
         float x0 = CamX - bx, y0 = CamY - by, x1 = CamX + bx, y1 = CamY + by;
 
-        // files whose removed lines are on the board as text: their windows
-        // leave out the thin markers, which would say the same thing twice
-        var cut = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var it in board.Items)
-            if (it.Kind == "removed" && it.File is not null) cut.Add(it.File);
-
         foreach (var it in board.Items)
         {
             if (it.Kind == "arrow" || Strokes.Is(it)) continue;   // drawn after, on top
@@ -2146,7 +2172,7 @@ public sealed class Scene : IDisposable
             int count = to - from + 1;
             float k = it.W / f.W;
             float bodyH = count * Data.LineH * k;
-            float headH = HeadOf(it);
+            float headH = WinHeadH;
 
             // off screen: skipped. The notes beside a window hang off its
             // right hand side, so it counts as a little wider than it is
@@ -2201,8 +2227,7 @@ public sealed class Scene : IDisposable
             if (changed is not null)
             {
                 canvas.Translate(0, -(Data.HeaderH + from * Data.LineH));
-                bool marks = !cut.Contains(f.P);
-                if (drewText) DrawReviewLines(canvas, f, lo, hi, marks);
+                if (drewText) DrawReviewLines(canvas, f, lo, hi);
                 else
                 {
                     float px = 1f / (CamS * k);
@@ -2212,7 +2237,8 @@ public sealed class Scene : IDisposable
                         IsAntialias = true,
                         MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 7f * px),
                     };
-                    DrawGlowBands(canvas, changed, 0, 0, f.W, 1f, px, fill, glow, lo, hi, marks);
+                    DrawGlowBands(canvas, changed, 0, 0, f.W, 1f, px, fill, glow, lo, hi,
+                        Splices.GetValueOrDefault(f.P)?.RemovedRows);
                 }
             }
             canvas.Restore();
@@ -2854,7 +2880,7 @@ public sealed class Scene : IDisposable
 
             var (from, to) = RangeOf(it, f);
             float k = it.W / f.W;
-            int line = from + (int)((wy - it.Y - HeadOf(it)) / (Data.LineH * k));
+            int line = from + (int)((wy - it.Y - WinHeadH) / (Data.LineH * k));
             return (it, i, Math.Clamp(line, from, to));
         }
         return null;
@@ -2994,7 +3020,7 @@ public sealed class Scene : IDisposable
         }
         else
         {
-            float bottom = it.Y + HeadOf(it) + (to - from + 1) * step;
+            float bottom = it.Y + WinHeadH + (to - from + 1) * step;
             int moved = (int)MathF.Round((wy - bottom) / step);
             it.Line = from;
             it.EndLine = Math.Clamp(to + moved, from, last);
@@ -3103,7 +3129,7 @@ public sealed class Scene : IDisposable
             if (r.Line < from || r.Line > to) continue;
             edge.Color = ColorFor(r.Kind);
 
-            float at = it.Y + HeadOf(it) + (r.Line - from) * Data.LineH * k;
+            float at = it.Y + WinHeadH + (r.Line - from) * Data.LineH * k;
             float y = Math.Max(at, lastBottom + 6);
             var wrapped = Wrap(a.Text, 220, size, out var paint);
             using (paint)

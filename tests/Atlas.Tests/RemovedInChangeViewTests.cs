@@ -2,11 +2,12 @@ using SkiaSharp;
 
 namespace Atlas.Tests;
 
-/// <summary>the change view shows what a change removed, where it was.
+/// <summary>the change view: whole windows, and a deleted file as a red
+/// block of its old text.
 ///
-/// Each file is cut at its removals into a stack of cropped windows, with the
-/// old lines in a red block between them, so every window stays an ordinary
-/// window and the rest of the app needs to know nothing about it.</summary>
+/// Removed lines in a file that still exists are in the review's text now
+/// (<see cref="Splice"/>), so a window shows them without being cut up; only
+/// a file the change deleted, which has no window, needs a block.</summary>
 [Collection("render")]
 public class RemovedInChangeViewTests
 {
@@ -42,6 +43,17 @@ public class RemovedInChangeViewTests
         i.Kind == "file" ? $"[{i.Line}-{i.EndLine}]" : i.Kind == "removed" ? $"-{i.Text!.Split('\n').Length}" : i.Kind));
 
     [Fact]
+    public void AFileWithRemovalsIsOneWholeWindow()
+    {
+        var (scene, repo) = Repo();
+        using (repo) using (scene)
+        {
+            var c = Removing(Path, (10, 10, ["a", "b"]), (20, 22, ["c"]));
+            Assert.Equal("[0-29]", Shape(ChangeBoard.Build(Set(c), scene, "c")));
+        }
+    }
+
+    [Fact]
     public void AFileWithNoRemovalsIsStillOneWholeWindow()
     {
         var (scene, repo) = Repo();
@@ -50,80 +62,6 @@ public class RemovedInChangeViewTests
             var added = new FileChange(Path, 1, 0);
             added.AddedLines.Add(5);
             Assert.Equal("[0-29]", Shape(ChangeBoard.Build(Set(added), scene, "c")));
-        }
-    }
-
-    /// <summary>every line of the file once, in order, with each block
-    /// exactly where its lines came out.</summary>
-    [Fact]
-    public void TheFileIsCutWhereLinesWereRemoved()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var c = Removing(Path, (10, 10, ["a", "b"]), (20, 22, ["c"]));
-            Assert.Equal("[0-9] -2 [10-19] -1 [20-29]", Shape(ChangeBoard.Build(Set(c), scene, "c")));
-        }
-    }
-
-    [Fact]
-    public void ARemovalAtEitherEndHasNoEmptyWindowBesideIt()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var atStart = Removing(Path, (0, 0, ["head"]));
-            Assert.Equal("-1 [0-29]", Shape(ChangeBoard.Build(Set(atStart), scene, "c")));
-
-            var atEnd = Removing(Path, (Lines, Lines, ["tail"]));
-            Assert.Equal("[0-29] -1", Shape(ChangeBoard.Build(Set(atEnd), scene, "c")));
-        }
-    }
-
-    /// <summary>the pieces touch, one under the next in one column, so the
-    /// stack reads as one file.</summary>
-    [Fact]
-    public void ThePiecesOfAFileTouch()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var board = ChangeBoard.Build(Set(Removing(Path, (10, 10, ["a", "b"]))), scene, "c");
-            for (int n = 1; n < board.Items.Count; n++)
-            {
-                var above = board.Items[n - 1];
-                Assert.Equal(above.X, board.Items[n].X);
-                Assert.Equal(above.Y + scene.ItemHeight(above), board.Items[n].Y, 2);
-            }
-        }
-    }
-
-    /// <summary>a removed line is as tall as a line in the windows beside it,
-    /// or the old text would be a different size from the new.</summary>
-    [Fact]
-    public void ARemovedLineIsAsTallAsAWindowLine()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var board = ChangeBoard.Build(Set(Removing(Path, (10, 10, ["a", "b", "c"]))), scene, "c");
-            var window = board.Items[0];
-            var block = board.Items[1];
-            var f = scene.Data.Files[scene.IndexOfPath(Path)];
-
-            Assert.Equal(3 * scene.LineStepIn(window, f), block.H, 2);
-            Assert.Equal((10, "a\nb\nc"), (block.Line, block.Text));
-        }
-    }
-
-    [Fact]
-    public void HiddenEachFileIsOneWindowAgain()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var c = Removing(Path, (10, 10, ["a"]), (20, 21, ["b"]));
-            Assert.Equal("[0-29]", Shape(ChangeBoard.Build(Set(c), scene, "c", removed: false)));
         }
     }
 
@@ -143,89 +81,6 @@ public class RemovedInChangeViewTests
             Assert.True(block.H > 3 * scene.Data.LineH, "a deleted file has a header as well as its lines");
 
             Assert.Empty(ChangeBoard.Build(Set(gone), scene, "c", removed: false).Items);
-        }
-    }
-
-    [Fact]
-    public void TheViewOpensOnTheWindowHoldingTheFirstChange()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var c = Removing(Path, (20, 20, ["x"]));
-            var set = Set(c);
-            var board = ChangeBoard.Build(set, scene, "c");
-            var spot = ChangeBoard.FirstChange(board, set, scene)!.Value;
-
-            // the change is at line 20, with context from 17: in the second window
-            var second = board.Items[2];
-            Assert.Equal(20, second.Line);
-            Assert.InRange(spot.Y, board.Items[0].Y, second.Y + scene.ItemHeight(second));
-        }
-    }
-
-    /// <summary>only the first piece of a file has a header. The pieces after
-    /// a cut carry straight on under the red block, like a diff, instead of
-    /// each costing a header's height - about three lines close in.</summary>
-    [Fact]
-    public void OnlyTheFirstPieceHasAHeader()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var board = ChangeBoard.Build(Set(Removing(Path, (10, 10, ["a"]), (20, 20, ["b"]))), scene, "c");
-            var windows = board.Items.Where(i => i.Kind == "file").ToList();
-
-            Assert.Equal([false, true, true], windows.Select(w => w.Continued));
-            var f = scene.Data.Files[scene.IndexOfPath(Path)];
-            var second = windows[1];
-            Assert.Equal((second.EndLine - second.Line + 1) * scene.LineStepIn(second, f), scene.ItemHeight(second), 2);
-            Assert.Equal(Scene.WinHeadH + 10 * scene.LineStepIn(windows[0], f), scene.ItemHeight(windows[0]), 2);
-        }
-    }
-
-    /// <summary>and one copied off the change view onto a board of your own
-    /// is a window in its own right again, header and all.</summary>
-    [Fact]
-    public void ACopiedPieceGetsItsHeaderBack()
-    {
-        var piece = new BoardItem { Id = "w", Kind = "file", File = Path, Continued = true };
-        var copy = System.Text.Json.JsonSerializer.Deserialize<BoardItem>(System.Text.Json.JsonSerializer.Serialize(piece))!;
-        Assert.False(copy.Continued);
-    }
-
-    /// <summary>with the removed lines on the board as text, the thin red
-    /// marker where they were would say it twice. With R hiding them, it is
-    /// the only sign left, so it comes back.</summary>
-    [Fact]
-    public void TheThinMarkerIsLeftOutWhereTheTextIsShown()
-    {
-        var (scene, repo) = Repo();
-        using (repo) using (scene)
-        {
-            var c = Removing(Path, (10, 10, ["a", "b"]));
-            var set = Set(c);
-            scene.Review = set;
-            var board = ChangeBoard.Build(set, scene, "c");
-            scene.ActiveBoard = board;
-            scene.BoardReadOnly = true;
-
-            // the block moved far off, so only the windows are on screen -
-            // but it is still on the board, so its file counts as shown
-            var block = board.Items.Single(i => i.Kind == "removed");
-            block.X += 100_000;
-            var second = board.Items.First(i => i.Kind == "file" && i.Continued);
-            scene.CamX = second.X + 310;
-            scene.CamY = second.Y;
-            scene.CamS = 3f;
-
-            int shown = Reddish(Render(scene, 600, 300));
-            board.Items.Remove(block);
-            int hidden = Reddish(Render(scene, 600, 300));
-
-            Assert.True(hidden > 0, "no marker at all with the text hidden");
-            Assert.True(shown < hidden / 4, $"{shown} red pixels with the text shown, {hidden} with it hidden");
-            scene.ActiveBoard = null;
         }
     }
 

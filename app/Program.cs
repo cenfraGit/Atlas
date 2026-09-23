@@ -1944,6 +1944,7 @@ public sealed class SceneView : Control
             Dispatcher.UIThread.Post(() =>
             {
                 if (cts.IsCancellationRequested || _grep is null) return;
+                found = PerWindow(found);
                 _found = found;
                 _foundAt = -1;
                 _grep.Show(found, query, where, found.Count >= Grep.Limit);
@@ -1980,7 +1981,7 @@ public sealed class SceneView : Control
 
     /// <summary>go and look at a match: the line framed, highlighted and
     /// selected, on the map or inside the board window showing that file.</summary>
-    void GoToMatch(Found m)
+    public void GoToMatch(Found m)
     {
         int i = _scene.ResolveFile(m.Path, null);
         if (i < 0) { Toast($"{m.Path} is not in this scan"); return; }
@@ -2007,16 +2008,52 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    /// <summary>on a board, one entry per window that shows the line. Two
+    /// windows onto one file, cropped to two methods, are two places to look,
+    /// and every match used to be sent to whichever window was made first -
+    /// clamped to its range, so a match in the second was never reached.
+    /// A match no window shows is kept once, and goes to the nearest.</summary>
+    public List<Found> PerWindow(List<Found> found)
+    {
+        if (_scene.ActiveBoard is not { } board) return found;
+        var windows = board.Items
+            .Where(it => it.Kind == "file" && it.File is not null)
+            .GroupBy(it => _scene.ResolveFile(it.File!, it.Key))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var result = new List<Found>(found.Count);
+        foreach (var m in found)
+        {
+            if (!windows.TryGetValue(m.File, out var mine)) { result.Add(m); continue; }
+            var f = _scene.Data.Files[m.File];
+            int before = result.Count;
+            for (int n = 0; n < mine.Count; n++)
+            {
+                var (from, to) = _scene.RangeOf(mine[n], f);
+                if (m.Line >= from && m.Line <= to)
+                    result.Add(m with { Window = mine[n].Id, Copy = mine.Count > 1 ? n + 1 : 0 });
+            }
+            if (result.Count == before) result.Add(m);
+        }
+        return result;
+    }
+
     void ShowMatchOnBoard(Found m, int fileIndex)
     {
         if (_scene.ActiveBoard is not { } board) return;
+        var f = _scene.Data.Files[fileIndex];
 
-        var window = board.Items.FirstOrDefault(
+        var windows = board.Items.Where(
             it => it.Kind == "file" && it.File is not null &&
-                  _scene.ResolveFile(it.File, it.Key) == fileIndex);
+                  _scene.ResolveFile(it.File, it.Key) == fileIndex).ToList();
+        var window = windows.FirstOrDefault(it => it.Id == m.Window)
+            ?? windows.MinBy(it =>
+            {
+                var (a, b) = _scene.RangeOf(it, f);
+                return m.Line < a ? a - m.Line : m.Line > b ? m.Line - b : 0;
+            });
         if (window is null) { Toast($"no window onto {m.Path} on this board"); return; }
 
-        var f = _scene.Data.Files[fileIndex];
         var (from, to) = _scene.RangeOf(window, f);
         int line = Math.Clamp(m.Line, from, to);
 
@@ -3490,7 +3527,7 @@ public sealed class SceneView : Control
     /// running, else where it already is. Aiming from here rather than from
     /// the live camera is what lets a flurry of wheel notches add up instead
     /// of each one restarting from a camera that has not caught up.</summary>
-    (float X, float Y, float S) Aim() =>
+    public (float X, float Y, float S) Aim() =>
         _glide.Running ? (_glide.X, _glide.Y, _glide.S) : (_scene.CamX, _scene.CamY, _scene.CamS);
 
     void GlideTo(float x, float y, float s)

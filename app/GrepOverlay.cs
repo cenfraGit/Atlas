@@ -134,7 +134,7 @@ public sealed class GrepOverlay : Border
     static string Label(Found f)
     {
         var name = f.Path[(f.Path.LastIndexOf('/') + 1)..];
-        return $"{name}:{f.Line + 1}";
+        return f.Copy > 0 ? $"{name}:{f.Line + 1} #{f.Copy}" : $"{name}:{f.Line + 1}";
     }
 
     static string Pad(string s, int width) =>

@@ -4,7 +4,11 @@ namespace Atlas;
 /// <param name="File">index into <see cref="Scan.Files"/>.</param>
 /// <param name="Line">0-based.</param>
 /// <param name="Col">0-based column of the first match on that line.</param>
-public readonly record struct Found(int File, string Path, int Line, int Col, string Text);
+/// <param name="Window">on a board, the id of the window showing the line.</param>
+/// <param name="Copy">which of several windows onto the same file that is,
+/// 1-based, or 0 when the file has only one.</param>
+public readonly record struct Found(int File, string Path, int Line, int Col, string Text,
+    string? Window = null, int Copy = 0);
 
 /// <summary>searching what the files say, rather than what they are called.
 ///

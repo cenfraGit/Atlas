@@ -413,6 +413,48 @@ public class ReviewGlowTests
             }
         }
 
+        /// <summary>and the glow is a glow: it spills past the window's edge,
+        /// the way it spills past a card's on the map. It was drawn inside the
+        /// window's clip, which cut off exactly the halo that makes a band
+        /// read as lit rather than as a flat highlight.</summary>
+        [Fact]
+        public void TheGlowSpillsPastTheWindowsEdge()
+        {
+            var (scene, repo, f) = Reviewing(6, 0, addedAt: [100, 101, 102, 103, 104, 105]);
+            using (repo)
+            using (scene)
+            {
+                var board = new Board { Id = "c", Name = "changes" };
+                board.Items.Add(new BoardItem { Id = "w", Kind = "file", File = f.P, Line = 0, EndLine = -1, X = 0, Y = 0, W = 620 });
+                scene.ActiveBoard = board;
+                scene.BoardReadOnly = true;
+                scene.CamX = 310;
+                scene.CamY = 300;
+                scene.CamS = 0.12f;
+                scene.Tier = Scene.TierFor(scene.CamS);
+
+                var px = Pixels(scene);
+                var set = scene.Review;
+                scene.Review = null;
+                var plain = Pixels(scene);
+                scene.Review = set;
+
+                // a strip just right of the window, level with the changed run:
+                // greener in review than out of it means the glow reached it
+                float k = 620f / f.W, s = scene.CamS;
+                float right = W / 2f + (620 - scene.CamX) * s;
+                float top = H / 2f + (Scene.WinHeadH + 100 * scene.Data.LineH * k - scene.CamY) * s;
+                float bottom = H / 2f + (Scene.WinHeadH + 106 * scene.Data.LineH * k - scene.CamY) * s;
+                int spill = 0;
+                for (int y = (int)top - 2; y <= (int)bottom + 2; y++)
+                    for (int x = (int)right + 1; x <= (int)right + 6; x++)
+                        if (px[y * W + x].Green - plain[y * W + x].Green > 8) spill++;
+
+                Assert.True(spill > 0, "no glow beside the window: the halo is clipped off");
+                scene.ActiveBoard = null;
+            }
+        }
+
         [Fact]
         public void CloseInTheChangedLinesAreLitAndTheRestIsNot()
         {

@@ -1335,9 +1335,10 @@ public sealed class Scene : IDisposable
 
         void Bands(IEnumerable<int> lines, SKColor col, bool thin)
         {
-            foreach (var (a, b) in Runs(lines))
+            foreach (var (ra, rb) in Runs(lines))
             {
-                if (b < lo || a - 1 > hi) continue;
+                if (rb < lo || ra - 1 > hi) continue;
+                int a = Math.Max(ra, lo), b = Math.Min(rb, hi);
                 float top = Top(a);
                 float bottom = thin ? top : Top(b) + Data.LineH * k;
                 if (bottom - top < minRun) bottom = top + minRun;
@@ -1401,9 +1402,10 @@ public sealed class Scene : IDisposable
             MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, Data.LineH * 1.6f),
         };
 
-        foreach (var (a, b) in Runs(change.AddedLines))
+        foreach (var (ra, rb) in Runs(change.AddedLines))
         {
-            if (b < lo || a > hi) continue;
+            if (rb < lo || ra > hi) continue;
+            int a = Math.Max(ra, lo), b = Math.Min(rb, hi);
             float y = Data.HeaderH + a * Data.LineH;
             float h = (b - a + 1) * Data.LineH;
             glow.Color = AddCol.WithAlpha(56);
@@ -2172,6 +2174,7 @@ public sealed class Scene : IDisposable
             canvas.Save();
             canvas.Translate(0, headH);
             canvas.Scale(k);
+            canvas.Save();
             canvas.ClipRect(new SKRect(0, 0, f.W, count * Data.LineH));
             canvas.Translate(0, -(Data.HeaderH + from * Data.LineH));
 
@@ -2182,14 +2185,22 @@ public sealed class Scene : IDisposable
                 if (!_bars.TryGetValue(i, out var pic)) { pic = BuildBars(i); BuiltThisFrame++; }
                 canvas.DrawPicture(pic);
             }
-            // the same glow the map uses, in the same card-local coordinates.
-            // Without it the gathered change view shows the right code and no
-            // indication of what about it changed, which is most of the point.
-            // Too far out to read, it is the map's zoomed out look as well -
-            // dark, with the changes lit - rather than full bright bars with a
-            // tint over them nobody could see
-            if (Review is not null && Review.ByPath.TryGetValue(f.P, out var changed))
+            var changed = Review is not null && Review.ByPath.TryGetValue(f.P, out var c) ? c : null;
+            // too far out to read, it is dark with the changes lit, the map's
+            // zoomed out look, rather than full bright bars with a tint over
+            // them nobody could see
+            if (changed is not null && !drewText) canvas.DrawRect(0, 0, f.W, f.H, _veil);
+            DrawBoardPicks(canvas, f, i);
+            canvas.Restore();
+
+            // the same glow the map uses, in the same card-local coordinates -
+            // and outside the clip, the way the map draws it outside a card.
+            // Inside it, the halo that spills past the edge was cut off, and a
+            // band with no halo is a highlight, not a glow. Trimmed to the
+            // lines in view instead, which the window's own lines bound
+            if (changed is not null)
             {
+                canvas.Translate(0, -(Data.HeaderH + from * Data.LineH));
                 bool marks = !cut.Contains(f.P);
                 if (drewText) DrawReviewLines(canvas, f, lo, hi, marks);
                 else
@@ -2201,12 +2212,9 @@ public sealed class Scene : IDisposable
                         IsAntialias = true,
                         MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 7f * px),
                     };
-                    canvas.DrawRect(0, 0, f.W, f.H, _veil);
                     DrawGlowBands(canvas, changed, 0, 0, f.W, 1f, px, fill, glow, lo, hi, marks);
                 }
             }
-            DrawBoardPicks(canvas, f, i);
-            canvas.Restore();
             canvas.Restore();
 
             DrawBoardNoteText(canvas, it, f, from, to, k);

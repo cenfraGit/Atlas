@@ -223,7 +223,7 @@ your team gets everything you wrote.
 | `shift+M` | the board's tour: its stops, to preview, reorder, rename, delete |
 | `P` | play the board's tour (on a board) |
 | space, arrows | next / previous stop while a tour is playing |
-| `O` | boards panel; `C` new, `F2` rename, `F3` group, Delete removes |
+| `O` | boards panel; `C` new, `F2` rename, `F3` group, Delete removes; drag a board between groups, or a group heading to reorder groups; `Esc` cancels a drag |
 | `A` | add the current file to the last opened board |
 | `N` | add a board note (while on a board) |
 | `F` | fit the whole map, or the whole board |

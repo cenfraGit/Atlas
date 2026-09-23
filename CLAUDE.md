@@ -212,13 +212,21 @@ stops.
 
 ### Boards panel
 
-- [ ] Show what is being dragged while it is dragged - a ghost of the row
-      and where it would land. Today nothing moves until the drop.
-- [ ] Escape cancels a drag in progress.
-- [ ] Groups can be reordered by dragging, and keep that order, rather than
-      sorting alphabetically.
-- [ ] Group headers look like headers. They read as a board row shifted
-      left.
+- [x] A drag rearranges the list as it goes, so the rows are the preview -
+      the same way the tour panel does it. Onto a heading means the top of
+      that group.
+- [x] Escape mid-drag puts every board's group and order back, and the group
+      order; only the next Escape closes the panel.
+- [x] Groups are dragged by their heading. The order lives in
+      `.atlas/groups.json` - beside `boards/`, since anything in it is read
+      as a board. A group not listed goes after the listed ones, ungrouped
+      first then by name, which is what every repo looked like before.
+- [x] Headings are set apart: capitals, accent colour, a count, a rule above.
+      They are never left selected, and up and down step over them.
+- [x] Both panels drew only their first rows: a virtualizing list handed its
+      rows while hidden never realised the rest. A panel of a few dozen rows
+      uses a plain `StackPanel` for its items. **Any new list in a panel that
+      is shown with `Reveal` wants the same.**
 
 ### Copy, paste and search on boards
 
@@ -646,7 +654,8 @@ undid nothing.
 
 `.atlas/` in the repo being read is **meant to be committed** - that is how a
 team shares boards and notes. Never add it to a `.gitignore`. It holds
-`boards/*.json` (tours included), `annotations.json` and `images/`.
+`boards/*.json` (tours included), `groups.json` (the order of the board
+groups), `annotations.json` and `images/`.
 
 There is no save step: stores write on every change and the canvas shows
 `saved: ...`. If you add state a user authors, it saves itself the same way -

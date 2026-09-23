@@ -27,8 +27,16 @@ public sealed class BoardOverlay : Border
     readonly ListBox _list;
     readonly List<BoardRow> _rows = [];
     readonly Button _open, _rename, _group, _delete;
-    Board? _dragging;
+
+    // a drag rearranges the list as it goes, so the rows themselves are the
+    // preview of where things will land. What everything was before it
+    // started is kept so Escape can put it back
+    Board? _dragBoard;
+    string? _dragGroup;
+    bool _moved;
     Point _pressAt;
+    List<(Board Board, string Group, int Order)>? _before;
+    List<string>? _beforeGroups;
 
     public event Action<Board>? Open;
     public event Action? CreateRequested;
@@ -56,10 +64,14 @@ public sealed class BoardOverlay : Border
             FontSize = 12,
             Foreground = Ui.Fore,
             SelectionMode = SelectionMode.Multiple,
+            // every row, always: the virtualizing default drew the first
+            // couple and left the rest as empty space until something scrolled
+            ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new StackPanel()),
         };
         _list.DoubleTapped += (_, _) => Commit();
-        _list.SelectionChanged += (_, _) => Reflect();
+        _list.SelectionChanged += (_, _) => { DropHeaders(); Reflect(); };
         _list.AddHandler(PointerPressedEvent, OnPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        _list.AddHandler(PointerMovedEvent, OnMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _list.AddHandler(PointerReleasedEvent, OnReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
         _open = Make("open", Commit);
@@ -86,6 +98,12 @@ public sealed class BoardOverlay : Border
                 },
                 buttons,
                 _list,
+                new TextBlock
+                {
+                    Text = "drag a board between groups, or a group heading to reorder groups. esc cancels a drag.",
+                    FontFamily = Ui.Mono, FontSize = 11, Foreground = Ui.Dim,
+                    TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0),
+                },
             },
         };
     }
@@ -115,16 +133,21 @@ public sealed class BoardOverlay : Border
         Reveal.Show(this);
     }
 
-    public void Close() => Reveal.Hide(this);
+    public void Close()
+    {
+        CancelDrag();
+        Reveal.Hide(this);
+    }
+
+    /// <summary>the rows as they are shown, top to bottom. For the tests.</summary>
+    public IReadOnlyList<BoardRow> Rows => _rows;
 
     public void Rebuild()
     {
         var keep = Selected;
         _rows.Clear();
 
-        var groups = _store.Boards.Select(b => b.Group).Distinct()
-            .OrderBy(g => g.Length == 0 ? "" : "1" + g, StringComparer.Ordinal);
-        foreach (var group in groups)
+        foreach (var group in _store.Groups())
         {
             _rows.Add(new BoardRow { Group = group });
             foreach (var b in _store.Boards.Where(x => x.Group == group)
@@ -132,7 +155,7 @@ public sealed class BoardOverlay : Border
                 _rows.Add(new BoardRow { Group = group, Board = b });
         }
 
-        _list.ItemsSource = _rows.Select(r => r.ToString()).ToList();
+        _list.ItemsSource = _rows.Select((r, i) => r.IsHeader ? Header(r, i == 0) : Line(r)).ToList();
         _list.SelectedItems?.Clear();
         foreach (var b in keep)
         {
@@ -145,6 +168,60 @@ public sealed class BoardOverlay : Border
             if (first >= 0) _list.SelectedIndex = first;
         }
         Reflect();
+    }
+
+    /// <summary>a group heading. It used to be a board row shifted left, and
+    /// read as one: now it is set apart by case, colour, a count and a rule
+    /// above it.</summary>
+    Control Header(BoardRow r, bool first)
+    {
+        int count = _store.Boards.Count(b => b.Group == r.Group);
+        return new Border
+        {
+            BorderBrush = Ui.Edge,
+            BorderThickness = new Thickness(0, first ? 0 : 1, 0, 0),
+            Margin = new Thickness(0, first ? 0 : 8, 0, 0),
+            Padding = new Thickness(0, first ? 2 : 8, 0, 2),
+            Cursor = new Cursor(StandardCursorType.SizeNorthSouth),
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = r.ToString().ToUpperInvariant(), Foreground = Ui.Accent,
+                        FontSize = 11, FontWeight = FontWeight.Bold,
+                    },
+                    new TextBlock
+                    {
+                        Text = $"  {count}", Foreground = Ui.Dim, FontSize = 11,
+                    },
+                },
+            },
+        };
+    }
+
+    static Control Line(BoardRow r) => new StackPanel
+    {
+        Orientation = Orientation.Horizontal,
+        Margin = new Thickness(12, 0, 0, 0),
+        Children =
+        {
+            new TextBlock { Text = r.Board!.Name },
+            new TextBlock { Text = $"   {r.Board.Items.Count}", Foreground = Ui.Dim },
+        },
+    };
+
+    /// <summary>a heading is never selected, even when pressed to drag it.</summary>
+    void DropHeaders()
+    {
+        if (_list.SelectedItems is null) return;
+        foreach (var item in _list.SelectedItems.Cast<object>().ToList())
+        {
+            int at = _list.Items.IndexOf(item);
+            if (at >= 0 && at < _rows.Count && _rows[at].IsHeader) _list.SelectedItems.Remove(item);
+        }
     }
 
     /// <summary>every board currently selected, headings ignored.</summary>
@@ -177,45 +254,118 @@ public sealed class BoardOverlay : Border
             b.Foreground = b.IsEnabled ? Ui.Fore : Ui.Dim;
     }
 
-    // ---- drag and drop, by hand: the rows are plain strings, so there are no
-    // item containers for avalonia's DragDrop to hang off ----
+    // ---- drag and drop, by hand ----
+
+    /// <summary>whether a drag has moved anything yet, for Escape.</summary>
+    public bool Dragging => _moved;
 
     void OnPressed(object? sender, PointerPressedEventArgs e)
     {
         _pressAt = e.GetPosition(_list);
-        _dragging = RowAt(_pressAt)?.Board;
+        var row = RowAt(_pressAt);
+        _dragBoard = row?.Board;
+        _dragGroup = row is { IsHeader: true } ? row.Group : null;
+        _moved = false;
+        _before = _store.Boards.Select(b => (b, b.Group, b.Order)).ToList();
+        _beforeGroups = [.. _store.GroupOrder];
+    }
+
+    void OnMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragBoard is null && _dragGroup is null) return;
+        var p = e.GetPosition(_list);
+        if (!_moved && Math.Abs(p.Y - _pressAt.Y) < 6) return;     // not a drag yet
+        if (RowAt(p) is not { } target) return;
+
+        if (_dragBoard is { } board) MoveBoard(board, target);
+        else MoveGroup(_dragGroup!, target);
+    }
+
+    /// <summary>put a board where the row under the pointer is: at the top of
+    /// a group whose heading it is over, otherwise beside the board it is
+    /// over, in that board's group.</summary>
+    public void MoveBoard(Board board, BoardRow target)
+    {
+        if (target.Board == board) return;
+        int from = _rows.FindIndex(r => r.Board == board);
+        int to = _rows.IndexOf(target);
+        bool down = to > from;
+
+        board.Group = target.Group;
+        var siblings = _store.Boards.Where(b => b.Group == board.Group && b != board)
+            .OrderBy(b => b.Order).ThenBy(b => b.Name, StringComparer.Ordinal).ToList();
+        int index = target.IsHeader ? 0 : siblings.IndexOf(target.Board!) + (down ? 1 : 0);
+        siblings.Insert(Math.Clamp(index, 0, siblings.Count), board);
+        for (int i = 0; i < siblings.Count; i++) siblings[i].Order = i;
+
+        _moved = true;
+        Rebuild();
+    }
+
+    /// <summary>put a group where the group of the row under the pointer is.
+    /// Every group gets a place in the stored order from then on, so the
+    /// order no longer depends on names.</summary>
+    public void MoveGroup(string group, BoardRow target)
+    {
+        if (target.Group == group) return;
+        var order = _store.Groups();
+        bool down = order.IndexOf(target.Group) > order.IndexOf(group);
+        order.Remove(group);
+        order.Insert(order.IndexOf(target.Group) + (down ? 1 : 0), group);
+        _store.GroupOrder.Clear();
+        _store.GroupOrder.AddRange(order);
+
+        _moved = true;
+        Rebuild();
     }
 
     void OnReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var from = _dragging;
-        _dragging = null;
-        if (from is null) return;
+        bool moved = _moved;
+        var before = _before;
+        var beforeGroups = _beforeGroups;
+        EndDrag();
+        if (!moved || before is null) return;
 
-        var at = e.GetPosition(_list);
-        if (Math.Abs(at.Y - _pressAt.Y) < 6) return;        // a click, not a drag
-
-        var target = RowAt(at);
-        if (target is null || target.Board == from) return;
-
-        from.Group = target.Group;
-        var siblings = _store.Boards.Where(b => b.Group == from.Group && b != from)
-            .OrderBy(b => b.Order).ToList();
-        int index = target.IsHeader ? 0 : siblings.IndexOf(target.Board!) + (at.Y > _pressAt.Y ? 1 : 0);
-        siblings.Insert(Math.Clamp(index, 0, siblings.Count), from);
-        for (int i = 0; i < siblings.Count; i++) siblings[i].Order = i;
-
-        foreach (var b in siblings) _store.Save(b);
-        Rebuild();
+        foreach (var (b, group, order) in before)
+            if (b.Group != group || b.Order != order) _store.Save(b);
+        if (beforeGroups is null || !beforeGroups.SequenceEqual(_store.GroupOrder)) _store.SaveGroups();
     }
 
+    /// <summary>put everything back as it was before the drag.</summary>
+    public void CancelDrag()
+    {
+        if (_moved && _before is not null)
+        {
+            foreach (var (b, group, order) in _before) { b.Group = group; b.Order = order; }
+            _store.GroupOrder.Clear();
+            _store.GroupOrder.AddRange(_beforeGroups ?? []);
+            Rebuild();
+        }
+        EndDrag();
+    }
+
+    void EndDrag()
+    {
+        _dragBoard = null;
+        _dragGroup = null;
+        _moved = false;
+        _before = null;
+        _beforeGroups = null;
+    }
+
+    /// <summary>the row under a point, asked of the rows themselves: a heading
+    /// is taller than a board row, so the list's height divided by the row
+    /// count is not a row.</summary>
     BoardRow? RowAt(Point p)
     {
-        if (_rows.Count == 0) return null;
-        // rows are a uniform height, so the position maps straight to an index
-        double h = _list.Bounds.Height / Math.Max(1, _rows.Count);
-        int i = (int)(p.Y / Math.Max(1, h));
-        return i >= 0 && i < _rows.Count ? _rows[i] : null;
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            if (_list.ContainerFromIndex(i) is not { } row) continue;
+            var top = row.TranslatePoint(new Point(0, 0), _list);
+            if (top is { } t && p.Y >= t.Y && p.Y < t.Y + row.Bounds.Height) return _rows[i];
+        }
+        return null;
     }
 
     public bool HandleKey(Key key)
@@ -237,14 +387,18 @@ public sealed class BoardOverlay : Border
         }
     }
 
+    /// <summary>the next board up or down, over any heading; past the last
+    /// one it stays where it is.</summary>
     void Step(int delta)
     {
-        if (_rows.Count == 0) return;
-        int i = Math.Clamp(_list.SelectedIndex + delta, 0, _rows.Count - 1);
-        while (i > 0 && i < _rows.Count - 1 && _rows[i].IsHeader) i += delta > 0 ? 1 : -1;
-        _list.SelectedItems?.Clear();
-        _list.SelectedIndex = Math.Clamp(i, 0, _rows.Count - 1);
-        _list.ScrollIntoView(_list.SelectedIndex);
+        for (int i = _list.SelectedIndex + delta; i >= 0 && i < _rows.Count; i += delta)
+        {
+            if (_rows[i].IsHeader) continue;
+            _list.SelectedItems?.Clear();
+            _list.SelectedIndex = i;
+            _list.ScrollIntoView(i);
+            return;
+        }
     }
 
     void Commit()

@@ -215,12 +215,51 @@ public sealed class BoardStore
     public List<Board> Boards { get; } = [];
     public string Dir { get; private set; } = "";
 
+    /// <summary>the order groups are listed in, by name. A group is only a
+    /// name on its boards, so the order has to live somewhere of its own:
+    /// <c>.atlas/groups.json</c>, beside the boards folder rather than in it,
+    /// where it would be read as a board. A group not in the list comes
+    /// after the ones that are - ungrouped first, then by name, which is how
+    /// every group was ordered before this existed.</summary>
+    public List<string> GroupOrder { get; } = [];
+
+    string GroupsPath => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Dir)!, "groups.json");
+
+    /// <summary>every group that has a board in it, in display order.</summary>
+    public List<string> Groups() => Boards.Select(b => b.Group).Distinct()
+        .OrderBy(g => GroupOrder.IndexOf(g) is var i && i >= 0 ? i : int.MaxValue)
+        .ThenBy(g => g.Length == 0 ? "" : "1" + g, StringComparer.Ordinal)
+        .ToList();
+
+    public void SaveGroups()
+    {
+        try
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(GroupsPath)!);
+            File.WriteAllText(GroupsPath, JsonSerializer.Serialize(GroupOrder, Options));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"could not write {GroupsPath}: {ex.Message}");
+        }
+    }
+
     public static string DirFor(string repoRoot) =>
         System.IO.Path.Combine(repoRoot, ".atlas", "boards");
 
     public static BoardStore Load(string repoRoot)
     {
         var store = new BoardStore { Dir = DirFor(repoRoot) };
+        try
+        {
+            if (File.Exists(store.GroupsPath) &&
+                JsonSerializer.Deserialize<List<string>>(File.ReadAllText(store.GroupsPath), Options) is { } order)
+                store.GroupOrder.AddRange(order);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"could not read {store.GroupsPath}: {ex.Message}");
+        }
         if (!Directory.Exists(store.Dir)) return store;
 
         foreach (var path in Directory.EnumerateFiles(store.Dir, "*.json").OrderBy(p => p))

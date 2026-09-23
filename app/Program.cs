@@ -559,6 +559,9 @@ public sealed class SceneView : Control
         Layers.Add("prompt", () => Reveal.Showing(_prompt), () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
         Layers.Add("grep", () => Reveal.Showing(_grep), () => { _grep!.Close(); Focus(); });
+        // a board or group being dragged in the boards panel goes back first,
+        // and only the next Escape closes the panel
+        Layers.Add("board drag", () => _boards is { Dragging: true }, () => _boards!.CancelDrag());
         Layers.Add("boards", () => Reveal.Showing(_boards), () => _boards!.Close());
         Layers.Add("tour panel", () => Reveal.Showing(_stops), () => { _stops!.Close(); Focus(); });
         Layers.Add("annotations", () => Reveal.Showing(_notes), () => _notes!.Close());

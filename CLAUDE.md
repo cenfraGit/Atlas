@@ -521,7 +521,10 @@ argument Atlas reopens whatever `data/scan.json` last pointed at. A folder
 passed with a trailing backslash arrives as `C:\repo"` (the backslash
 escapes the closing quote), so `App.RepoFrom` cleans the argument up rather
 than trusting it, and says so when a path-looking argument is not a folder -
-it used to fall back to the last scan without a word.
+it used to fall back to the last scan without a word. Typed unquoted into
+Git Bash, a Windows path loses every backslash (`C:UsersmeRepo`);
+`App.Unmangled` walks down from the drive to put them back, and takes the
+answer only when exactly one folder fits.
 
 C# / .NET 10, Avalonia for the window and input, SkiaSharp for the canvas,
 TextMate grammars for highlighting, Roslyn for symbols, LibGit2Sharp for git.
@@ -741,6 +744,13 @@ and `mouse_event` and screenshotted with `CopyFromScreen` - see the driver
 scripts pattern in `uitest.ps1`. Do not conclude the app cannot be launched
 from a failure to launch it; check the crash log first, because a startup
 bug looks exactly like a missing desktop.
+
+**Driving the app rewrites `data/scan.json`.** Any launch with a folder
+scans it and saves the scan as the one a bare launch reopens. Driving Atlas
+on its own folder, or a scratch one, changes what the user's next launch
+opens - and a path argument that was silently being ignored went unnoticed
+for exactly that reason, because the fallback happened to be the folder
+meant. Say so when a session has done it.
 
 **Driving the app writes to `.atlas/`.** The sample boards are committed, so
 a note added while testing lands in a tracked file. Check `git status` after

@@ -170,6 +170,11 @@ public sealed class App : Application
             if (a.StartsWith("--")) continue;
             var p = a.Trim().Trim('"');
             if (p.Length == 0) continue;
+            if (!Directory.Exists(p) && Unmangled(p) is { } restored)
+            {
+                Console.WriteLine($"read {a} as {restored} - bash drops unquoted backslashes");
+                p = restored;
+            }
             try { p = Path.GetFullPath(p); } catch { continue; }
             if (!Directory.Exists(p)) continue;
             var root = Path.GetPathRoot(p);
@@ -178,7 +183,39 @@ public sealed class App : Application
         return null;
     }
 
-    static bool LooksLikePath(string a) => a.Contains('\\') || a.Contains('/') || a.StartsWith('.');
+    static bool LooksLikePath(string a) =>
+        a.Contains('\\') || a.Contains('/') || a.StartsWith('.') || a.Length > 2 && a[1] == ':';
+
+    /// <summary>a Windows path typed unquoted into bash, put back together.
+    ///
+    /// Bash treats a backslash as an escape and drops it, so
+    /// <c>C:\Users\me\Repo</c> arrives as <c>C:UsersmeRepo</c>. That used to
+    /// fall through to the last scan, which looked like it worked for as long
+    /// as the last scan happened to be the folder meant. The separators can
+    /// be found again by walking down from the drive, taking each folder
+    /// whose name the rest of the text starts with - and only a single match
+    /// is accepted, so this never guesses between two.</summary>
+    public static string? Unmangled(string arg)
+    {
+        if (arg.Length < 3 || !char.IsLetter(arg[0]) || arg[1] != ':' || arg[2] is '\\' or '/') return null;
+        var found = new List<string>();
+        Walk(arg[..2] + "\\", arg[2..], found);
+        return found.Count == 1 ? found[0] : null;
+
+        static void Walk(string dir, string rest, List<string> found)
+        {
+            if (found.Count > 1) return;
+            if (rest.Length == 0) { found.Add(dir.TrimEnd('\\')); return; }
+            string[] subs;
+            try { subs = Directory.GetDirectories(dir); } catch { return; }
+            foreach (var sub in subs)
+            {
+                var name = Path.GetFileName(sub);
+                if (rest.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+                    Walk(sub + "\\", rest[name.Length..], found);
+            }
+        }
+    }
 
     static Scan LoadScan(string[] args)
     {

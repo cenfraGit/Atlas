@@ -43,4 +43,38 @@ public class LaunchTests
         var root = Path.GetPathRoot(Environment.SystemDirectory)!;
         Assert.Equal(root, App.RepoFrom([root]));
     }
+
+    /// <summary>what bash makes of an unquoted Windows path: every backslash
+    /// dropped.</summary>
+    static string Bashed(string path) => path[..2] + path[2..].Replace("\\", "").Replace("/", "");
+
+    /// <summary>typed unquoted into Git Bash, a path loses its backslashes,
+    /// and Atlas opened the last scan instead - which looked like it worked
+    /// for as long as the last scan was the folder meant.</summary>
+    [Fact]
+    public void APathBashDroppedTheBackslashesFromIsPutBackTogether()
+    {
+        using var dir = new TempDir();
+        var repo = Directory.CreateDirectory(Path.Combine(dir.Path, "Repos", "MyApp")).FullName;
+
+        Assert.Equal(repo, App.RepoFrom([Bashed(repo)]));
+    }
+
+    /// <summary>and where two folders would both fit, it does not guess.</summary>
+    [Fact]
+    public void AnAmbiguousOneIsNotGuessed()
+    {
+        using var dir = new TempDir();
+        var one = Directory.CreateDirectory(Path.Combine(dir.Path, "ab", "c")).FullName;
+        Directory.CreateDirectory(Path.Combine(dir.Path, "a", "bc"));
+
+        Assert.Null(App.Unmangled(Bashed(one)));
+    }
+
+    [Fact]
+    public void ARealPathIsNeverUnmangled()
+    {
+        Assert.Null(App.Unmangled(@"C:\Windows"));
+        Assert.Null(App.Unmangled("relative"));
+    }
 }

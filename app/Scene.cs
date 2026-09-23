@@ -614,14 +614,6 @@ public sealed class Scene : IDisposable
                 continue;
             }
 
-            // and one cropped before its end was anchored gets that part
-            if (it.EndLine >= 0 && it.EndSymbol is null && Anchors.CaptureEnd(full, it.EndLine) is ({ } es, var eo))
-            {
-                it.EndSymbol = es;
-                it.EndOffset = eo;
-                changed = true;
-            }
-
             var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, it.Line, full, lines);
             // an orphan is left where it is. Moving a window to a guess is
             // worse than leaving it somewhere the user can see is wrong
@@ -634,8 +626,25 @@ public sealed class Scene : IDisposable
             // that grew is still shown down to its closing brace. If that
             // declaration is gone, the range keeps its length
             if (end >= 0)
-                end = Math.Clamp((it.EndSymbol is { } endSymbol ? Anchors.ResolveEnd(full, endSymbol, it.EndOffset ?? 0) : null)
-                                 ?? it.EndLine + (start - it.Line), start, last);
+            {
+                if (it.EndSymbol is { } endSymbol && Anchors.ResolveEnd(full, endSymbol, it.EndOffset ?? 0) is int resolved)
+                    end = resolved;
+                else
+                {
+                    end = it.EndLine + (start - it.Line);
+                    // a range cropped before its end was anchored gets an
+                    // anchor now - where the end lands after the move, since
+                    // the stored number is from before whatever moved it
+                    if (it.EndSymbol is null &&
+                        Anchors.CaptureEnd(full, Math.Clamp(end, start, last)) is ({ } es, var eo))
+                    {
+                        it.EndSymbol = es;
+                        it.EndOffset = eo;
+                        changed = true;
+                    }
+                }
+                end = Math.Clamp(end, start, last);
+            }
             if (Anchors.IsOldContext(it.Context) && at.Kind != AnchorKind.Drifted)
             {
                 it.Context = Anchors.ContextOf(lines, start);

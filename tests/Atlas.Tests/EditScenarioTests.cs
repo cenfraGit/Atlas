@@ -195,6 +195,33 @@ public class EditScenarioTests
         Edit(fx, "and the board opened again with nothing new", _ => { });
     }
 
+    /// <summary>a window cropped before ends were anchored, on a file that
+    /// has changed since. Its end was anchored at the stored line number -
+    /// which is from before the edit - so the first open collapsed a window
+    /// whose code had moved down onto a single line.</summary>
+    [Fact]
+    public void AWindowCroppedBeforeEndsWereAnchoredKeepsItsWholeRange()
+    {
+        using var fx = Open();
+        fx.Cropped.EndSymbol = null;
+        fx.Cropped.EndOffset = null;
+        int length = fx.Cropped.EndLine - fx.Cropped.Line;
+
+        fx.Src.InsertRange(Find(fx.Src, "public class Scenario") + 2, Enumerable.Repeat("    // filler", 30));
+        Write(fx.Repo, fx.Src);
+        fx.Scene.AnchorBoard(fx.Board);
+
+        int decl = Find(fx.Src, Decl);
+        Assert.Equal((decl, decl + length), (fx.Cropped.Line, fx.Cropped.EndLine));
+        Assert.NotNull(fx.Cropped.EndSymbol);
+
+        // and from then on it follows the method
+        fx.Src.InsertRange(Find(fx.Src, Marked) + 1, Enumerable.Repeat("        int more = 0;", 3));
+        Write(fx.Repo, fx.Src);
+        fx.Scene.AnchorBoard(fx.Board);
+        Assert.Equal(Find(fx.Src, "    }", decl), fx.Cropped.EndLine);
+    }
+
     /// <summary>a rectangle round two methods grows when the second one
     /// does. Its bottom used to be measured from the end of the first
     /// method - the one its top was on - so growth in the second slid out

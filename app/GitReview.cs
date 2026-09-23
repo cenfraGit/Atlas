@@ -18,7 +18,17 @@ public sealed record FileChange(string Path, int Added, int Removed)
 
     /// <summary>0-based lines in the new version where lines were deleted.</summary>
     public List<int> RemovedAt { get; } = [];
+
+    /// <summary>the deleted lines themselves, a block per run of them. The
+    /// map only has room for where they were; the change view shows them.</summary>
+    public List<RemovedBlock> RemovedText { get; } = [];
 }
+
+/// <summary>a run of consecutive deleted lines.</summary>
+/// <param name="At">0-based line in the new version that now sits where they
+/// did. The file's length when they came off the end.</param>
+/// <param name="OldLine">0-based line in the old version the run started at.</param>
+public sealed record RemovedBlock(int At, int OldLine, List<string> Lines);
 
 public sealed class ChangeSet
 {
@@ -266,23 +276,31 @@ public sealed class GitReview : IDisposable
         }
     }
 
-    static readonly Regex HunkHeader = new(@"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
+    static readonly Regex HunkHeader = new(@"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
 
-    /// <summary>walk a unified diff, recording new-side line numbers. patches
-    /// count from 1, the canvas counts from 0.</summary>
-    static void ReadHunks(string patchText, FileChange into)
+    /// <summary>walk a unified diff, recording new-side line numbers, and the
+    /// text of what was removed with its old-side line. patches count from 1,
+    /// the canvas counts from 0.
+    ///
+    /// Public so a test can hand it a patch without building a repository.</summary>
+    public static void ReadHunks(string patchText, FileChange into)
     {
-        int newLine = 0;
+        int newLine = 0, oldLine = 0;
+        RemovedBlock? open = null;
         foreach (var raw in patchText.Split('\n'))
         {
             var line = raw.TrimEnd('\r');
             var header = HunkHeader.Match(line);
             if (header.Success)
             {
-                newLine = int.Parse(header.Groups[1].Value) - 1;
+                oldLine = int.Parse(header.Groups[1].Value) - 1;
+                newLine = int.Parse(header.Groups[2].Value) - 1;
+                open = null;
                 continue;
             }
-            if (line.Length == 0) { newLine++; continue; }
+            // a block is a run of removed lines with nothing between them
+            if (line.Length == 0 || line[0] != '-' || line.StartsWith("---")) open = null;
+            if (line.Length == 0) { newLine++; oldLine++; continue; }
             switch (line[0])
             {
                 case '+':
@@ -292,11 +310,19 @@ public sealed class GitReview : IDisposable
                 case '-':
                     if (line.StartsWith("---")) break;
                     into.RemovedAt.Add(Math.Max(0, newLine));
+                    if (open is null)
+                    {
+                        open = new RemovedBlock(Math.Max(0, newLine), oldLine, []);
+                        into.RemovedText.Add(open);
+                    }
+                    open.Lines.Add(line[1..]);
+                    oldLine++;
                     break;
                 case '\\':
                     break;                       // "\ No newline at end of file"
                 default:
                     newLine++;
+                    oldLine++;
                     break;
             }
         }

@@ -6,7 +6,8 @@ using Avalonia.Media;
 
 namespace Atlas;
 
-/// <summary>pull requests recovered from merge commits, newest first.</summary>
+/// <summary>pull requests - open ones from GitHub, merged ones recovered from
+/// their merge commits - or branches, newest first.</summary>
 public sealed class ReviewOverlay : Border
 {
     readonly ListBox _list;

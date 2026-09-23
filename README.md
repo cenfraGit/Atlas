@@ -173,8 +173,10 @@ from the buttons. A stop remembers the *region* you were looking at, so it
 frames the same things in a smaller window. The tour is saved in the
 board's own file.
 
-**Review a change.** `P` lists merged pull requests, `G` branches ahead
-of the base. Opening one rescans the repo *as it was at that commit* and
+**Review a change.** `P` lists pull requests - open ones first, then
+merged - and `G` branches ahead of the base. Open pull requests come from
+GitHub through the `gh` command line tool, signed in; without it you get the
+merged ones only. Opening one rescans the repo *as it was at that commit* and
 lights up the files it touches - green for added, red for removed. `]` and
 `[` step through the commits one at a time. `Esc` returns to the working
 tree.
@@ -344,7 +346,12 @@ belongs on a board, next to the notes about it.
 
 ## Review mode
 
-`P` lists **branches that are ahead of the base**, then merged pull requests.
+`P` lists **open pull requests**, then merged ones. A merged pull request is
+found by its merge commit, so it needs nothing but git; an open one has no
+merge commit and nothing local says it exists, so the list asks GitHub
+through `gh pr list`, and the open ones join the top when the answer comes
+back. Opening one whose commits were never fetched fetches them
+(`git fetch origin pull/N/head`) first. `G` lists branches.
 Opening one lights up every changed file across the whole map, coloured green
 through red by how much of its churn was additions. `]` and `[` walk the
 commits, and the camera flies to whatever that commit touched. At reading

@@ -1716,7 +1716,7 @@ public sealed class SceneView : Control
     public void AttachReview(ReviewOverlay panel, CommitsPanel commits)
     {
         _reviews = panel;
-        panel.Chosen += OpenTarget;
+        panel.Chosen += ChooseTarget;
         _commitsPanel = commits;
         commits.Picked += GoToCommit;
     }
@@ -1739,6 +1739,49 @@ public sealed class SceneView : Control
         var targets = branches ? _git.Branches() : _git.MergedPrs();
         _reviews.Show(targets, _git.HeadName, branches ? "branches" : "pull requests");
         _caption = "";
+        if (!branches) AskForOpenPrs(targets);
+    }
+
+    int _askingPrs;
+
+    /// <summary>open pull requests are not in the local history at all, so
+    /// they come from GitHub, which takes a moment: the merged ones are shown
+    /// straight away and the open ones join them at the top when they arrive.</summary>
+    void AskForOpenPrs(List<ReviewTarget> merged)
+    {
+        int turn = ++_askingPrs;
+        var root = _scene.Data.Root;
+        var branch = _git?.HeadName ?? "";
+        Task.Run(() => GitReview.OpenPrs(root)).ContinueWith(t => Dispatcher.UIThread.Post(() =>
+        {
+            if (turn != _askingPrs || _reviews is null || !Reveal.Showing(_reviews)) return;
+            if (t.Result is not { } open)
+            {
+                Toast("open pull requests come from GitHub: needs the gh tool, signed in");
+                return;
+            }
+            _reviews.Show([.. open.Select(GitReview.RowFor), .. merged], branch, "pull requests");
+        }));
+    }
+
+    /// <summary>pick something from the review panel. An open pull request
+    /// may need its commits fetched first, which is network and so off the
+    /// UI thread; everything after it is libgit2 and so back on it.</summary>
+    void ChooseTarget(ReviewTarget chosen)
+    {
+        if (chosen.Open is not { } pr || _git is null) { OpenTarget(chosen); return; }
+        if (_git.TargetFor(pr) is { } here) { OpenTarget(here); return; }
+
+        _caption = $"#{pr.Number}   -   fetching its commits...";
+        InvalidateVisual();
+        var root = _scene.Data.Root;
+        Task.Run(() => GitReview.FetchPr(root, pr.Number)).ContinueWith(t => Dispatcher.UIThread.Post(() =>
+        {
+            _caption = "";
+            if (_git?.TargetFor(pr) is { } fetched) OpenTarget(fetched);
+            else Toast($"could not fetch #{pr.Number} - try git fetch origin pull/{pr.Number}/head");
+            InvalidateVisual();
+        }));
     }
 
     int _opening;

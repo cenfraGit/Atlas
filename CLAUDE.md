@@ -315,6 +315,14 @@ covered by `AnchorTests` and works.
 
 ### Review mode
 
+- [x] `P` lists **open** pull requests as well as merged ones. Merged ones
+      are found by their merge commit; an open one has none, so nothing in
+      the local history says it exists. They come from `gh pr list`, off the
+      UI thread, and join the top of the list when it answers - no `gh`, or
+      not signed in, and the merged list stands with a toast saying why. An
+      open one whose commits are not here is fetched with the user's own git
+      (`pull/N/head`, no ref made) before it opens; libgit2 would need the
+      credentials handed to it. Reviewed from its merge base, like a branch.
 - [x] `G` lists every branch. The base and anything fully merged into it
       have no change set, and leaving them out made the panel look broken -
       you open the list of branches and the one you are on is not in it. A

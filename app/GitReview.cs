@@ -7,7 +7,15 @@ namespace Atlas;
 /// host API: parent 1 is what it merged into, parent 2 is the branch head.</summary>
 /// <summary>something reviewable: a merged pull request, or a branch that has
 /// commits its base does not.</summary>
-public sealed record ReviewTarget(string Label, string Detail, string BaseSha, string HeadSha);
+public sealed record ReviewTarget(string Label, string Detail, string BaseSha, string HeadSha)
+{
+    /// <summary>an open pull request, whose base is not known until it is
+    /// opened: its commits may not have been fetched yet.</summary>
+    public OpenPr? Open { get; init; }
+}
+
+/// <summary>an open pull request, as GitHub reports it.</summary>
+public sealed record OpenPr(int Number, string Title, string Head, string Base, string HeadSha);
 
 public sealed record CommitInfo(string Sha, string Short, string Subject, string Author, DateTimeOffset When);
 
@@ -200,6 +208,96 @@ public sealed class GitReview : IDisposable
         }
         return prs;
     }
+
+    /// <summary>open pull requests, asked of GitHub through the gh command
+    /// line tool, or null when that cannot be done - no gh, not signed in,
+    /// not a GitHub repo, no network.
+    ///
+    /// An open pull request has no merge commit, so nothing in the local
+    /// history says it exists: its branch shows under branches, but nothing
+    /// there knows it is a pull request, what it is called or what it is for.
+    /// Only the host knows, and gh is the host's own client, already signed
+    /// in with whatever the user uses.
+    ///
+    /// No libgit2 here, so it runs off the UI thread.</summary>
+    public static List<OpenPr>? OpenPrs(string root, int max = 50)
+    {
+        var json = Run(root, "gh", $"pr list --state open --limit {max} --json number,title,headRefName,baseRefName,headRefOid", 20_000);
+        return json is null ? null : ParseOpenPrs(json);
+    }
+
+    public static List<OpenPr> ParseOpenPrs(string json)
+    {
+        var list = new List<OpenPr>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var pr in doc.RootElement.EnumerateArray())
+                list.Add(new OpenPr(
+                    pr.GetProperty("number").GetInt32(),
+                    pr.GetProperty("title").GetString() ?? "",
+                    pr.GetProperty("headRefName").GetString() ?? "",
+                    pr.GetProperty("baseRefName").GetString() ?? "",
+                    pr.GetProperty("headRefOid").GetString() ?? ""));
+        }
+        catch { }
+        return list;
+    }
+
+    /// <summary>fetch a pull request's commits, for one whose branch was
+    /// never fetched. Through the git on the path, so it signs in the way
+    /// every other fetch does; libgit2 would need the credentials handed to
+    /// it. Nothing gets a ref: the commits land in the object store, which is
+    /// all a review reads. Off the UI thread.</summary>
+    public static bool FetchPr(string root, int number) =>
+        Run(root, "git", $"fetch --quiet origin pull/{number}/head", 90_000) is not null;
+
+    static string? Run(string root, string exe, string args, int timeoutMs)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo(exe, args)
+            {
+                WorkingDirectory = root,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            // a console prompt for a password would wait for ever on a
+            // process with no console
+            psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null) return null;
+            var output = p.StandardOutput.ReadToEndAsync();
+            _ = p.StandardError.ReadToEndAsync();
+            if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch { } return null; }
+            return p.ExitCode == 0 ? output.Result : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>an open pull request as something to review: from where its
+    /// branch left its base to its head. Null when its head commit is not
+    /// here, which means it needs fetching first.</summary>
+    public ReviewTarget? TargetFor(OpenPr pr)
+    {
+        if (_repo.Lookup<Commit>(pr.HeadSha) is not { } head) return null;
+        var baseTip = _repo.Branches["origin/" + pr.Base]?.Tip
+                      ?? _repo.Branches[pr.Base]?.Tip
+                      ?? (BaseBranch() is { } name ? _repo.Branches[name]?.Tip : null);
+        if (baseTip is null) return null;
+        var from = _repo.ObjectDatabase.FindMergeBase(head, baseTip) ?? baseTip;
+        return new ReviewTarget($"#{pr.Number}  {pr.Title}", $"open, {pr.Head} into {pr.Base}", from.Sha, head.Sha)
+        {
+            Open = pr,
+        };
+    }
+
+    /// <summary>the list row for one, before it is known whether its
+    /// commits are here.</summary>
+    public static ReviewTarget RowFor(OpenPr pr) =>
+        new($"#{pr.Number}  {pr.Title}", $"open, into {pr.Base}", "", pr.HeadSha) { Open = pr };
 
     /// <summary>the commits a pull request contributed, oldest first, which is
     /// the order a reviewer wants to walk them in.</summary>

@@ -177,7 +177,6 @@ a test that was checked to fail against the old code first.
 - [x] Undo records when something changes, not when it is clicked.
 - [x] A finished stroke is saved on the spot, and gives the pointer capture
       back like the branches beside it.
-- [x] Escape leaves a board again - see Dialogs.
 - [x] Every stored file reference carries a fingerprint: windows, bookmarks
       and the fly-to for an annotation, which had one and ignored it.
 - [x] `.atlas/` is written with LF - see the storage contract.
@@ -220,10 +219,11 @@ tour stop does not.
       so a dialog can no longer strand itself by losing focus. **Any new
       overlay must be registered in `BuildLayers` or it inherits the old
       bug.**
-- [x] The board itself is a layer. It was left out when dismissal moved
-      here, and HandleKey refuses Escape outright, so Esc on a board did
-      nothing at all while the bar still offered "back to map  esc".
-      **A place you can be inside needs a layer, not just a dialog.**
+- [x] Escape closes things; it does not leave a board. Leaving is going
+      somewhere, not closing something, and when one key did both, Escape
+      on a dialog threw you off the board with it. `alt+Left` leaves, and
+      the bar says so - it used to offer "back to map  esc" while Escape
+      did nothing, which is what made the key look broken.
 - [x] The secondary-click menu is in the stack, innermost of all. Its flag is
       cleared from the menu's own `Closed` event, since clicking away from it
       closes it without anyone here being told.

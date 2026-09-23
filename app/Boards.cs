@@ -117,6 +117,15 @@ public sealed class BoardItem
     /// declaration ends now; that is the thing to ask.</summary>
     [JsonPropertyName("endOffset")] public int? EndOffset { get; set; }
 
+    /// <summary>the declaration <see cref="EndOffset"/> is measured from the
+    /// end of (<see cref="Anchors.CaptureEnd"/>). Null on anything anchored
+    /// before this existed, which measured from <see cref="Symbol"/>.
+    ///
+    /// A file window carries one too, for the last line of its range: a
+    /// window cropped to one method used to keep its line count when the
+    /// method grew, so the end of the method slid out of the bottom.</summary>
+    [JsonPropertyName("endSymbol")] public string? EndSymbol { get; set; }
+
     /// <summary>and the remainder, so a box that stopped halfway through a
     /// line goes back to halfway through it.</summary>
     [JsonPropertyName("endDy")] public float EndDy { get; set; }

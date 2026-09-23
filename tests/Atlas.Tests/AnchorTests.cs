@@ -134,6 +134,69 @@ public class AnchorTests
         Assert.Contains("host.Start()", lines[anchor.Line]);
     }
 
+    /// <summary>the edit that happens most is the one right next to the
+    /// line you marked. The fingerprint used to be one hash of the line and
+    /// its neighbours, so a line added beside it matched nowhere and the
+    /// note fell back to a count from the top of the method - landing on
+    /// the new line instead.</summary>
+    [Fact]
+    public void SurvivesALineAddedRightAboveIt()
+    {
+        using var f = new Fixture();
+        var (anchor, lines) = f.Resolve(Source.Replace("        host.Start();", "        host.Warm();\n        host.Start();"));
+
+        Assert.Equal(AnchorKind.Symbol, anchor.Kind);
+        Assert.Contains("host.Start()", lines[anchor.Line]);
+    }
+
+    [Fact]
+    public void SurvivesLinesAddedOnBothSides()
+    {
+        using var f = new Fixture();
+        var (anchor, lines) = f.Resolve(Source.Replace("        host.Start();",
+            "        host.Warm();\n        host.Check();\n        host.Start();\n        host.Log();\n        host.Wait();"));
+
+        Assert.Equal(AnchorKind.Symbol, anchor.Kind);
+        Assert.Contains("host.Start()", lines[anchor.Line]);
+    }
+
+    /// <summary>with the declaration gone the whole file is searched, where
+    /// a line on its own could be anywhere - so half its neighbours must
+    /// still agree. A rename and an edit beside the line at once is still
+    /// found.</summary>
+    [Fact]
+    public void ARenameAndAnEditBesideTheLineAreStillFound()
+    {
+        using var f = new Fixture();
+        var edited = Source.Replace("void Configure()", "void ConfigureServices()")
+                           .Replace("Configure();", "ConfigureServices();")
+                           .Replace("        host.Start();", "        host.Warm();\n        host.Start();");
+        var (anchor, lines) = f.Resolve(edited);
+
+        Assert.Equal(AnchorKind.Context, anchor.Kind);
+        Assert.Contains("host.Start()", lines[anchor.Line]);
+    }
+
+    /// <summary>boards and annotations written before the fingerprint was
+    /// split per line hold the old single hash. It still matches.</summary>
+    [Fact]
+    public void AFingerprintOfTheOldKindStillMatches()
+    {
+        using var f = new Fixture();
+        var lines = Lines(Source);
+        var parts = Enumerable.Range(f.TargetLine - 2, 5)
+            .Select(i => i >= 0 && i < lines.Length ? string.Concat(lines[i].Where(c => !char.IsWhiteSpace(c))) : "");
+        var sha = System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(string.Join("\u0001", parts)));
+        f.Ann.Context = Convert.ToHexString(sha)[..12];
+        Assert.True(Anchors.IsOldContext(f.Ann.Context));
+
+        var header = string.Join("\n", Enumerable.Repeat("// filler", 5)) + "\n";
+        var (anchor, after) = f.Resolve(header + Source);
+
+        Assert.Equal(AnchorKind.Symbol, anchor.Kind);
+        Assert.Contains("host.Start()", after[anchor.Line]);
+    }
+
     [Fact]
     public void FallsBackToContextWhenTheMethodIsRenamed()
     {

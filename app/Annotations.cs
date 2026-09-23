@@ -129,14 +129,54 @@ public static class Anchors
     const int ContextRadius = 2;
 
     /// <summary>fingerprint of a line and its neighbours, whitespace removed so
-    /// reindenting does not break it.</summary>
+    /// reindenting does not break it.
+    ///
+    /// One short hash per line rather than one hash of the lot, so a match
+    /// can be partial. A single hash failed the moment anything went in
+    /// right next to the line - which is exactly where people edit - and
+    /// the anchor fell back to a line count from the top of the method.
+    /// Now the line itself has to match and its neighbours break ties.</summary>
     public static string ContextOf(string[] lines, int line)
     {
-        var parts = new List<string>();
+        var parts = new System.Text.StringBuilder();
         for (int i = line - ContextRadius; i <= line + ContextRadius; i++)
-            parts.Add(i >= 0 && i < lines.Length ? Normalize(lines[i]) : "");
-        return Hash(string.Join("", parts));
+            parts.Append(Hash(i >= 0 && i < lines.Length ? Normalize(lines[i]) : "")[..LineHash]);
+        return parts.ToString();
     }
+
+    const int LineHash = 4;
+
+    /// <summary>how well line <paramref name="i"/> fits a fingerprint: -1 when
+    /// the line itself is different, otherwise how many of its neighbours
+    /// still agree.
+    ///
+    /// A twelve character fingerprint is the single hash written before
+    /// there was one per line. It still matches, whole or not at all, and is
+    /// replaced with the new kind whenever the thing holding it re-anchors.</summary>
+    public static int Fit(string[] lines, string context, int i)
+    {
+        int full = ContextRadius * 2;
+        if (context.Length != (full + 1) * LineHash)
+        {
+            var parts = new List<string>();
+            for (int j = i - ContextRadius; j <= i + ContextRadius; j++)
+                parts.Add(j >= 0 && j < lines.Length ? Normalize(lines[j]) : "");
+            return Hash(string.Join("", parts)) == context ? full : -1;
+        }
+
+        var mine = ContextOf(lines, i);
+        if (string.CompareOrdinal(mine, ContextRadius * LineHash, context, ContextRadius * LineHash, LineHash) != 0)
+            return -1;
+        int agree = 0;
+        for (int k = 0; k <= full; k++)
+            if (k != ContextRadius && string.CompareOrdinal(mine, k * LineHash, context, k * LineHash, LineHash) == 0)
+                agree++;
+        return agree;
+    }
+
+    /// <summary>whether a stored fingerprint is the old single-hash kind.</summary>
+    public static bool IsOldContext(string? context) =>
+        context is not null && context.Length != (ContextRadius * 2 + 1) * LineHash;
 
     static string Normalize(string s)
     {
@@ -190,6 +230,38 @@ public static class Anchors
         return null;
     }
 
+    /// <summary>an anchor for the *last* line of something: the declaration
+    /// whose end it should follow, and how far past that end it is.
+    ///
+    /// Measured from an end rather than a start, so lines added inside the
+    /// method push it down with the closing brace. The declaration is the
+    /// innermost one the line sits in - unless the line is in a gap between
+    /// members (a blank line, a class's closing brace), where it follows the
+    /// member just above it. A box round two methods then grows with the
+    /// second, which measuring from the first one's end did not.</summary>
+    public static (string? Symbol, int Offset) CaptureEnd(string fullPath, int line)
+    {
+        var all = Symbols.ForFile(fullPath);
+        if (Symbols.Innermost(all, line) is not { } inside) return (null, 0);
+
+        SymbolSpan? above = null;
+        foreach (var s in all)
+        {
+            if (s.StartLine < inside.StartLine || s.EndLine >= line || s.EndLine > inside.EndLine) continue;
+            if (s.Name == inside.Name) continue;
+            if (above is null || s.EndLine > above.Value.EndLine ||
+                s.EndLine == above.Value.EndLine && s.Lines > above.Value.Lines)
+                above = s;
+        }
+        var from = above ?? inside;
+        return (from.Name, line - from.EndLine);
+    }
+
+    /// <summary>where an end anchor lands now, or null when its declaration
+    /// is gone.</summary>
+    public static int? ResolveEnd(string fullPath, string symbol, int offset) =>
+        SpanOf(fullPath, symbol) is { } span ? span.End + offset : null;
+
     public static (string? Symbol, int Offset) CaptureAt(string fullPath, int line)
     {
         var sym = Symbols.Innermost(Symbols.ForFile(fullPath), line);
@@ -222,9 +294,11 @@ public static class Anchors
 
                 // the declaration narrows the search; the fingerprint pinpoints
                 // the line inside it, so edits within the method are handled too
+                // inside the declaration the line's own text is enough: the
+                // search is already narrowed to one method
                 if (a.Context is not null)
                 {
-                    int found = FindContext(lines, a.Context, from, to, s.StartLine + a.Offset);
+                    int found = FindContext(lines, a.Context, from, to, s.StartLine + a.Offset, 0);
                     if (found >= 0) return new Anchor(found, AnchorKind.Symbol);
                 }
                 else
@@ -237,28 +311,36 @@ public static class Anchors
             }
         }
 
+        // across a whole file a line like "}" is everywhere, so half its
+        // neighbours have to agree as well
         if (a.Context is not null)
         {
-            int found = FindContext(lines, a.Context, 0, last, a.Line);
+            int found = FindContext(lines, a.Context, 0, last, a.Line, ContextRadius);
             if (found >= 0) return new Anchor(found, AnchorKind.Context);
         }
 
         if (a.Line >= 0 && a.Line <= last &&
-            a.Context is not null && ContextOf(lines, a.Line) == a.Context)
+            a.Context is not null && Fit(lines, a.Context, a.Line) == ContextRadius * 2)
             return new Anchor(a.Line, AnchorKind.Line);
 
         return new Anchor(Math.Clamp(a.Line, 0, last), AnchorKind.Orphan);
     }
 
-    /// <summary>nearest line to <paramref name="near"/> whose fingerprint matches.</summary>
-    static int FindContext(string[] lines, string context, int from, int to, int near)
+    /// <summary>the line that fits the fingerprint best, with at least
+    /// <paramref name="least"/> neighbours agreeing; the nearest to
+    /// <paramref name="near"/> among equals.</summary>
+    static int FindContext(string[] lines, string context, int from, int to, int near, int least)
     {
-        int best = -1, bestDistance = int.MaxValue;
+        int best = -1, bestFit = -1, bestDistance = int.MaxValue;
         for (int i = from; i <= to; i++)
         {
-            if (ContextOf(lines, i) != context) continue;
+            int fit = Fit(lines, context, i);
+            if (fit < least) continue;
             int distance = Math.Abs(i - near);
-            if (distance < bestDistance) { best = i; bestDistance = distance; }
+            if (fit > bestFit || fit == bestFit && distance < bestDistance)
+            {
+                best = i; bestFit = fit; bestDistance = distance;
+            }
         }
         return best;
     }

@@ -609,23 +609,42 @@ public sealed class Scene : IDisposable
             // does for fingerprints
             if (it.Context is null)
             {
-                var (symbol, offset) = Anchors.CaptureAt(full, it.Line);
-                it.Symbol = symbol;
-                it.Offset = offset;
-                it.Context = Anchors.ContextOf(lines, it.Line);
+                Reanchor(it);
                 changed = true;
                 continue;
+            }
+
+            // and one cropped before its end was anchored gets that part
+            if (it.EndLine >= 0 && it.EndSymbol is null && Anchors.CaptureEnd(full, it.EndLine) is ({ } es, var eo))
+            {
+                it.EndSymbol = es;
+                it.EndOffset = eo;
+                changed = true;
             }
 
             var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, it.Line, full, lines);
             // an orphan is left where it is. Moving a window to a guess is
             // worse than leaving it somewhere the user can see is wrong
-            if (!at.Resolved || at.Line == it.Line) continue;
+            if (!at.Resolved) continue;
 
-            int shift = at.Line - it.Line;
             int last = Math.Max(0, lines.Length - 1);
-            it.Line = Math.Clamp(at.Line, 0, last);
-            if (it.EndLine >= 0) it.EndLine = Math.Clamp(it.EndLine + shift, it.Line, last);
+            int start = Math.Clamp(at.Line, 0, last);
+            int end = it.EndLine;
+            // the end follows the end of its own declaration, so a method
+            // that grew is still shown down to its closing brace. If that
+            // declaration is gone, the range keeps its length
+            if (end >= 0)
+                end = Math.Clamp((it.EndSymbol is { } endSymbol ? Anchors.ResolveEnd(full, endSymbol, it.EndOffset ?? 0) : null)
+                                 ?? it.EndLine + (start - it.Line), start, last);
+            if (Anchors.IsOldContext(it.Context) && at.Kind != AnchorKind.Drifted)
+            {
+                it.Context = Anchors.ContextOf(lines, start);
+                changed = true;
+            }
+            if (start == it.Line && end == it.EndLine) continue;
+
+            it.Line = start;
+            it.EndLine = end;
             changed = true;
         }
         return changed;
@@ -701,15 +720,20 @@ public sealed class Scene : IDisposable
         // is added inside it. Only shapes: a note's height is its words and
         // a stroke's is its ink, so neither has a height to stretch
         it.EndOffset = null;
+        it.EndSymbol = null;
         it.EndDy = 0;
-        if (!IsShape(it.Kind) || symbol is null) return;
-        if (Anchors.SpanOf(full, symbol) is not { } span) return;
+        if (!IsShape(it.Kind)) return;
 
         float bottom = it.Y + LastHeight(it);
         int end = Math.Clamp(from + (int)MathF.Floor((bottom - top) / step), 0, Math.Max(0, lines.Length - 1));
         if (end <= line) return;                 // too short to have two ends
 
-        it.EndOffset = end - span.End;
+        // the bottom edge sits on the line just past the box, so the end is
+        // anchored by the last line inside it
+        var (endSymbol, endOffset) = Anchors.CaptureEnd(full, end - 1);
+        if (endSymbol is null) return;
+        it.EndSymbol = endSymbol;
+        it.EndOffset = endOffset + 1;
         it.EndDy = bottom - (top + (end - from) * step);
     }
 
@@ -741,6 +765,11 @@ public sealed class Scene : IDisposable
             var full = Path.Combine(Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
             var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, 0, full, lines);
             if (!at.Resolved) continue;      // an orphan stays where it is
+            if (Anchors.IsOldContext(it.Context) && at.Kind != AnchorKind.Drifted)
+            {
+                it.Context = Anchors.ContextOf(lines, at.Line);
+                changed = true;
+            }
 
             float step = LineStepIn(host, f);
             var (from, _) = RangeOf(host, f);
@@ -753,10 +782,10 @@ public sealed class Scene : IDisposable
             // its own, so it is matched on its fingerprint nearest to where
             // the top landed - which is why the top is resolved first
             float height = 0;
-            if (it.EndOffset is int endOffset && IsShape(it.Kind) && it.Symbol is not null &&
-                Anchors.SpanOf(full, it.Symbol) is { } span)
+            if (it.EndOffset is int endOffset && IsShape(it.Kind) && (it.EndSymbol ?? it.Symbol) is { } endSymbol &&
+                Anchors.ResolveEnd(full, endSymbol, endOffset) is int resolvedEnd)
             {
-                int endLine = Math.Clamp(span.End + endOffset, at.Line, Math.Max(0, lines.Length - 1));
+                int endLine = Math.Clamp(resolvedEnd, at.Line, Math.Max(0, lines.Length - 1));
                 if (endLine > at.Line)
                     height = top + (endLine - from) * step + it.EndDy - want;
             }
@@ -831,6 +860,14 @@ public sealed class Scene : IDisposable
         window.Symbol = symbol;
         window.Offset = offset;
         window.Context = Anchors.ContextOf(lines, window.Line);
+
+        // a window onto the whole file has no end to keep
+        window.EndSymbol = null;
+        window.EndOffset = null;
+        if (window.EndLine < 0) return;
+        var (endSymbol, endOffset) = Anchors.CaptureEnd(full, window.EndLine);
+        window.EndSymbol = endSymbol;
+        window.EndOffset = endSymbol is null ? null : endOffset;
     }
 
     /// <summary>the annotations to draw on this file, here.

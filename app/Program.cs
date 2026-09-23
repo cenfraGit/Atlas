@@ -156,6 +156,30 @@ public sealed class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    /// <summary>the folder a command line names, cleaned up, or null.
+    ///
+    /// A folder tab-completed in a terminal ends in a backslash, and quoted
+    /// that makes <c>\"</c> - which Windows reads as an escaped quote, so the
+    /// argument arrives as <c>C:\repo"</c>. That is not a folder, and the path
+    /// was ignored without a word: Atlas opened whatever it had last scanned.
+    /// The quote is trimmed, the path made full, the trailing slash dropped.</summary>
+    public static string? RepoFrom(IEnumerable<string> args)
+    {
+        foreach (var a in args)
+        {
+            if (a.StartsWith("--")) continue;
+            var p = a.Trim().Trim('"');
+            if (p.Length == 0) continue;
+            try { p = Path.GetFullPath(p); } catch { continue; }
+            if (!Directory.Exists(p)) continue;
+            var root = Path.GetPathRoot(p);
+            return p.Length > (root?.Length ?? 0) ? p.TrimEnd('\\', '/') : p;
+        }
+        return null;
+    }
+
+    static bool LooksLikePath(string a) => a.Contains('\\') || a.Contains('/') || a.StartsWith('.');
+
     static Scan LoadScan(string[] args)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -165,7 +189,9 @@ public sealed class App : Application
         var cache = Path.Combine(dir?.FullName ?? ".", "data", "scan.json");
 
         // first non-flag argument is a repo to scan; otherwise reuse the last scan
-        var repo = args.Skip(1).FirstOrDefault(a => !a.StartsWith("--") && Directory.Exists(a));
+        var repo = RepoFrom(args.Skip(1));
+        if (repo is null && args.Skip(1).FirstOrDefault(a => !a.StartsWith("--") && LooksLikePath(a)) is { } asked)
+            Console.WriteLine($"not a folder: {asked} - opening the last scan instead");
         if (repo is not null)
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();

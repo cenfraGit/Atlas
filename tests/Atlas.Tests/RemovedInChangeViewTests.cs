@@ -164,6 +164,102 @@ public class RemovedInChangeViewTests
         }
     }
 
+    /// <summary>only the first piece of a file has a header. The pieces after
+    /// a cut carry straight on under the red block, like a diff, instead of
+    /// each costing a header's height - about three lines close in.</summary>
+    [Fact]
+    public void OnlyTheFirstPieceHasAHeader()
+    {
+        var (scene, repo) = Repo();
+        using (repo) using (scene)
+        {
+            var board = ChangeBoard.Build(Set(Removing(Path, (10, 10, ["a"]), (20, 20, ["b"]))), scene, "c");
+            var windows = board.Items.Where(i => i.Kind == "file").ToList();
+
+            Assert.Equal([false, true, true], windows.Select(w => w.Continued));
+            var f = scene.Data.Files[scene.IndexOfPath(Path)];
+            var second = windows[1];
+            Assert.Equal((second.EndLine - second.Line + 1) * scene.LineStepIn(second, f), scene.ItemHeight(second), 2);
+            Assert.Equal(Scene.WinHeadH + 10 * scene.LineStepIn(windows[0], f), scene.ItemHeight(windows[0]), 2);
+        }
+    }
+
+    /// <summary>and one copied off the change view onto a board of your own
+    /// is a window in its own right again, header and all.</summary>
+    [Fact]
+    public void ACopiedPieceGetsItsHeaderBack()
+    {
+        var piece = new BoardItem { Id = "w", Kind = "file", File = Path, Continued = true };
+        var copy = System.Text.Json.JsonSerializer.Deserialize<BoardItem>(System.Text.Json.JsonSerializer.Serialize(piece))!;
+        Assert.False(copy.Continued);
+    }
+
+    /// <summary>with the removed lines on the board as text, the thin red
+    /// marker where they were would say it twice. With R hiding them, it is
+    /// the only sign left, so it comes back.</summary>
+    [Fact]
+    public void TheThinMarkerIsLeftOutWhereTheTextIsShown()
+    {
+        var (scene, repo) = Repo();
+        using (repo) using (scene)
+        {
+            var c = Removing(Path, (10, 10, ["a", "b"]));
+            var set = Set(c);
+            scene.Review = set;
+            var board = ChangeBoard.Build(set, scene, "c");
+            scene.ActiveBoard = board;
+            scene.BoardReadOnly = true;
+
+            // the block moved far off, so only the windows are on screen -
+            // but it is still on the board, so its file counts as shown
+            var block = board.Items.Single(i => i.Kind == "removed");
+            block.X += 100_000;
+            var second = board.Items.First(i => i.Kind == "file" && i.Continued);
+            scene.CamX = second.X + 310;
+            scene.CamY = second.Y;
+            scene.CamS = 3f;
+
+            int shown = Reddish(Render(scene, 600, 300));
+            board.Items.Remove(block);
+            int hidden = Reddish(Render(scene, 600, 300));
+
+            Assert.True(hidden > 0, "no marker at all with the text hidden");
+            Assert.True(shown < hidden / 4, $"{shown} red pixels with the text shown, {hidden} with it hidden");
+            scene.ActiveBoard = null;
+        }
+    }
+
+    /// <summary>a window draws the lines that can be seen, not its whole
+    /// range. It drew every line every frame, which for the change view's
+    /// whole-file windows was 25ms a frame - past the budget for 60 on its
+    /// own - and is about a millisecond now.</summary>
+    [Fact]
+    public void AWindowDrawsOnlyTheLinesOnScreen()
+    {
+        using var repo = SampleRepo.Build();
+        const string big = "src/Big.cs";
+        repo.File(big, string.Join("\n", Enumerable.Range(0, 3000).Select(n => $"var value{n} = {n};")));
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        var window = new BoardItem { Id = "w", Kind = "file", File = big, Line = 0, EndLine = -1, W = 620 };
+        scene.ActiveBoard = new Board { Id = "b", Items = { window } };
+        scene.CamX = 310;
+        scene.CamY = scene.ItemHeight(window) / 2;
+        scene.CamS = 2f;
+
+        using var bmp = new SKBitmap(800, 600);
+        using var canvas = new SKCanvas(bmp);
+        for (int n = 0; n < 300 && scene.LinesOf(big) is null; n++) { scene.Draw(canvas, 800, 600); Thread.Sleep(10); }
+        Assert.NotNull(scene.LinesOf(big));
+
+        int before = scene.LinesDrawn;
+        scene.Draw(canvas, 800, 600);
+        int drawn = scene.LinesDrawn - before;
+
+        // 600 pixels at this zoom is under forty lines
+        Assert.InRange(drawn, 1, 60);
+        scene.ActiveBoard = null;
+    }
+
     static SKColor[] Render(Scene scene, int w, int h)
     {
         using var bmp = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);

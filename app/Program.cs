@@ -2065,7 +2065,7 @@ public sealed class SceneView : Control
         // a window scales its card, so a line's height on the board is not
         // the file's line height
         float k = window.W / f.W;
-        float y = window.Y + Scene.WinHeadH + (line - from + 0.5f) * _scene.Data.LineH * k;
+        float y = window.Y + Scene.HeadOf(window) + (line - from + 0.5f) * _scene.Data.LineH * k;
 
         _scene.Highlight = (fileIndex, m.Line, m.Line);
         Select(fileIndex, m.Line, m.Line);

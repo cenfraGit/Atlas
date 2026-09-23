@@ -365,12 +365,18 @@ covered by `AnchorTests` and works.
       the UI thread, like any file.
 - [ ] ctrl+F does not search removed text: the scope is the files the
       board's windows show, and a removed block is not a file.
-- [ ] The segment headers are sized for a zoomed out view, so close in each
-      cut costs about three lines of height. A continuation segment could
-      draw a thin one - but `WinHeadH` is assumed in about eight places.
-- [ ] The thin red removal marker still draws at each cut, beside the block
-      that now shows the same thing. Worth leaving off when the text is
-      shown, and keeping when `R` hides it.
+- [x] Only the first piece of a file has a header. The rest are
+      `BoardItem.Continued` - never stored, so a piece copied onto your own
+      board gets its header back - and carry straight on under the red
+      block. Every place that assumed a header height asks `Scene.HeadOf`.
+- [x] The thin red marker is left out of a window whose file has its
+      removed text on the board, and comes back when `R` hides it.
+- [x] Zooming into the change view was slow because a board window drew
+      every line of its range every frame - 25ms for a whole file, and the
+      same before the stacks existed. Windows and removed blocks off screen
+      are skipped now, and a window draws only the lines in view, glow
+      included: about a millisecond. See "A board window draws what is on
+      screen".
 - [ ] Removed text on the map: a peek of the old lines when hovering a red
       marker, since a card cannot make room for them.
 - [ ] The debug readout in the top left sits under the "map" back button on
@@ -511,7 +517,11 @@ dotnet test tests/Atlas.Tests                   # the unit suite
 ```
 
 `run.cmd` opens Atlas on itself; `test.cmd` runs the unit suite. With no
-argument Atlas reopens whatever `data/scan.json` last pointed at.
+argument Atlas reopens whatever `data/scan.json` last pointed at. A folder
+passed with a trailing backslash arrives as `C:\repo"` (the backslash
+escapes the closing quote), so `App.RepoFrom` cleans the argument up rather
+than trusting it, and says so when a path-looking argument is not a folder -
+it used to fall back to the last scan without a word.
 
 C# / .NET 10, Avalonia for the window and input, SkiaSharp for the canvas,
 TextMate grammars for highlighting, Roslyn for symbols, LibGit2Sharp for git.
@@ -575,6 +585,15 @@ diffable. Do not compute card positions in drawing code.
 zoom are a pure canvas transform with no geometry rebuild. Construction is
 budgeted to 14 cards per frame so flinging into unseen territory never blocks.
 If you add per-frame geometry work, you have broken this.
+
+**A board window draws what is on screen.** The board loop works out the
+view rectangle once (`x0..y1`), skips any window or removed block outside
+it, and hands a window's drawing a visible line range (`lo..hi`) - code,
+review glow and removal marks all take it. Nothing was culled before, so a
+window drew its whole range every frame, and the change view's whole-file
+windows cost 25ms a frame on their own. Anything new drawn per line inside
+a window takes the range too. `Scene.LinesDrawn` counts lines drawn, so a
+test can say "about a screenful" without a clock.
 
 **`Scene.ReadLines` does not cache, on purpose.** `_text` is filled in
 alongside `_runs` by the loader, and an entry in one without the other means

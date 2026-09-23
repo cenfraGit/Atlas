@@ -147,6 +147,13 @@ public sealed class BoardItem
     [JsonPropertyName("offset")] public int Offset { get; set; }
     [JsonPropertyName("context")] public string? Context { get; set; }
 
+    /// <summary>a window that carries on from the one above it: the change
+    /// view cuts a file where lines were removed, and every piece after the
+    /// first is drawn without a header, so the cut reads as the red block
+    /// between two runs of one file rather than as a new window. Never
+    /// stored, so a piece copied onto a board of your own gets its header.</summary>
+    [JsonIgnore] public bool Continued { get; set; }
+
     /// <summary>type size for a text label, in board units. 0 means the
     /// default. A label is the one thing on a board whose size is the point
     /// of it - a heading over a group of windows is a heading because it is

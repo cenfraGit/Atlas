@@ -121,6 +121,7 @@ public static class ChangeBoard
             {
                 Id = BoardStore.NewId(), Kind = "file", File = change.Path,
                 Line = from, EndLine = to, W = WindowW,
+                Continued = parts.Count > 0,
             };
             parts.Add((item, scene.ItemHeight(item)));
         }
@@ -187,7 +188,7 @@ public static class ChangeBoard
             // windows are scaled to a fixed width, so a file's own line
             // height is not the height of a line on the board
             float k = window.W / file.W;
-            float y = window.Y + Scene.WinHeadH + (first - window.Line) * scene.Data.LineH * k;
+            float y = window.Y + Scene.HeadOf(window) + (first - window.Line) * scene.Data.LineH * k;
             return (window.X + window.W / 2, y);
         }
         return null;

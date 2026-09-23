@@ -36,29 +36,6 @@ public static class Samples
             "right, so everything that works on a stroke goes on working on them."),
     ];
 
-    /// <summary>places worth being able to get back to, as a tour in the
-    /// order they are listed: the shape of the app, roughly in the order a
-    /// frame is built.
-    ///
-    /// Regions rather than whole files, because a bookmark that frames a
-    /// declaration lands on the thing it is about, while one that frames a
-    /// file lands on whichever part of it happens to be at the top.</summary>
-    static readonly (string Suffix, string? Symbol, string Name, string Note)[] Marks =
-    [
-        ("Scanner.cs", "Build", "the scan",
-            "Everything starts here: the repo is read and laid out once."),
-        ("Scene.cs", "TierFor", "the four tiers",
-            "What the zoom decides you are looking at."),
-        ("Scene.cs", "DrawCode", "real text",
-            "The innermost tier, where a card becomes source."),
-        ("Highlighter.cs", "Tokenise", "the one lock",
-            "TextMate is not thread safe, and finding that out cost a stack overflow."),
-        ("Annotations.cs", "Resolve", "the anchor ladder",
-            "Symbol, then fingerprint, then the stored line."),
-        ("Strokes.cs", "ScaleInto", "ink that resizes",
-            "A stroke is a box like everything else, as far as the board knows."),
-    ];
-
     static readonly (string Id, string Name, (string Suffix, string? Symbol, string Note)[] Parts)[] Boards =
     [
         ("sample-1", "How a frame is drawn",
@@ -98,70 +75,6 @@ public static class Samples
             Console.WriteLine("  board: " + MakeBoard(scene, boards, id, name, parts));
         Console.WriteLine("  board: " + MakeMessyBoard(scene, boards));
         Console.WriteLine($"{made} annotations");
-        Console.WriteLine("  " + MakeBookmarks(scene, repo));
-    }
-
-    /// <summary>bookmarks for the places in <see cref="Marks"/>, and a tour
-    /// that walks them in order.
-    ///
-    /// A tour is the reason bookmarks are worth having and there was no way
-    /// to see one without recording it by hand first, which is a lot to ask
-    /// of someone who has just opened the app.</summary>
-    static string MakeBookmarks(Scene scene, string repo)
-    {
-        var store = BookmarkStore.Load(repo);
-        store.Bookmarks.RemoveAll(b => b.Id.StartsWith("sample"));
-        store.Tours.RemoveAll(t => t.Id.StartsWith("sample"));
-
-        var stops = new List<string>();
-        foreach (var (suffix, symbol, name, note) in Marks)
-        {
-            var f = scene.Data.Files.FirstOrDefault(
-                x => x.P.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
-            if (f is null) { Console.WriteLine($"  skip bookmark: no {suffix}"); continue; }
-
-            var full = Path.Combine(scene.Data.Root, f.P.Replace('/', Path.DirectorySeparatorChar));
-            var (from, to) = SpanOf(full, symbol, f.N);
-
-            var b = new Bookmark
-            {
-                // stable, so regenerating rewrites the same bookmarks rather
-                // than filling the file with fresh copies of the same places
-                Id = IdFor(name),
-                Name = name, Note = note,
-                File = f.P, Key = scene.KeyFor(f.P), Line = from, EndLine = to,
-            };
-            store.Bookmarks.Add(b);
-            stops.Add(b.Id);
-        }
-
-        // one free camera position as well, so both kinds are represented: a
-        // bookmark does not have to be a place in a file
-        var bounds = scene.ContentBounds();
-        if (bounds.Width > 0)
-        {
-            var wide = new Bookmark
-            {
-                Id = IdFor("the whole repo"),
-                Name = "the whole repo",
-                Note = "Not a place in a file - just a view. F does this too.",
-                File = null, Line = -1, EndLine = -1,
-                X = bounds.MidX, Y = bounds.MidY,
-                // a guess at a window, since there is not one to measure here
-                S = Math.Clamp(1500f * 0.9f / bounds.Width, 0.01f, 1f),
-            };
-            store.Bookmarks.Add(wide);
-            stops.Add(wide.Id);
-        }
-
-        if (stops.Count > 0)
-            store.Tours.Add(new Tour
-            {
-                Id = "sample-tour", Name = "How a frame is built", Stops = stops,
-            });
-
-        store.Save();
-        return $"{stops.Count} bookmarks and a tour";
     }
 
     /// <summary>a stable id from a name. Everything a sample writes is
@@ -273,8 +186,17 @@ public static class Samples
                 // of the window
                 X = 900, Y = y, W = 380,
             });
-            y += (end - start + 1) * scene.Data.LineH * (620f / f.W) + 26 + 48;
+            float h = (end - start + 1) * scene.Data.LineH * (620f / f.W) + 26;
+            // a stop per window and its note, so the board comes with a tour
+            // through it - there is no other way to see one without making
+            // it by hand first
+            board.Stops.Add(new Stop { Name = Path.GetFileName(f.P), X = 640, Y = y + h / 2, W = 1400, H = h + 120 });
+            y += h + 48;
         }
+
+        // and the whole board first, so the tour opens on where it is going
+        if (board.Stops.Count > 0)
+            board.Stops.Insert(0, new Stop { Name = "the whole board", X = 640, Y = y / 2, W = 1500, H = y + 120 });
 
         boards.Save(board);
         return $"{name} ({board.Items.Count} items)";

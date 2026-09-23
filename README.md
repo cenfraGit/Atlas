@@ -55,8 +55,8 @@ part of a repo is worse than one that shows something ugly.
 
 ### What Atlas writes, and where
 
-**In the repo you are looking at: `.atlas/`.** Boards, annotations and
-bookmarks. Every path in it is repo-relative, so it works wherever the repo
+**In the repo you are looking at: `.atlas/`.** Boards (with their tours)
+and annotations. Every path in it is repo-relative, so it works wherever the repo
 is cloned. **Commit this folder** - that is how the rest of your team gets
 what you wrote. Nothing needs adding to that repo's `.gitignore`.
 
@@ -164,10 +164,14 @@ first, which is where you repair one that has drifted - and where you select
 several and make them a board's own, or send them back to everywhere, in one
 go.
 
-**Leave yourself a way back.** `M` bookmarks the current view under a name.
-`B` lists bookmarks, `Enter` flies to one, `Delete` removes it. `R` starts
-recording a tour: bookmark a few views in order, press `R` again, and the
-tour plays back with space and the arrow keys.
+**Walk someone through a board.** On a board, frame the view you want and
+press `M`: that is a stop. Move, `M` again, and so on. `P` plays the stops in
+order like slides, flying between them - space and the arrows step, `Esc`
+stops. `shift+M` opens the list of stops down the right: click one to look
+at it, double click to play from it, drag to reorder, and rename or delete
+from the buttons. A stop remembers the *region* you were looking at, so it
+frames the same things in a smaller window. The tour is saved in the
+board's own file.
 
 **Review a change.** `P` lists merged pull requests, `G` branches ahead
 of the base. Opening one rescans the repo *as it was at that commit* and
@@ -175,7 +179,7 @@ lights up the files it touches - green for added, red for removed. `]` and
 `[` step through the commits one at a time. `Esc` returns to the working
 tree.
 
-**Saving.** There is no save. Boards, notes and bookmarks are written into
+**Saving.** There is no save. Boards, tours and notes are written into
 `.atlas/` in the repo you are looking at the moment you make them, and the
 canvas says `saved: ...` so you can see it happen. Commit that folder and
 your team gets everything you wrote.
@@ -212,12 +216,12 @@ your team gets everything you wrote.
 | click a line | pick it (at reading zoom; on a board, while editing) |
 | shift-click | extend the picked range |
 | double-click | pick the whole enclosing method |
-| secondary click | actions: annotate, bookmark, add to a board |
+| secondary click | actions: annotate, add to a board |
 
 | `L` | annotations, worst anchors first |
-| `M` | bookmark the current view |
-| `R` | start / finish recording a tour |
-| `B` | bookmarks and tours; Enter goes, Delete removes |
+| `M` | capture the view as a tour stop (on a board) |
+| `shift+M` | the board's tour: its stops, to preview, reorder, rename, delete |
+| `P` | play the board's tour (on a board) |
 | space, arrows | next / previous stop while a tour is playing |
 | `O` | boards panel; `C` new, `F2` rename, `F3` group, Delete removes |
 | `A` | add the current file to the last opened board |
@@ -245,7 +249,7 @@ against the repo it was handed, and printed `SKIP` when that repo had no merge
 commits, which is the case for Atlas itself.
 
 Covered: scanning and layout, search ranking, camera flights, symbol and
-context anchoring, board storage, bookmark anchoring and framing, undo,
+context anchoring, board storage and tours, framing a range of lines, undo,
 file-reference resolution across renames, image storage and pruning,
 concurrent tokenising, and review mode end to end.
 
@@ -317,43 +321,25 @@ in-process, the language the team already works in, cloning and running with
 no extra toolchain - favours .NET. Performance did not decide it; the LOD
 architecture is what makes it smooth, not the stack.
 
-## Bookmarks and tours
+## Tours
 
-A bookmark is saved to the **scanned repo**, in `.atlas/bookmarks.json`, so
-it travels with the code through git. It anchors to a file and a line rather
-than to camera coordinates:
+A tour belongs to a board and is stored in it, as `stops`:
 
 ```json
-{ "id": "14b90c60", "name": "where a frame is drawn",
-  "file": "app/Scene.cs", "line": 446, "endLine": 470,
-  "x": 12824, "y": 13995.2, "s": 4.08 }
+"stops": [
+  { "name": "the whole board", "x": 640, "y": 900, "w": 1500, "h": 1920 },
+  { "name": "Scanner.cs", "x": 640, "y": 312, "w": 1400, "h": 744 }
+]
 ```
 
-The camera is stored too, but only as a fallback. On load the anchor is
-resolved against the current layout, so a bookmark still lands correctly
-after files are added, removed or moved and the map is laid out afresh. A
-bookmark whose file is gone is reported as `MISSING` in the list instead of
-flying somewhere arbitrary. A bookmark taken while zoomed out has no file and
-keeps its camera - that is how you save a view of the whole map.
+Each stop is the centre and size of the region that was on screen, in board
+units - not a zoom level. Playing fits that region into whatever part of the
+window is free, so a stop captured full screen still frames the same things
+in a small window, or with the stops panel open down the side.
 
-A bookmark captures a **region**, not just a point: `line`..`endLine` are
-whatever was on screen when you pressed `M`. Zoom onto one method and the
-bookmark is that method, with no selection step to learn. Flying back frames
-those lines and marks them with an amber band, so a tour can point at
-`OnStartup` rather than at the 900-line file that happens to contain it.
-
-Framing a region is capped by readable line width - past a point, zooming
-closer would run code off the side. When a card ends up wider than the
-window its left edge is pinned rather than centred, because that is where
-lines start. Both are covered by `--bookmarktest`.
-
-A tour is an ordered list of bookmark ids. Record one with `R`, save a stop
-at each place with `M`, finish with `R`. Playing it flies between stops with
-the name shown as a caption. Deleting a bookmark removes it from every tour
-that used it.
-
-`--bookmarktest` covers the part that matters: that an anchored bookmark
-still resolves to the right place after the whole layout shifts.
+There used to be bookmarks and tours on the map as well. They went: a
+bookmark was a tour with one stop, and something worth pointing somebody at
+belongs on a board, next to the notes about it.
 
 ## Review mode
 
@@ -428,8 +414,8 @@ An annotation keeps a permanent tint across **every line it covers**, so a
 note about a method does not read as a note about its first line. The same
 tint shows inside a board's file windows.
 
-Secondary click acts on whatever is picked: annotate it, bookmark it, or add
-it to a board - and the picked line range becomes the board window's range,
+Secondary click acts on whatever is picked: annotate it, or add it to a
+board - and the picked line range becomes the board window's range,
 so a board shows the method you chose rather than the whole file. The menu
 also edits and deletes annotations under the pick, and offers *New board...*
 so a board can be started from the code you are looking at.
@@ -492,7 +478,7 @@ file that is genuinely gone reports as gone.
 
 ## Saving
 
-Nothing needs saving. Bookmarks, boards and annotations are written to
+Nothing needs saving. Boards, their tours and annotations are written to
 `.atlas/` in the scanned repo the moment you make them, and the canvas says
 `saved: ...` each time so it is visible rather than merely true.
 
@@ -613,7 +599,7 @@ adding files to the repo disturbs none of them. Not built yet.
   scan and the highlighting are from when you opened it; annotations
   re-anchor on the next launch, so nothing is lost, but the view goes stale.
 - **Portals.** Jumping from a place in one file to a related place in
-  another, as a first-class thing rather than a bookmark.
+  another, as a first-class thing rather than a tour stop.
 - **Drawing.** A board has rectangles and arrows, not a diagram tool.
 - **Other languages.** The map, search, highlighting and boards work for
   every extension the scanner reads. Symbol anchoring is C# only - Roslyn

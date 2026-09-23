@@ -206,7 +206,7 @@ public static class Strokes
         {
             var piece = new BoardItem
             {
-                Id = BookmarkStore.NewId(),
+                Id = BoardStore.NewId(),
                 Kind = "stroke",
                 Color = from.Color,
                 Weight = from.Weight,

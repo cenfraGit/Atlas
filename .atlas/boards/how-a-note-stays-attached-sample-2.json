@@ -18,6 +18,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -35,6 +38,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -53,6 +59,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -70,6 +79,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -88,6 +100,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -105,9 +120,42 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     }
   ],
   "group": "",
-  "order": 0
+  "order": 0,
+  "stops": [
+    {
+      "name": "the whole board",
+      "x": 640,
+      "y": 506.25,
+      "w": 1500,
+      "h": 1132.5
+    },
+    {
+      "name": "Annotations.cs",
+      "x": 640,
+      "y": 148.625,
+      "w": 1400,
+      "h": 417.25
+    },
+    {
+      "name": "Symbols.cs",
+      "x": 640,
+      "y": 493.875,
+      "w": 1400,
+      "h": 417.25
+    },
+    {
+      "name": "FileKeys.cs",
+      "x": 640,
+      "y": 827.5,
+      "w": 1400,
+      "h": 394
+    }
+  ]
 }

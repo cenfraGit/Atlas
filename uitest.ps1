@@ -84,8 +84,7 @@ $after = (Get-ChildItem $images -ErrorAction SilentlyContinue).Count
 Check ($after -eq $before) "leaving the board prunes the image undo threw away"
 
 Key "p" 3.0; Shot "08-pull-requests"
-Key "{ESC}"; Key "b" 1.5; Shot "09-bookmarks"
-Key "{ESC}"; Key "/" 1.5; Shot "10-search"
+Key "{ESC}"; Key "/" 1.5; Shot "09-search"
 Key "{ESC}"
 
 Stop-Process -Id $app.Id -Force

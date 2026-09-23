@@ -59,11 +59,10 @@ public sealed class App : Application
             view.SearchOpen = () => Reveal.Showing(search);
             view.CloseSearch = search.Close;
 
-            var store = BookmarkStore.Load(scene.Data.Root);
             var prompt = new PromptOverlay();
-            var marks = new BookmarkOverlay(store, scene);
-            marks.Play += view.PlayTour;
-            view.Attach(store, prompt, marks);
+            view.AttachPrompt(prompt);
+            var tour = new TourPanel();
+            view.AttachTour(tour);
 
             var reviews = new ReviewOverlay();
             var commits = new CommitsPanel();
@@ -110,7 +109,7 @@ public sealed class App : Application
             var root = new Grid();
             root.Children.Add(view);
             root.Children.Add(search);
-            root.Children.Add(marks);
+            root.Children.Add(tour);
             root.Children.Add(boards);
             root.Children.Add(notes);
             root.Children.Add(boardBar);
@@ -482,7 +481,6 @@ public sealed class SceneView : Control
         var items = new List<MenuItem>
         {
             ContextActions.Item($"── {what} ──", () => { }, enabled: false),
-            ContextActions.Item("Bookmark this", () => BookmarkSelection(target, what)),
         };
 
         // the whole file goes on the board. a note about a range is written
@@ -556,11 +554,13 @@ public sealed class SceneView : Control
         // canvas, and an editor is inside the item itself
         Layers.Add("editing", () => _editor is { Editing: true }, () => _editor!.Cancel());
         Layers.Add("menu", () => _menuOpen, CloseMenu);
+        // a stop being dragged in the tour panel goes back where it was
+        Layers.Add("stop drag", () => _stops is { Dragging: true }, () => _stops!.CancelDrag());
         Layers.Add("prompt", () => Reveal.Showing(_prompt), () => { _prompt!.Close(); Focus(); });
         Layers.Add("search", () => SearchOpen?.Invoke() ?? false, () => { CloseSearch?.Invoke(); Focus(); });
         Layers.Add("grep", () => Reveal.Showing(_grep), () => { _grep!.Close(); Focus(); });
         Layers.Add("boards", () => Reveal.Showing(_boards), () => _boards!.Close());
-        Layers.Add("bookmarks", () => Reveal.Showing(_marks), () => _marks!.Close());
+        Layers.Add("tour panel", () => Reveal.Showing(_stops), () => { _stops!.Close(); Focus(); });
         Layers.Add("annotations", () => Reveal.Showing(_notes), () => _notes!.Close());
         Layers.Add("reviews", () => Reveal.Showing(_reviews), () => _reviews!.Close());
         Layers.Add("tour", () => _tour is not null, EndTour);
@@ -844,26 +844,6 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
-    void BookmarkSelection((int File, int From, int To) target, string what)
-    {
-        if (_store is null || _prompt is null) return;
-        var f = _scene.Data.Files[target.File];
-        _prompt.Ask("name this bookmark", what, name =>
-        {
-            var b = new Bookmark
-            {
-                Id = BookmarkStore.NewId(), Name = name, File = f.P,
-                Line = target.From, EndLine = target.To,
-                X = _scene.CamX, Y = _scene.CamY, S = _scene.CamS,
-            };
-            _store.Bookmarks.Add(b);
-            _recording?.Add(b.Id);
-            _store.Save();
-            Saved($"bookmark  {name}");
-            Focus();
-        });
-    }
-
     /// <summary>the selection becomes the window's line range, so a board shows
     /// exactly the method you picked rather than the whole file.</summary>
     BoardItem WindowFor((int File, int From, int To) target)
@@ -871,7 +851,7 @@ public sealed class SceneView : Control
         var f = _scene.Data.Files[target.File];
         return new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
+            Id = BoardStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
             Line = target.From < 0 ? 0 : target.From,
             EndLine = target.To, W = 620,
         };
@@ -886,7 +866,7 @@ public sealed class SceneView : Control
             var f = _scene.Data.Files[i];
             board.Items.Add(new BoardItem
             {
-                Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
+                Id = BoardStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
                 Line = 0, EndLine = -1, W = 620, X = 0, Y = y,
             });
             y += Math.Min(f.N, 400) * _scene.Data.LineH * (620f / f.W) + 26 + 40;
@@ -1381,23 +1361,16 @@ public sealed class SceneView : Control
 
     // file under the cursor on the map, and the boards that reference it
 
-    BookmarkStore? _store;
     PromptOverlay? _prompt;
-    BookmarkOverlay? _marks;
-
-    Tour? _tour;
-    int _stop = -1;
     string _caption = "";
 
-    // while recording, every bookmark saved joins the tour being built
-    List<string>? _recording;
+    public void AttachPrompt(PromptOverlay prompt) => _prompt = prompt;
 
-    public void Attach(BookmarkStore store, PromptOverlay prompt, BookmarkOverlay marks)
-    {
-        _store = store;
-        _prompt = prompt;
-        _marks = marks;
-    }
+    TourPanel? _stops;
+
+    /// <summary>the board whose tour is playing, and the stop it is on.</summary>
+    Board? _tour;
+    int _stop = -1;
 
     CommitsPanel? _commitsPanel;
     HintBar? _hints;
@@ -1601,7 +1574,7 @@ public sealed class SceneView : Control
         Remember();
         board.Items.Add(new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "arrow",
+            Id = BoardStore.NewId(), Kind = "arrow",
             From = from.Id, To = to.Id, Color = PenColor,
             // a fallback for if either is ever cut
             X = from.X + from.W / 2, Y = from.Y,
@@ -1640,6 +1613,9 @@ public sealed class SceneView : Control
             items.Add(("board note", "N", AddNote));
             items.Add(("rectangle", "T", AddShape));
             items.Add(("boards", "O", () => _boards?.Show()));
+            items.Add(("tour stop", "M", CaptureStop));
+            items.Add(("tour", "shift+M", ToggleTourPanel));
+            items.Add(("play", "P", () => PlayTour(0)));
             items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
             items.Add(("back to map", "alt+←", LeaveBoard));
         }
@@ -1658,7 +1634,6 @@ public sealed class SceneView : Control
             items.Add(("branches", "G", () => OpenReviewPanel(branches: true)));
             items.Add(("boards", "O", () => _boards?.Show()));
             items.Add(("notes", "L", OpenNotes));
-            items.Add(("bookmarks", "B", () => _marks?.Open()));
             items.Add(("fit", "F", FitAll));
         }
         _hints.Set(items);
@@ -1994,7 +1969,7 @@ public sealed class SceneView : Control
         if (_scene.ActiveBoard is not null) { ShowMatchOnBoard(m, i); return; }
 
         var f = _scene.Data.Files[i];
-        var target = BookmarkTargets.Resolve(_scene, new Bookmark
+        var target = Places.Resolve(_scene, new Place
         {
             Name = m.Text, File = f.P,
             Line = Math.Max(0, m.Line - 12),
@@ -2108,13 +2083,13 @@ public sealed class SceneView : Control
             if (ReferenceEquals(candidate, a)) { line = anchor.Line; kind = anchor.Kind; }
 
         var f = _scene.Data.Files[i];
-        var bookmark = new Bookmark
+        var t = Places.Resolve(_scene, new Place
         {
-            Name = a.Text, File = a.File,
+            Name = a.Text, File = a.File, Key = a.Key,
             Line = Math.Max(0, line - 12),
             EndLine = Math.Min(f.N - 1, line + 12),
-        };
-        FlyToBookmark(bookmark);
+        }, (float)Bounds.Width, (float)Bounds.Height);
+        FlyTo(t.X, t.Y, t.S);
         _scene.Highlight = (i, line, line);
         _caption = kind is AnchorKind.Symbol or AnchorKind.Line ? a.Text : $"{a.Text}   [{kind}]";
     }
@@ -2173,6 +2148,8 @@ public sealed class SceneView : Control
         _flight = null;
         _glide.Stop();
         _boards?.Close();
+        _stops?.Close();
+        if (_tour is not null) EndTour();
         if (_scene.ActiveBoard is null) _mapCam = (_scene.CamX, _scene.CamY, _scene.CamS);
         _scene.ActiveBoard = b;
         // a board made before windows kept fingerprints gets them now, and
@@ -2278,6 +2255,8 @@ public sealed class SceneView : Control
     {
         DismissPrompt();
         if (_scene.ActiveBoard is null) return;
+        _stops?.Close();
+        if (_tour is not null) EndTour();
 
         // a generated board is not saved and owns no images
         if (_scene.BoardReadOnly)
@@ -2327,14 +2306,14 @@ public sealed class SceneView : Control
         int i = _scene.FileAt(_scene.CamX, _scene.CamY);
         if (i < 0 || _scene.Tier < 2) { _caption = "zoom onto a file first"; InvalidateVisual(); return; }
 
-        var mark = BookmarkTargets.Capture(_scene, "", (float)Bounds.Width, (float)Bounds.Height);
+        var mark = Places.Capture(_scene, (float)Bounds.Width, (float)Bounds.Height);
         // whichever board was open last, so adding several files in a row works
         var board = _lastBoard is not null && _boardStore.Boards.Contains(_lastBoard)
             ? _lastBoard
             : _boardStore.Boards[0];
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(),
+            Id = BoardStore.NewId(),
             Kind = "file",
             File = mark.File,
             Key = mark.File is null ? null : _scene.KeyFor(mark.File),
@@ -2411,7 +2390,7 @@ public sealed class SceneView : Control
         Remember();
         board.Items.Add(new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "image", File = name,
+            Id = BoardStore.NewId(), Kind = "image", File = name,
             W = w, H = h, X = _scene.CamX - w / 2, Y = _scene.CamY - h / 2,
         });
         _boardStore?.Save(board);
@@ -2454,7 +2433,7 @@ public sealed class SceneView : Control
         Remember();
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = kind, Text = "", Color = PenColor,
+            Id = BoardStore.NewId(), Kind = kind, Text = "", Color = PenColor,
             X = box.Left, Y = box.Top, W = box.Width, H = box.Height,
         };
         board.Items.Add(item);
@@ -2474,7 +2453,7 @@ public sealed class SceneView : Control
         Remember();
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "text", Text = "",
+            Id = BoardStore.NewId(), Kind = "text", Text = "",
             X = box.Left, Y = box.Top, W = box.Width, Color = PenColor,
         };
         board.Items.Add(item);
@@ -2746,7 +2725,7 @@ public sealed class SceneView : Control
         var boxes = _clipboard.Select(_scene.BoundsOf).ToList();
         float dx = wx - boxes.Min(r => r.Left), dy = wy - boxes.Min(r => r.Top);
 
-        var fresh = _clipboard.ToDictionary(i => i.Id, _ => BookmarkStore.NewId());
+        var fresh = _clipboard.ToDictionary(i => i.Id, _ => BoardStore.NewId());
         var pasted = new List<BoardItem>();
         foreach (var it in _clipboard)
         {
@@ -2843,7 +2822,7 @@ public sealed class SceneView : Control
         Remember();
         var item = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "note", Text = "",
+            Id = BoardStore.NewId(), Kind = "note", Text = "",
             W = 380,
             // where the user is looking, not off beside everything else
             X = _scene.CamX - 190,
@@ -2858,56 +2837,94 @@ public sealed class SceneView : Control
         BeginEdit(item);
     }
 
-    public void FlyToBookmark(Bookmark b)
+    public void AttachTour(TourPanel panel)
     {
-        var t = BookmarkTargets.Resolve(_scene, b, (float)Bounds.Width, (float)Bounds.Height);
-        _caption = t.Orphaned ? $"{b.Name}  (file is gone: {b.File})" : b.Name;
-
-        int i = b.File is null ? -1 : _scene.ResolveFile(b.File, b.Key);
-        _scene.Highlight = i >= 0 && b.EndLine >= b.Line && b.Line >= 0
-            ? (i, b.Line, b.EndLine)
-            : null;
-
-        FlyTo(t.X, t.Y, t.S);
+        _stops = panel;
+        panel.Preview += i => GoToStop(i, playing: false);
+        panel.Play += PlayTour;
+        panel.Capture += CaptureStop;
+        panel.RenameRequested += RenameStop;
+        panel.Changed += () =>
+        {
+            if (_scene.ActiveBoard is not { } b) return;
+            _boardStore?.Save(b);
+            Saved($"tour on  {b.Name}");
+        };
     }
 
-    public void PlayTour(Tour tour) => PlayTour(tour, 0);
-
-    /// <summary>walk a tour from a given stop. Starting anywhere but the
-    /// beginning is what makes a single bookmark steppable: it is stop n of
-    /// an unnamed tour of all of them.</summary>
-    public void PlayTour(Tour tour, int at)
+    void ToggleTourPanel()
     {
-        if (_store is null || tour.Stops.Count == 0) return;
-        _tour = tour;
-        _stop = Math.Clamp(at, 0, tour.Stops.Count - 1) - 1;
-        Step(1);
+        if (_stops is null || _scene.ActiveBoard is not { } b || _scene.BoardReadOnly) return;
+        if (Reveal.Showing(_stops)) _stops.Close();
+        else _stops.Show(b);
+        Focus();
     }
 
-    /// <summary>move to another stop.
-    ///
-    /// Both ends clamp rather than leaving. Walking off the end used to end
-    /// the tour, which meant the left arrow could not bring you back from
-    /// it - and now that a plain bookmark is a stop on an unnamed tour of
-    /// all of them, being ejected for reaching the last one would be worse
-    /// still. Escape is how you leave.</summary>
+    /// <summary>how much of the right of the canvas the tour panel covers.
+    /// A stop is the region you could *see*, and with the panel open that is
+    /// less than the window.</summary>
+    float Covered() => Reveal.Showing(_stops) ? (float)_stops!.Width : 0;
+
+    /// <summary>what is on screen becomes the next stop.</summary>
+    void CaptureStop()
+    {
+        if (_scene.ActiveBoard is not { } b || _scene.BoardReadOnly) return;
+        // where the camera is going rather than where it has got to, so a
+        // capture straight after a scroll takes the view being scrolled to
+        var (x, y, s) = Destination();
+        float c = Covered();
+        b.Stops.Add(Stop.Of(x - c / 2 / s, y, s, (float)Bounds.Width - c, (float)Bounds.Height));
+        _boardStore?.Save(b);
+        if (Reveal.Showing(_stops)) _stops!.Rebuild(b.Stops.Count - 1);
+        Saved($"stop {b.Stops.Count} on  {b.Name}");
+    }
+
+    void RenameStop(int i)
+    {
+        if (_prompt is null || _scene.ActiveBoard is not { } b || i < 0 || i >= b.Stops.Count) return;
+        _prompt.Ask("name this stop", b.Stops[i].Name ?? "", name =>
+        {
+            b.Stops[i].Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+            _boardStore?.Save(b);
+            _stops?.Rebuild(i);
+            Focus();
+        });
+    }
+
+    /// <summary>frame a stop. The region is fitted to the part of the window
+    /// that is not under the panel, whatever size the window is now.</summary>
+    void GoToStop(int i, bool playing)
+    {
+        if (_scene.ActiveBoard is not { } b || i < 0 || i >= b.Stops.Count) return;
+        var stop = b.Stops[i];
+        float c = Covered();
+        float s = stop.ScaleFor((float)Bounds.Width - c, (float)Bounds.Height);
+        FlyTo(stop.X + c / 2 / s, stop.Y, s);
+        if (!playing) return;
+        _stops?.Select(i);
+        _caption = $"{TourPanel.Label(stop, i)}   {i + 1}/{b.Stops.Count}   -   space, arrows: step   esc: stop";
+    }
+
+    /// <summary>play this board's tour from a stop.</summary>
+    public void PlayTour(int from)
+    {
+        if (_scene.ActiveBoard is not { } b || _scene.BoardReadOnly) return;
+        if (b.Stops.Count == 0) { Toast("no stops yet: frame a view and press M"); return; }
+        _tour = b;
+        _stop = Math.Clamp(from, 0, b.Stops.Count - 1);
+        GoToStop(_stop, playing: true);
+    }
+
+    /// <summary>the next stop, or the previous one. Both ends clamp rather
+    /// than leaving: walking off the end would mean the left arrow could not
+    /// bring you back. Escape is how you leave.</summary>
     void Step(int by)
     {
-        if (_tour is null || _store is null || _tour.Stops.Count == 0) return;
-        int step = Math.Sign(by);
-        if (step == 0) return;
-
-        // a stop whose bookmark was deleted is skipped over, and the search
-        // gives up at the end rather than walking off it
-        for (int next = _stop + step; next >= 0 && next < _tour.Stops.Count; next += step)
-        {
-            if (_store.ById(_tour.Stops[next]) is not { } b) continue;
-            _stop = next;
-            FlyToBookmark(b);
-            _caption = $"{_tour.Name}   {_stop + 1}/{_tour.Stops.Count}   -   {_caption}" +
-                       "   -   arrows: next, esc: done";
-            return;
-        }
+        if (_tour is null || _tour != _scene.ActiveBoard || _tour.Stops.Count == 0) return;
+        int next = Math.Clamp(_stop + Math.Sign(by), 0, _tour.Stops.Count - 1);
+        if (next == _stop) return;
+        _stop = next;
+        GoToStop(_stop, playing: true);
     }
 
     void EndTour()
@@ -2915,52 +2932,7 @@ public sealed class SceneView : Control
         _tour = null;
         _stop = -1;
         _caption = "";
-        _scene.Highlight = null;
         InvalidateVisual();
-    }
-
-    void SaveBookmark()
-    {
-        if (_store is null || _prompt is null) return;
-        var suggested = _scene.FileAt(_scene.CamX, _scene.CamY) is var i && i >= 0
-            ? Path.GetFileNameWithoutExtension(_scene.Data.Files[i].P)
-            : "view";
-        _prompt.Ask("name this bookmark", suggested, name =>
-        {
-            var b = BookmarkTargets.Capture(_scene, name, (float)Bounds.Width, (float)Bounds.Height);
-            _store.Bookmarks.Add(b);
-            _recording?.Add(b.Id);
-            _store.Save();
-            _caption = _recording is null
-                ? $"saved  {b.Name}"
-                : $"saved  {b.Name}   (stop {_recording.Count} of this tour)";
-            InvalidateVisual();
-            Focus();
-        });
-    }
-
-    void ToggleRecording()
-    {
-        if (_store is null || _prompt is null) return;
-        if (_recording is null)
-        {
-            _recording = [];
-            _caption = "recording a tour - press M at each stop, R to finish";
-            InvalidateVisual();
-            return;
-        }
-        var stops = _recording;
-        _recording = null;
-        if (stops.Count == 0) { _caption = "tour discarded - no stops"; InvalidateVisual(); return; }
-
-        _prompt.Ask("name this tour", "tour", name =>
-        {
-            _store.Tours.Add(new Tour { Id = BookmarkStore.NewId(), Name = name, Stops = stops });
-            _store.Save();
-            _caption = $"saved tour  {name}   ({stops.Count} stops)";
-            InvalidateVisual();
-            Focus();
-        });
     }
 
     /// <summary>the search list means "go there" on the map and "put it here"
@@ -2978,7 +2950,7 @@ public sealed class SceneView : Control
         Remember();
         var window = new BoardItem
         {
-            Id = BookmarkStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
+            Id = BoardStore.NewId(), Kind = "file", File = f.P, Key = _scene.KeyFor(f.P),
             Line = 0, EndLine = -1, W = 620,
             X = _scene.CamX - 310, Y = _scene.CamY - 120,
         };
@@ -3052,7 +3024,7 @@ public sealed class SceneView : Control
             {
                 _scene.StrokeDraft = new BoardItem
                 {
-                    Id = BookmarkStore.NewId(), Kind = "stroke",
+                    Id = BoardStore.NewId(), Kind = "stroke",
                     Color = PenColor, Weight = PenWeight,
                 };
                 Strokes.Add(_scene.StrokeDraft, wx, wy);
@@ -3257,7 +3229,7 @@ public sealed class SceneView : Control
 
                 var arrow = new BoardItem
                 {
-                    Id = BookmarkStore.NewId(), Kind = "arrow",
+                    Id = BoardStore.NewId(), Kind = "arrow",
                     X = made.A.X, Y = made.A.Y, X2 = made.B.X, Y2 = made.B.Y,
                     From = from?.Item.Id, To = to?.Item.Id,
                     FromSide = from?.Side ?? -1,
@@ -3527,6 +3499,17 @@ public sealed class SceneView : Control
     /// running, else where it already is. Aiming from here rather than from
     /// the live camera is what lets a flurry of wheel notches add up instead
     /// of each one restarting from a camera that has not caught up.</summary>
+    /// <summary>where the camera will come to rest: the end of a flight if
+    /// one is under way, otherwise where the glide is heading.</summary>
+    public (float X, float Y, float S) Destination()
+    {
+        if (_flight is null) return Aim();
+        // false at the end, since the flight is then over - but the numbers
+        // it hands back are the end
+        _flight.Sample(_flight.DurationMs, out var x, out var y, out var s);
+        return (x, y, s);
+    }
+
     public (float X, float Y, float S) Aim() =>
         _glide.Running ? (_glide.X, _glide.Y, _glide.S) : (_scene.CamX, _scene.CamY, _scene.CamS);
 
@@ -3649,7 +3632,7 @@ public sealed class SceneView : Control
 
         // panels have no focus of their own; the canvas drives them
         if (Reveal.Showing(_grep) && _grep!.HandleKey(key)) { InvalidateVisual(); return; }
-        if (Reveal.Showing(_marks) && _marks!.HandleKey(key)) { InvalidateVisual(); return; }
+        if (Reveal.Showing(_stops) && _stops!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_boards) && _boards!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_notes) && _notes!.HandleKey(key)) { InvalidateVisual(); return; }
         if (Reveal.Showing(_reviews) && _reviews!.HandleKey(key)) { InvalidateVisual(); return; }
@@ -3683,7 +3666,6 @@ public sealed class SceneView : Control
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
                 case Key.H: ToggleCommits(); return;
-                case Key.B: _marks?.Open(); InvalidateVisual(); return;
                 case Key.OemQuestion: OpenSearch?.Invoke(); return;
                 default: return;
             }
@@ -3721,6 +3703,9 @@ public sealed class SceneView : Control
                 case Key.OemOpenBrackets: StepTool(-1); return;
                 case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;
+                case Key.M when e_shift: ToggleTourPanel(); return;
+                case Key.M: CaptureStop(); return;
+                case Key.P: PlayTour(Reveal.Showing(_stops) ? Math.Max(0, _stops!.Selected) : 0); return;
             }
         }
 
@@ -3737,7 +3722,6 @@ public sealed class SceneView : Control
             case Key.C: ToggleChangeBoard(); break;
             case Key.D: _scene.ShowFolders = !_scene.ShowFolders; break;
             case Key.OemPeriod: ToggleHidden(); break;
-            case Key.M: SaveBookmark(); break;
             case Key.O: _boards?.Show(); break;
             case Key.A: AddViewToBoard(); break;
             case Key.I: Annotate(); break;
@@ -3745,8 +3729,6 @@ public sealed class SceneView : Control
             case Key.S: SetWheelZoom(!WheelZoom); break;
             case Key.L: OpenNotes(); break;
             case Key.P: OpenReviewPanel(branches: false); break;
-            case Key.R: ToggleRecording(); break;
-            case Key.B: _marks?.Open(); break;
             case Key.Space or Key.Right when _tour is not null: Step(1); break;
             case Key.Left when _tour is not null: Step(-1); break;
             case Key.OemQuestion:

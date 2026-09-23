@@ -5,8 +5,8 @@ namespace Atlas.Tests;
 /// Every stored reference to a file keeps a content fingerprint beside the
 /// path, so renaming or moving the file finds it again instead of orphaning
 /// whatever pointed at it. The rule was written down and then only annotations
-/// kept it: board windows stored null, and bookmarks had nowhere to put one
-/// and resolved on the exact path alone.</summary>
+/// kept it: board windows stored null, and places framed from a capture had
+/// nowhere to put one and resolved on the exact path alone.</summary>
 public class FileReferenceTests
 {
     const string Original = "app/ui/Panel.cs";
@@ -65,7 +65,7 @@ public class FileReferenceTests
     }
 
     [Fact]
-    public void ABookmarkKeepsAFingerprintToo()
+    public void APlaceKeepsAFingerprintToo()
     {
         using var repo = SampleRepo.Build();
         using var scene = new Scene(Scanner.Build(repo.Path));
@@ -77,20 +77,19 @@ public class FileReferenceTests
         scene.CamY = f.Y + f.H / 2;
         scene.Tier = Scene.TierFor(scene.CamS);
 
-        var mark = BookmarkTargets.Capture(scene, "a place", 800, 600);
+        var mark = Places.Capture(scene, 800, 600);
 
         Assert.Equal(Original, mark.File);
         Assert.False(string.IsNullOrEmpty(mark.Key));
     }
 
-    /// <summary>and that is what makes a tour survive a refactor: every stop
-    /// is a bookmark, and a stop that cannot find its file is a stop that
-    /// drops you on the map with no explanation.</summary>
+    /// <summary>a capture turned into a board window by "add this view"
+    /// carries the key too, so it still lands after a rename.</summary>
     [Fact]
-    public void ABookmarkOnARenamedFileStillLands()
+    public void APlaceInARenamedFileStillLands()
     {
         using var repo = SampleRepo.Build();
-        Bookmark mark;
+        Place mark;
         using (var scene = new Scene(Scanner.Build(repo.Path)))
         {
             int i = scene.IndexOfPath(Original);
@@ -99,11 +98,11 @@ public class FileReferenceTests
             scene.CamX = f.X + f.W / 2;
             scene.CamY = f.Y + f.H / 2;
             scene.Tier = Scene.TierFor(scene.CamS);
-            mark = BookmarkTargets.Capture(scene, "a place", 800, 600);
+            mark = Places.Capture(scene, 800, 600);
         }
 
         using var after = Rescanned(repo);
-        var target = BookmarkTargets.Resolve(after, mark, 800, 600);
+        var target = Places.Resolve(after, mark, 800, 600);
 
         Assert.False(target.Orphaned);
         var moved = after.Data.Files[after.IndexOfPath(Renamed)];

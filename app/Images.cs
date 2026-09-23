@@ -46,7 +46,7 @@ public static class ImageStore
         {
             using var fitted = Fit(bitmap);
             var (bytes, ext) = Encode(fitted);
-            var name = BookmarkStore.NewId() + "." + ext;
+            var name = BoardStore.NewId() + "." + ext;
             Directory.CreateDirectory(DirFor(root));
             File.WriteAllBytes(Path.Combine(DirFor(root), name), bytes);
             return name;

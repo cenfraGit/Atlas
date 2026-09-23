@@ -187,23 +187,28 @@ a test that was checked to fail against the old code first.
 
 ### Board tours
 
-Replaces "presentation boards", and answers its open question: a slide is a
-saved view of one board. Today a tour is a list of *map* bookmarks, played
-with Space and the arrows, with `Flight` easing position and zoom between
-stops. None of that knows about boards, and nothing lets you see, order or
-prune the stops.
+Replaced "presentation boards", and answered its open question: a slide is
+a saved view of one board. A tour used to be a list of *map* bookmarks that
+knew nothing about boards, and nothing let you see, order or prune its
+stops.
 
-- [ ] Stops on a board: frame the view, capture it (position and zoom),
-      move, capture again. Stored in the board's own json so a tour travels
-      with the board it walks through.
-- [ ] Play steps between them with `Flight`, like slides - the easing that
-      already exists for bookmarks.
-- [ ] A side panel listing the stops: reorder by dragging, delete, click one
-      to fly there. Registered in `BuildLayers` like every other overlay.
-- [ ] Tours only on boards. Remove tours *and* bookmarks from the map: a
-      bookmark is a one-stop tour, and something to focus on belongs on a
-      board. `Bookmarks.cs`, `BookmarkOverlay.cs` and the `B`/tour keys on
-      the map go.
+- [x] Stops on a board (`M`), stored in the board's own json as
+      `Board.Stops`. A stop is the *region* on screen - centre, width and
+      height in board units - not a zoom, so it frames the same things in
+      any window. With the panel open the region is the uncovered part, and
+      it plays back into the uncovered part too.
+- [x] `P` plays them with `Flight`; space and the arrows step, clamping at
+      both ends, and Escape stops. Leaving or switching boards ends it.
+- [x] `TourPanel`, `shift+M`: click to look, double click to play from
+      there, drag to reorder - the rows move as you drag, and Escape mid-drag
+      puts the order back. Delete is the panel's button only: the panel stays
+      open while you work, and the key belongs to what is picked.
+- [x] Map bookmarks and tours are gone, with `bookmarks.json`. What survived
+      is `Places` - framing a range of lines - which search, annotations
+      and "add this view" use. Ids come from `BoardStore.NewId`.
+- [ ] Nothing on a board yet shows where its stops are. A faint numbered
+      frame per stop while the panel is open would make the list readable
+      at a glance.
 
 ### Boards panel
 
@@ -427,10 +432,9 @@ covered by `AnchorTests` and works.
 - [x] A third sample board, "Everything at once": every kind of item,
       overlapping, an empty frame over the lot, connectors with one end
       loose. What breaks in edit mode breaks on a board like that.
-- [x] Sample bookmarks, and a tour through them. A tour is the reason
-      bookmarks are worth having and there was no way to see one without
-      recording it by hand first. Both kinds are represented: six anchored
-      to declarations, and one free camera position.
+- [x] The tidy sample boards come with a tour: the whole board, then a
+      stop per window. There is no other way to see a tour without making
+      one by hand first.
 - [x] `--samples` is deterministic. Every id is derived from a name rather
       than generated, and a board's file is named after the id it ends up
       with rather than the random one `Create` handed out - which is why
@@ -452,7 +456,7 @@ syntax-highlighted source. It is a desktop app, not a library.
 app/                 the whole application, one flat folder, no sub-projects
 tests/Atlas.Tests/   xunit suite (hermetic - builds its own fixtures)
 data/scan.json       layout cache, machine specific, gitignored
-.atlas/              boards, annotations, bookmarks for the repo being read
+.atlas/              boards (and their tours), annotations, for the repo being read
 ```
 
 `app/` is deliberately flat. Files are named after the thing they do
@@ -596,7 +600,7 @@ must `Symbols.Forget` first - otherwise it resolves against the parse from
 before the edit, finds the symbol at its old line, and concludes nothing
 moved.
 
-**A path is not an identity.** Board windows, annotations and bookmarks
+**A path is not an identity.** Board windows and annotations
 reference files by path *and* a content fingerprint (`FileKeys`).
 `Scene.ResolveFile` tries the path, then a uniquely named file, then the
 fingerprint. Anything that stores a file reference must store the key too, and
@@ -642,7 +646,7 @@ undid nothing.
 
 `.atlas/` in the repo being read is **meant to be committed** - that is how a
 team shares boards and notes. Never add it to a `.gitignore`. It holds
-`boards/*.json`, `annotations.json`, `bookmarks.json` and `images/`.
+`boards/*.json` (tours included), `annotations.json` and `images/`.
 
 There is no save step: stores write on every change and the canvas shows
 `saved: ...`. If you add state a user authors, it saves itself the same way -

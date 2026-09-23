@@ -18,6 +18,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 44
     },
     {
@@ -35,6 +38,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -52,6 +58,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -70,6 +79,9 @@
       "toSide": -1,
       "weight": 0,
       "fill": "#b48ae8",
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -88,6 +100,9 @@
       "toSide": -1,
       "weight": 0,
       "fill": "none",
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -107,6 +122,9 @@
       "fromSide": 1,
       "toSide": 3,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -125,6 +143,9 @@
       "fromSide": 2,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -226,6 +247,9 @@
         326.27948
       ],
       "weight": 5,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -243,6 +267,9 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     },
     {
@@ -261,9 +288,13 @@
       "fromSide": -1,
       "toSide": -1,
       "weight": 0,
+      "dy": 0,
+      "endDy": 0,
+      "offset": 0,
       "size": 0
     }
   ],
   "group": "",
-  "order": 0
+  "order": 0,
+  "stops": []
 }

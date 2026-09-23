@@ -154,6 +154,31 @@ public sealed class BoardItem
     [JsonPropertyName("size")] public float Size { get; set; }
 }
 
+/// <summary>a saved view of a board: one slide of its tour.
+///
+/// The region that was on screen rather than a zoom level, so playing it
+/// in a smaller window frames the same things instead of cropping them.</summary>
+public sealed class Stop
+{
+    [JsonPropertyName("name")] public string? Name { get; set; }
+
+    /// <summary>centre of the region, in board units.</summary>
+    [JsonPropertyName("x")] public float X { get; set; }
+    [JsonPropertyName("y")] public float Y { get; set; }
+
+    /// <summary>its size, in board units.</summary>
+    [JsonPropertyName("w")] public float W { get; set; }
+    [JsonPropertyName("h")] public float H { get; set; }
+
+    /// <summary>the view as it is now.</summary>
+    public static Stop Of(float camX, float camY, float camS, float vw, float vh) =>
+        new() { X = camX, Y = camY, W = vw / camS, H = vh / camS };
+
+    /// <summary>the zoom that fits the whole region into a viewport.</summary>
+    public float ScaleFor(float vw, float vh) =>
+        Math.Min(vw / Math.Max(1f, W), vh / Math.Max(1f, H));
+}
+
 /// <summary>a hand-arranged canvas that references files rather than owning
 /// them, so the auto-laid-out map never has to move.</summary>
 public sealed class Board
@@ -167,6 +192,10 @@ public sealed class Board
 
     /// <summary>position within its group.</summary>
     [JsonPropertyName("order")] public int Order { get; set; }
+
+    /// <summary>the board's tour, in order. Kept in the board's own file so a
+    /// tour travels with the board it walks through.</summary>
+    [JsonPropertyName("stops")] public List<Stop> Stops { get; set; } = [];
 
     [JsonIgnore] public string Path { get; set; } = "";
 }
@@ -211,7 +240,10 @@ public sealed class BoardStore
         return store;
     }
 
-    public Board Create(string name) => Create(name, BookmarkStore.NewId());
+    public Board Create(string name) => Create(name, NewId());
+
+    /// <summary>a short random id, for boards and the items on them.</summary>
+    public static string NewId() => Guid.NewGuid().ToString("n")[..8];
 
     /// <summary>create with an id of your own, for the sample boards, whose
     /// ids are fixed so that regenerating them rewrites the same files.

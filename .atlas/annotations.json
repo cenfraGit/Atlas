@@ -9,7 +9,7 @@
       "offset": 0,
       "span": 2,
       "line": 73,
-      "context": "A4B1ADE4FA28"
+      "context": "F786678933458828DA39"
     },
     {
       "id": "sample-Scanner-cs-Classify",
@@ -20,7 +20,7 @@
       "offset": 0,
       "span": 20,
       "line": 128,
-      "context": "CD948470E721"
+      "context": "2CC8DA39CB2760BA28CF"
     },
     {
       "id": "sample-Annotations-cs-Resolve",
@@ -29,9 +29,9 @@
       "key": "C96136700B0F",
       "symbol": "Atlas.Anchors.Resolve(3)",
       "offset": 0,
-      "span": 42,
-      "line": 182,
-      "context": "FD1E063EEF2D"
+      "span": 2,
+      "line": 272,
+      "context": "921B4C6BAEED055BDA39"
     },
     {
       "id": "sample-FileKeys-cs-Of",
@@ -42,18 +42,18 @@
       "offset": 0,
       "span": 18,
       "line": 15,
-      "context": "0629DD0EBB88"
+      "context": "3CA61D9ECE9160BAD45F"
     },
     {
       "id": "sample-Images-cs-Prune",
       "text": "Images nothing points at are deleted - but only once the undo history that could bring one back has been dropped.",
       "file": "app/Images.cs",
-      "key": "2D88C74D1232",
+      "key": "08D6362A0E83",
       "symbol": "Atlas.ImageStore.Prune(2)",
       "offset": 0,
-      "span": 19,
-      "line": 63,
-      "context": "E108A2701C78"
+      "span": 23,
+      "line": 72,
+      "context": "8741EEBF136260BAA8A9"
     },
     {
       "id": "sample-Strokes-cs-Erase",
@@ -64,7 +64,7 @@
       "offset": 0,
       "span": 25,
       "line": 175,
-      "context": "0EB19602D737"
+      "context": "039852B7510B60BAAD8B"
     }
   ]
 }

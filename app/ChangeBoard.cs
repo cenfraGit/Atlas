@@ -88,7 +88,7 @@ public static class ChangeBoard
 
             var item = new BoardItem
             {
-                Id = BookmarkStore.NewId(),
+                Id = BoardStore.NewId(),
                 Kind = "file",
                 File = change.Path,
                 Line = 0,

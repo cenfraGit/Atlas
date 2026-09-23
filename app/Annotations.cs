@@ -201,7 +201,7 @@ public static class Anchors
         int line = Math.Min(from, to);
         var a = new Annotation
         {
-            Id = BookmarkStore.NewId(),
+            Id = BoardStore.NewId(),
             Text = text,
             File = relPath,
             Line = line,

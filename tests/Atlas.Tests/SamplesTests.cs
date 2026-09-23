@@ -1,6 +1,6 @@
 namespace Atlas.Tests;
 
-/// <summary>the sample boards, annotations and bookmarks that `--samples`
+/// <summary>the sample boards and annotations that `--samples`
 /// writes into a repo.
 ///
 /// The rule worth defending is that generating them twice produces the same
@@ -55,52 +55,40 @@ public class SamplesTests
         Assert.Contains("everything-at-once-sample-3", names);
     }
 
+    /// <summary>a sample board comes with a tour through it, or there is no
+    /// way to see one without making it by hand first.</summary>
     [Fact]
-    public void ThereAreBookmarksAndATourThroughThem()
+    public void TheTidyBoardsComeWithATour()
     {
         using var repo = SampleRepo.Build("atlas_samples");
         Generate(repo.Path);
 
-        var store = BookmarkStore.Load(repo.Path);
-        var tour = Assert.Single(store.Tours);
-
-        Assert.NotEmpty(store.Bookmarks);
-        Assert.Equal(store.Bookmarks.Count, tour.Stops.Count);
-        // a tour with a stop nothing answers to walks into a wall
-        foreach (var id in tour.Stops)
-            Assert.Contains(store.Bookmarks, b => b.Id == id);
+        var tidy = BoardStore.Load(repo.Path).Boards.Where(b => b.Id is "sample-1" or "sample-2").ToList();
+        Assert.Contains(tidy, b => b.Stops.Count > 0);
+        foreach (var b in tidy)
+        {
+            // the whole board, then one stop per window - and no tour at all
+            // on a board the fixture had none of the files for
+            int windows = b.Items.Count(i => i.Kind == "file");
+            Assert.Equal(windows == 0 ? 0 : windows + 1, b.Stops.Count);
+            Assert.All(b.Stops, s => Assert.True(s.W > 0 && s.H > 0));
+        }
     }
 
-    /// <summary>both kinds: a bookmark anchored to lines in a file, and a
-    /// free camera position that is only a view.</summary>
+    /// <summary>and every stop frames something that is on the board.</summary>
     [Fact]
-    public void BothKindsOfBookmarkAreRepresented()
+    public void EveryStopLooksAtItsWindow()
     {
         using var repo = SampleRepo.Build("atlas_samples");
         Generate(repo.Path);
 
-        var marks = BookmarkStore.Load(repo.Path).Bookmarks;
-
-        Assert.Contains(marks, b => b.File is not null && b.EndLine >= b.Line);
-        Assert.Contains(marks, b => b.File is null && b.S > 0);
-    }
-
-    /// <summary>an anchored sample must frame the lines it names, or the tour
-    /// stops somewhere arbitrary in the file.</summary>
-    [Fact]
-    public void AnAnchoredBookmarkResolvesToItsOwnLines()
-    {
-        using var repo = SampleRepo.Build("atlas_samples");
-        Generate(repo.Path);
-
-        using var scene = new Scene(Scanner.Build(repo.Path));
-        var marks = BookmarkStore.Load(repo.Path).Bookmarks;
-        var anchored = marks.First(b => b.File is not null);
-
-        var target = BookmarkTargets.Resolve(scene, anchored, 1200, 800);
-
-        Assert.False(target.Orphaned);
-        Assert.True(target.S > 0);
+        var b = BoardStore.Load(repo.Path).Boards.First(x => x.Id == "sample-1");
+        var windows = b.Items.Where(i => i.Kind == "file").ToList();
+        for (int n = 0; n < windows.Count; n++)
+        {
+            var stop = b.Stops[n + 1];
+            Assert.InRange(windows[n].Y, stop.Y - stop.H / 2, stop.Y + stop.H / 2);
+        }
     }
 
     [Fact]
@@ -110,15 +98,13 @@ public class SamplesTests
 
         Generate(repo.Path);
         int boards = BoardStore.Load(repo.Path).Boards.Count;
-        int marks = BookmarkStore.Load(repo.Path).Bookmarks.Count;
 
         Generate(repo.Path);
 
         Assert.Equal(boards, BoardStore.Load(repo.Path).Boards.Count);
-        Assert.Equal(marks, BookmarkStore.Load(repo.Path).Bookmarks.Count);
     }
 
-    /// <summary>a board or bookmark the user made is not a sample and must
+    /// <summary>a board the user made is not a sample and must
     /// survive a regeneration. The scratch board in this repo is named
     /// "sample", which is exactly the near miss worth testing.</summary>
     [Fact]
@@ -132,13 +118,8 @@ public class SamplesTests
         mine.Items.Add(new BoardItem { Id = "x", Kind = "note", Text = "mine" });
         boards.Save(mine);
 
-        var marks = BookmarkStore.Load(repo.Path);
-        marks.Bookmarks.Add(new Bookmark { Id = "mine", Name = "my place", X = 1, Y = 2, S = 3 });
-        marks.Save();
-
         Generate(repo.Path);
 
         Assert.Contains(BoardStore.Load(repo.Path).Boards, b => b.Id == mine.Id);
-        Assert.Contains(BookmarkStore.Load(repo.Path).Bookmarks, b => b.Id == "mine");
     }
 }

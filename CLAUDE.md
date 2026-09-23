@@ -591,6 +591,16 @@ zoom are a pure canvas transform with no geometry rebuild. Construction is
 budgeted to 14 cards per frame so flinging into unseen territory never blocks.
 If you add per-frame geometry work, you have broken this.
 
+**Every canvas save has its restore, and a one-window test cannot tell.**
+A window's drawing saves three times - its place, its scale, its clip - and
+once restored only twice, so each window left its offset under everything
+drawn after it. Real boards came out scrambled, differently at each zoom
+(a window off screen is skipped and so left no offset), while every test,
+drawing one window with nothing after it, passed. `CanvasBalanceTests`
+checks the save count after a whole board and a note drawn after two
+windows; anything that changes the drawing's save and restore structure
+runs against a board of several things.
+
 **A board window draws what is on screen.** The board loop works out the
 view rectangle once (`x0..y1`), skips any window or removed block outside
 it, and hands a window's drawing a visible line range (`lo..hi`) - code,

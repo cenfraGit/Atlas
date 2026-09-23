@@ -2241,6 +2241,10 @@ public sealed class Scene : IDisposable
                         Splices.GetValueOrDefault(f.P)?.RemovedRows);
                 }
             }
+            // three saves above - the window's place, its scale, its clip -
+            // so two restores here, the clip's having gone already. One short
+            // left every window's offset under everything drawn after it
+            canvas.Restore();
             canvas.Restore();
 
             DrawBoardNoteText(canvas, it, f, from, to, k);

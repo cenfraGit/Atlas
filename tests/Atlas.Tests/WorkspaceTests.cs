@@ -72,6 +72,36 @@ public class WorkspaceTests
         Assert.False(Reveal.Showing(r.Panel));
     }
 
+    /// <summary>the "map" button is back: shown on a board, and it goes
+    /// home. It moves aside for the workspace with everything else.</summary>
+    [AvaloniaFact]
+    public void TheMapButtonShowsOnABoardAndGoesHome()
+    {
+        using var r = Open("one");
+        var back = new BackButton { Transitions = null };
+        r.View.AttachBack(back);
+        ((Grid)r.Window.Content!).Children.Add(back);
+        App.MakeRoom([r.Panel], [], [back]);
+        var own = back.Margin;
+
+        r.Panel.Show();
+        Settle(r.Window);
+        r.List.SelectedIndex = r.Panel.Rows.ToList().FindIndex(x => x.Board is not null);
+        r.Panel.HandleKey(Key.Enter);
+        Assert.True(Reveal.Showing(back));
+
+        r.View.ToggleWorkspace();
+        Assert.Equal(own.Left + r.Panel.Width, back.Margin.Left, 1);
+        r.View.ToggleWorkspace();
+
+        Settle(r.Window);
+        var at = back.TranslatePoint(new Point(back.Bounds.Width / 2, back.Bounds.Height / 2), r.Window)!.Value;
+        r.Window.MouseDown(at, MouseButton.Left);
+        r.Window.MouseUp(at, MouseButton.Left);
+        Assert.Null(r.Scene.ActiveBoard);
+        Assert.False(Reveal.Showing(back));
+    }
+
     /// <summary>Home cannot be dragged, and nothing can be dropped above it.</summary>
     [AvaloniaFact]
     public void HomeStaysAtTheTop()

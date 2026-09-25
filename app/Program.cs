@@ -757,6 +757,10 @@ public sealed class SceneView : Control
         // the workspace: tab, then H. Escape did leave a board once, and putting a
         // dialog on top of one then meant Escape both dismissed the dialog
         // and threw you off the board
+        // the gathered change view is not a board you are on - it is a way of
+        // looking at the review - so Escape takes you back out of it, and
+        // the next Escape out of the review itself
+        Layers.Add("change view", () => _scene.BoardReadOnly, LeaveBoard);
         Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
     }
 
@@ -1642,6 +1646,14 @@ public sealed class SceneView : Control
         bar.Add += AddOfKind;
     }
 
+    BackButton? _back;
+
+    public void AttachBack(BackButton back)
+    {
+        _back = back;
+        back.Clicked += GoHome;
+    }
+
     PenBar? _penBar;
     EraserBar? _eraserBar;
 
@@ -1684,6 +1696,7 @@ public sealed class SceneView : Control
         // every change that comes through here
         MouseModeChanged?.Invoke();
         bool editing = _scene.ActiveBoard is not null && Editing;
+        _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
         _boardBar?.Reflect(editing,
             _armShape ?? (_armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null));
         // each tool shows its own settings, and only while it is armed
@@ -1861,12 +1874,12 @@ public sealed class SceneView : Control
 
         if (_scene.BoardReadOnly)
         {
-            items.Add(("previous commit", "[", () => { StepCommit(-1); RebuildChangeBoard(); }));
-            items.Add(("next commit", "]", () => { StepCommit(1); RebuildChangeBoard(); }));
-            items.Add(("commits", "H", ToggleCommits));
+            items.Add(("back to the map", "esc", LeaveBoard));
+            items.Add(("previous commit", "↑", () => StepCommit(-1)));
+            items.Add(("next commit", "↓", () => StepCommit(1)));
+            items.Add(("toggle commits", "H", ToggleCommits));
+            items.Add(("toggle removed", "R", ToggleRemoved));
             items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
-            items.Add((_showRemoved ? "hide removed" : "show removed", "R", ToggleRemoved));
-            items.Add(("back to the map", "C", LeaveBoard));
         }
         else if (_scene.ActiveBoard is not null)
         {
@@ -1880,12 +1893,12 @@ public sealed class SceneView : Control
         }
         else if (_scene.Review is not null)
         {
-            items.Add(("previous commit", "[", () => StepCommit(-1)));
-            items.Add(("next commit", "]", () => StepCommit(1)));
-            items.Add(("commits", "H", ToggleCommits));
-            items.Add((_showRemoved ? "hide removed" : "show removed", "R", ToggleRemoved));
-            items.Add(("changed code", "C", ToggleChangeBoard));
             items.Add(("leave review", "esc", LeaveReview));
+            items.Add(("previous commit", "↑", () => StepCommit(-1)));
+            items.Add(("next commit", "↓", () => StepCommit(1)));
+            items.Add(("toggle commits", "H", ToggleCommits));
+            items.Add(("toggle removed", "R", ToggleRemoved));
+            items.Add(("changed code", "C", ToggleChangeBoard));
         }
         else
         {
@@ -2650,10 +2663,9 @@ public sealed class SceneView : Control
         _git = null;
     }
 
-    /// <summary>go to the map - Home - from whatever board is open,
-    /// generated or not. The one way back now: Home in the workspace, or H
-    /// while it is open. There used to be a "map" button, alt+left and a
-    /// button in the bottom bar as well.</summary>
+    /// <summary>go to the map - home - from whatever board is open,
+    /// generated or not: the "map" button, or home in the workspace (H while
+    /// it is open). Alt+left and the bottom bar's button went.</summary>
     public void GoHome()
     {
         if (_scene.ActiveBoard is not null) LeaveBoard();
@@ -4309,8 +4321,6 @@ public sealed class SceneView : Control
         {
             switch (key)
             {
-                case Key.OemCloseBrackets: StepCommit(1); return;
-                case Key.OemOpenBrackets: StepCommit(-1); return;
                 // the arrows walk the commit list the same way, which is
                 // what a list of commits down the side looks like it does.
                 // Not while a tour is running: those are its arrows

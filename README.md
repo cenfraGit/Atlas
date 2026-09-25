@@ -117,8 +117,8 @@ height, so a long thin divider is as available as a square.
 
 `N` adds a note, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
 snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
-Home, in the workspace (`Tab`, then `H`), goes back to the map, and the
-camera returns exactly where you left it.
+The `<  map` button top left, or home in the workspace (`Tab`, then `H`),
+goes back to the map, and the camera returns exactly where you left it.
 
 **`Esc` cancels, it does not leave.** It closes whatever is innermost - a
 dialog, then a panel, then an armed tool, then the selection - and never the
@@ -189,8 +189,8 @@ board's own file.
 merged - and `G` branches ahead of the base. Open pull requests come from
 GitHub through the `gh` command line tool, signed in; without it you get the
 merged ones only. Opening one rescans the repo *as it was at that commit* and
-lights up the files it touches - green for added, red for removed. `]` and
-`[` step through the commits one at a time. `Esc` returns to the working
+lights up the files it touches - green for added, red for removed. The up and down
+arrows step through the commits one at a time. `Esc` returns to the working
 tree.
 
 **Saving.** There is no save. Boards, tours and notes are written into
@@ -216,7 +216,7 @@ your team gets everything you wrote.
 | `Esc` | cancel the innermost thing: dialog, panel, tool, selection |
 | `Tab` | the workspace: Home and every board, from anywhere |
 | space | spotlight: dim everything but a circle round the pointer, for explaining on a call; `Alt`+wheel sizes it, space or `Esc` turns it off |
-| `Tab`, then `H` | Home: back to the map from a board |
+| `<  map`, or `Tab` then `H` | home: back to the map from a board |
 | Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |
 | `X` | eraser on a board |
@@ -230,7 +230,7 @@ your team gets everything you wrote.
 | `ctrl+V` (board) | paste an image from the clipboard |
 | `C` | gather the changed code onto one view (while reviewing) |
 | `R` | while reviewing: show or hide the removed lines, in red where they were |
-| `]` `[` | next / previous commit while reviewing |
+| up, down | next / previous commit while reviewing |
 | double-click (board, editing) | type into a note, shape or label; on an arrow, its label; on a window's header, its title |
 | click a line | pick it (at reading zoom; on a board, while editing) |
 | shift-click | extend the picked range |
@@ -375,7 +375,7 @@ through `gh pr list`, and the open ones join the top when the answer comes
 back. Opening one whose commits were never fetched fetches them
 (`git fetch origin pull/N/head`) first. `G` lists branches.
 Opening one lights up every changed file across the whole map, coloured green
-through red by how much of its churn was additions. `]` and `[` walk the
+through red by how much of its churn was additions. the up and down arrows walk the
 commits, and the camera flies to whatever that commit touched. At reading
 zoom, added lines are tinted green and **removed lines are put back as text,
 tinted red, where they were** - the review's copy of each changed file has
@@ -390,7 +390,7 @@ and the panel opens at once, saying it is reading, and fills in when the
 answer arrives.
 
 The commits of whatever is open are listed in a panel down the right: click a
-commit to switch to it, or step with `[` and `]`. Its sha, author, date and
+commit to switch to it, or step with the up and down arrows. Its sha, author, date and
 counts live there too. Details deliberately do **not** go in a line at the
 bottom of the canvas - that was unreadable once there was more than one fact
 to show.
@@ -404,8 +404,8 @@ change said, and on a large repo the changed files are nowhere near each
 other. `C` lays out every changed file as one whole window - real code, with
 the removed lines in it and the changes glowing - biggest churn first, and
 opens looking at the first change rather than at line one. A file the change
-deleted has no window, so it appears as a red block of its old text. `]` and
-`[` walk the commits without leaving. It is generated and read only: it is not
+deleted has no window, so it appears as a red block of its old text. The up and
+down arrows walk the commits without leaving; `Esc` goes back to the map. It is generated and read only: it is not
 in the boards panel, nothing is written to `.atlas/`, and `C` again puts the
 map back exactly where you left it.
 

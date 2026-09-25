@@ -136,11 +136,11 @@ public class ReviewLoadTests
         Assert.True(Until(() => scene.Review is not null));
         var whole = Paths(scene.Review!);
 
-        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        view.HandleKey(Avalonia.Input.Key.Down);
         var first = Paths(review.OfCommit(commits[0])!);
         Assert.True(Until(() => Paths(scene.Review!) == first), "the commit never showed");
 
-        view.HandleKey(Avalonia.Input.Key.OemOpenBrackets);
+        view.HandleKey(Avalonia.Input.Key.Up);
         Assert.Equal(whole, Paths(scene.Review!));      // no waiting: it was kept
     }
 
@@ -157,9 +157,9 @@ public class ReviewLoadTests
         view.OpenTarget(pr);
         Assert.True(Until(() => scene.Review is not null));
 
-        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);    // 0
-        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);    // 1
-        view.HandleKey(Avalonia.Input.Key.OemOpenBrackets);     // 0
+        view.HandleKey(Avalonia.Input.Key.Down);    // 0
+        view.HandleKey(Avalonia.Input.Key.Down);    // 1
+        view.HandleKey(Avalonia.Input.Key.Up);      // 0
 
         var want = Paths(review.OfCommit(commits[0])!);
         Assert.True(Until(() => Paths(scene.Review!) == want));
@@ -169,6 +169,50 @@ public class ReviewLoadTests
     }
 
     static string Paths(ChangeSet set) => string.Join(",", set.Files.Select(f => f.Path).Order());
+
+    /// <summary>Escape leaves the gathered change view - it is a way of
+    /// looking at the review, not a board you are on - and the next Escape
+    /// leaves the review.</summary>
+    [AvaloniaFact]
+    public void EscapeLeavesTheChangeViewThenTheReview()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        view.OpenTarget(review.MergedPrs().Single());
+        Assert.True(Until(() => scene.Review is not null));
+
+        view.HandleKey(Avalonia.Input.Key.C);
+        Assert.True(scene.BoardReadOnly);
+
+        Assert.True(view.Escape());
+        Assert.False(scene.BoardReadOnly);
+        Assert.Null(scene.ActiveBoard);
+        Assert.NotNull(scene.Review);
+
+        Assert.True(view.Escape());
+        Assert.Null(scene.Review);
+    }
+
+    /// <summary>the brackets no longer step the commits; the arrows do.</summary>
+    [AvaloniaFact]
+    public void TheBracketsNoLongerStepCommits()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        view.OpenTarget(review.MergedPrs().Single());
+        Assert.True(Until(() => scene.Review is not null));
+        var whole = Paths(scene.Review!);
+
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while (DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        Assert.Equal(whole, Paths(scene.Review!));
+
+        view.HandleKey(Avalonia.Input.Key.Down);
+        Assert.True(Until(() => Paths(scene.Review!) != whole), "the arrow did not step");
+    }
 
     /// <summary>picking a second target before the first has arrived shows
     /// the second: the first one's result is thrown away when it lands.</summary>

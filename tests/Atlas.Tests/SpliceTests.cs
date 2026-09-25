@@ -222,8 +222,8 @@ public class SpliceTests
         Assert.True(Until(() => scene.Review is not null));
 
         // the second commit edits Program.cs's Main: one line out, one in
-        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
-        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        view.HandleKey(Avalonia.Input.Key.Down);
+        view.HandleKey(Avalonia.Input.Key.Down);
         Assert.True(Until(() => scene.Review!.ByPath.TryGetValue("app/Program.cs", out var c) && c.RemovedAt.Count > 0));
 
         var change = scene.Review!.ByPath["app/Program.cs"];

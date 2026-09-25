@@ -226,6 +226,9 @@ public sealed class Shell
         var boardBar = new BoardBar();
         view.AttachBoardBar(boardBar);
 
+        var back = new BackButton();
+        view.AttachBack(back);
+
         var penBar = new PenBar(SceneView.Colours);
         view.AttachPenBar(penBar);
 
@@ -252,6 +255,7 @@ public sealed class Shell
         root.Children.Add(boards);
         root.Children.Add(notes);
         root.Children.Add(boardBar);
+        root.Children.Add(back);
         root.Children.Add(penBar);
         root.Children.Add(eraserBar);
         root.Children.Add(hints);
@@ -267,7 +271,7 @@ public sealed class Shell
 
         view.BuildLayers();
         _unhook = App.MakeRoom([boards], [tour, commits],
-            [search, notes, boardBar, penBar, eraserBar, hints, islands, reviews, grep, prompt]);
+            [search, notes, boardBar, back, penBar, eraserBar, hints, islands, reviews, grep, prompt]);
 
         _window.Content = root;
         _window.Title = $"Atlas - {Path.GetFileName(scan.Root)}";

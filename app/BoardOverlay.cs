@@ -21,7 +21,7 @@ public sealed class BoardRow
 
     public bool IsHeader => Board is null && !IsHome;
 
-    public override string ToString() => IsHome ? "Home"
+    public override string ToString() => IsHome ? "home"
         : IsHeader ? (Group.Length == 0 ? "ungrouped" : Group)
         : "   " + Board!.Name + "   (" + Board.Items.Count + ")";
 }
@@ -210,7 +210,7 @@ public sealed class BoardOverlay : Border
     /// <summary>the map, as the first thing in the list.</summary>
     static Control HomeLine() => new TextBlock
     {
-        Text = "Home", FontWeight = FontWeight.Bold, Margin = new Thickness(0, 2, 0, 4),
+        Text = "home", FontWeight = FontWeight.Bold, Margin = new Thickness(0, 2, 0, 4),
     };
 
     /// <summary>a group heading. It used to be a board row shifted left, and

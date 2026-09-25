@@ -7,20 +7,28 @@ using Avalonia.Styling;
 
 namespace Atlas;
 
-/// <summary>a row in the boards panel: either a group heading or a board.</summary>
+/// <summary>a row in the workspace panel: the map, a group heading or a
+/// board.</summary>
 public sealed class BoardRow
 {
     public string Group { get; init; } = "";
     public Board? Board { get; init; }
-    public bool IsHeader => Board is null;
 
-    public override string ToString() => IsHeader
-        ? (Group.Length == 0 ? "ungrouped" : Group)
+    /// <summary>the map - "Home" - pinned at the top. It is somewhere to go,
+    /// like a board, but not a board: it cannot be moved, renamed, grouped
+    /// or deleted, and nothing can be dropped on it.</summary>
+    public bool IsHome { get; init; }
+
+    public bool IsHeader => Board is null && !IsHome;
+
+    public override string ToString() => IsHome ? "Home"
+        : IsHeader ? (Group.Length == 0 ? "ungrouped" : Group)
         : "   " + Board!.Name + "   (" + Board.Items.Count + ")";
 }
 
-/// <summary>boards, grouped, with buttons for what you can do to the ones you
-/// have selected. it used to explain its keys in a wall of text; a button that
+/// <summary>the workspace: the map and every board, grouped, with buttons
+/// for what you can do to the ones you have selected. Tab opens it from
+/// anywhere. It used to explain its keys in a wall of text; a button that
 /// does the thing is easier to read than a sentence about a key.</summary>
 public sealed class BoardOverlay : Border
 {
@@ -40,6 +48,9 @@ public sealed class BoardOverlay : Border
     List<string>? _beforeGroups;
 
     public event Action<Board>? Open;
+
+    /// <summary>go to the map.</summary>
+    public event Action? HomeRequested;
     public event Action? CreateRequested;
     public event Action<Board>? RenameRequested;
     public event Action<Board>? GroupRequested;
@@ -54,6 +65,7 @@ public sealed class BoardOverlay : Border
         BorderThickness = new Thickness(0, 0, 1, 0);
         Padding = new Thickness(12);
         Width = 340;
+        MinWidth = MinW;
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Stretch;
 
@@ -69,6 +81,9 @@ public sealed class BoardOverlay : Border
             // couple and left the rest as empty space until something scrolled
             ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new StackPanel()),
         };
+        // no sideways scrolling, so a long name wraps to the panel's width
+        // instead of running off its edge
+        ScrollViewer.SetHorizontalScrollBarVisibility(_list, Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled);
         _list.DoubleTapped += (_, _) => Commit();
         _list.SelectionChanged += (_, _) => { DropHeaders(); Reflect(); };
 
@@ -100,26 +115,52 @@ public sealed class BoardOverlay : Border
             Children = { _open, _rename, _group, _delete, create },
         };
 
-        Child = new StackPanel
+        // a grip down the right edge drags the width: names are long, and a
+        // fixed panel either wasted space or cut them off
+        var grip = new Border
+        {
+            Width = 6, Background = Brushes.Transparent,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, -12, -13, -12),
+            Cursor = new Cursor(StandardCursorType.SizeWestEast),
+        };
+        grip.PointerPressed += (_, e) =>
+        {
+            _resizeFrom = e.GetPosition(this).X - Width;
+            e.Pointer.Capture(grip);
+            e.Handled = true;
+        };
+        grip.PointerMoved += (_, e) =>
+        {
+            if (_resizeFrom is not { } from) return;
+            Width = Math.Clamp(e.GetPosition(this).X - from, MinW, MaxW);
+        };
+        grip.PointerReleased += (_, e) => { _resizeFrom = null; e.Pointer.Capture(null); };
+
+        var content = new StackPanel
         {
             Children =
             {
                 new TextBlock
                 {
-                    Text = "BOARDS", FontFamily = Ui.Mono, FontSize = 12,
+                    Text = "WORKSPACE", FontFamily = Ui.Mono, FontSize = 12,
                     Foreground = Ui.Accent, Margin = new Thickness(0, 0, 0, 8),
                 },
                 buttons,
                 _list,
                 new TextBlock
                 {
-                    Text = "drag a board between groups, or a group heading to reorder groups. esc cancels a drag.",
+                    Text = "tab opens and closes this from anywhere. drag a board between groups, or a group heading to reorder groups. esc cancels a drag. drag the right edge to widen.",
                     FontFamily = Ui.Mono, FontSize = 11, Foreground = Ui.Dim,
                     TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0),
                 },
             },
         };
+        Child = new Grid { Children = { content, grip } };
     }
+
+    const double MinW = 240, MaxW = 900;
+    double? _resizeFrom;
 
     static Button Make(string text, Action run)
     {
@@ -158,7 +199,9 @@ public sealed class BoardOverlay : Border
     public void Rebuild()
     {
         var keep = Selected;
+        bool home = _list.SelectedItems is { Count: 1 } && _list.SelectedIndex == 0 && _rows is [{ IsHome: true }, ..];
         _rows.Clear();
+        _rows.Add(new BoardRow { IsHome = true });
 
         foreach (var group in _store.Groups())
         {
@@ -168,20 +211,27 @@ public sealed class BoardOverlay : Border
                 _rows.Add(new BoardRow { Group = group, Board = b });
         }
 
-        _list.ItemsSource = _rows.Select((r, i) => r.IsHeader ? Header(r, i == 0) : Line(r)).ToList();
+        _list.ItemsSource = _rows.Select((r, i) => r.IsHome ? HomeLine() : r.IsHeader ? Header(r, i == 1) : Line(r)).ToList();
         _list.SelectedItems?.Clear();
         foreach (var b in keep)
         {
             int at = _rows.FindIndex(r => r.Board == b);
             if (at >= 0) _list.SelectedItems?.Add(_list.Items[at]);
         }
+        if (home) _list.SelectedIndex = 0;
         if (_list.SelectedItems is { Count: 0 })
         {
-            int first = _rows.FindIndex(r => !r.IsHeader);
-            if (first >= 0) _list.SelectedIndex = first;
+            int first = _rows.FindIndex(r => r.Board is not null);
+            _list.SelectedIndex = first >= 0 ? first : 0;
         }
         Reflect();
     }
+
+    /// <summary>the map, as the first thing in the list.</summary>
+    static Control HomeLine() => new TextBlock
+    {
+        Text = "Home", FontWeight = FontWeight.Bold, Margin = new Thickness(0, 2, 0, 4),
+    };
 
     /// <summary>a group heading. It used to be a board row shifted left, and
     /// read as one: now it is set apart by case, colour, a count and a rule
@@ -215,16 +265,18 @@ public sealed class BoardOverlay : Border
         };
     }
 
-    static Control Line(BoardRow r) => new StackPanel
+    /// <summary>a board: its name, wrapping onto more lines when it is long,
+    /// and its item count kept to the right of the first.</summary>
+    static Control Line(BoardRow r)
     {
-        Orientation = Orientation.Horizontal,
-        Margin = new Thickness(12, 0, 0, 0),
-        Children =
+        var count = new TextBlock { Text = $"   {r.Board!.Items.Count}", Foreground = Ui.Dim };
+        DockPanel.SetDock(count, Dock.Right);
+        return new DockPanel
         {
-            new TextBlock { Text = r.Board!.Name },
-            new TextBlock { Text = $"   {r.Board.Items.Count}", Foreground = Ui.Dim },
-        },
-    };
+            Margin = new Thickness(12, 0, 0, 0),
+            Children = { count, new TextBlock { Text = r.Board.Name, TextWrapping = TextWrapping.Wrap } },
+        };
+    }
 
     /// <summary>a heading is never selected, even when pressed to drag it.</summary>
     void DropHeaders()
@@ -255,10 +307,13 @@ public sealed class BoardOverlay : Border
 
     Board? One => Selected is [var only] ? only : null;
 
+    /// <summary>whether Home - and only Home - is selected.</summary>
+    bool HomePicked => _list.SelectedItems is { Count: 1 } && _list.SelectedIndex == 0 && _rows is [{ IsHome: true }, ..];
+
     void Reflect()
     {
         int n = Selected.Count;
-        _open.IsEnabled = n == 1;
+        _open.IsEnabled = n == 1 || HomePicked;
         _rename.IsEnabled = n == 1;
         _group.IsEnabled = n == 1;
         _delete.IsEnabled = n > 0;
@@ -276,6 +331,7 @@ public sealed class BoardOverlay : Border
     {
         _pressAt = e.GetPosition(_list);
         var row = RowAt(_pressAt);
+        // Home stays where it is
         _dragBoard = row?.Board;
         _dragGroup = row is { IsHeader: true } ? row.Group : null;
         _moved = false;
@@ -288,7 +344,7 @@ public sealed class BoardOverlay : Border
         if (_dragBoard is null && _dragGroup is null) return;
         var p = e.GetPosition(_list);
         if (!_moved && Math.Abs(p.Y - _pressAt.Y) < 6) return;     // not a drag yet
-        if (RowAt(p) is not { } target) return;
+        if (RowAt(p) is not { } target || target.IsHome) return;    // nothing goes above Home
 
         if (_dragBoard is { } board) MoveBoard(board, target);
         else MoveGroup(_dragGroup!, target);
@@ -406,7 +462,7 @@ public sealed class BoardOverlay : Border
     {
         for (int i = _list.SelectedIndex + delta; i >= 0 && i < _rows.Count; i += delta)
         {
-            if (_rows[i].IsHeader) continue;
+            if (_rows[i].IsHeader) continue;        // Home is a stop, headings are not
             _list.SelectedItems?.Clear();
             _list.SelectedIndex = i;
             _list.ScrollIntoView(i);
@@ -416,8 +472,16 @@ public sealed class BoardOverlay : Border
 
     void Commit()
     {
+        if (HomePicked) { Close(); HomeRequested?.Invoke(); return; }
         if (One is not { } b) return;
         Close();
         Open?.Invoke(b);
+    }
+
+    /// <summary>open it, or close it when it is open.</summary>
+    public void Toggle()
+    {
+        if (Reveal.Showing(this)) Close();
+        else Show();
     }
 }

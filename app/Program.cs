@@ -141,14 +141,7 @@ public sealed class App : Application
                 Content = root,
             };
 
-            // tunnel, so the window sees Escape on the way *down* to whatever
-            // holds focus. A dialog that owns the key can only handle it while
-            // it owns focus, and that is exactly how dialogs got stranded
-            window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
-            {
-                if (e.Key != Key.Escape) return;
-                if (view.Escape()) e.Handled = true;
-            }, RoutingStrategies.Tunnel, handledEventsToo: true);
+            WireKeys(window, view);
 
             // now the framework is up, so the dispatcher is the real one,
             // and there is somewhere to say it out loud
@@ -219,6 +212,33 @@ public sealed class App : Application
                     Walk(sub + "\\", rest[name.Length..], found);
             }
         }
+    }
+
+    /// <summary>the keys the window takes before any control can: Escape,
+    /// peeled off the layer stack, and Tab, the workspace. Public so a test
+    /// can wire a window the way the app does.</summary>
+    public static void WireKeys(Window window, SceneView view)
+    {
+        // tunnel, so the window sees Escape on the way *down* to whatever
+        // holds focus. A dialog that owns the key can only handle it while
+        // it owns focus, and that is exactly how dialogs got stranded
+        window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            if (view.Escape()) e.Handled = true;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        // tab opens and closes the workspace from anywhere: taken here,
+        // on the way down, before a focused list or button can read it as
+        // "move to the next control". Not while typing, where a tab may
+        // be text, and not with a modifier, which is someone else's key
+        window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
+            if (window.FocusManager?.GetFocusedElement() is TextBox) return;
+            view.ToggleWorkspace();
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
     }
 
     static Scan LoadScan(string[] args)
@@ -748,7 +768,7 @@ public sealed class SceneView : Control
         _spotAt = _clock.Elapsed.TotalSeconds;
         // it stays drawn while it fades out; StepSpotlight lets it go
         if (_spotOn) _scene.Spotlight = new SkiaSharp.SKPoint((float)_pointer.X, (float)_pointer.Y);
-        Toast(_spotOn ? "spotlight - tab or esc to turn off, alt+wheel to size" : "spotlight off");
+        Toast(_spotOn ? "spotlight - space or esc to turn off, alt+wheel to size" : "spotlight off");
         InvalidateVisual();
     }
 
@@ -1248,11 +1268,10 @@ public sealed class SceneView : Control
     /// you can grab things here, which is what edit mode is.</summary>
     /// <summary>outside edit mode the canvas is something you take hold of, so
     /// it gets the open hand, and the closed one while you are holding it.
-    /// Holding space to pan while editing means the same thing and looks the
-    /// same way.</summary>
+    /// </summary>
     void ApplyCursor()
     {
-        bool panning = _spaceDown || !Editing;
+        bool panning = !Editing;
 
         Cursor = _armBrush || _armEraser || _armShape is not null || _armArrow
                 ? new Cursor(StandardCursorType.Cross)
@@ -1275,7 +1294,7 @@ public sealed class SceneView : Control
     {
         StandardCursorType? want = null;
         bool armed = _armBrush || _armEraser || _armShape is not null || _armArrow;
-        if (Editing && !_spaceDown && !armed && !_scene.BoardReadOnly)
+        if (Editing && !armed && !_scene.BoardReadOnly)
         {
             var (wx, wy) = WorldAt(p);
             if (_scene.GripAt(wx, wy) is { } grip)
@@ -1417,7 +1436,6 @@ public sealed class SceneView : Control
 
     /// <summary>which wall is being dragged, or -1 when it is a corner.</summary>
     int _resizeEdge = -1;
-    bool _spaceDown;
     bool _band;
     readonly List<string> _bandBase = [];
     readonly List<int> _bandBaseFiles = [];
@@ -1929,7 +1947,7 @@ public sealed class SceneView : Control
         {
             items.Add(("undo", "ctrl+Z", Undo));
             items.Add(("redo", "ctrl+Y", Redo));
-            items.Add(("boards", "O", () => _boards?.Show()));
+            items.Add(("workspace", "tab", ToggleWorkspace));
             items.Add(("tour stop", "M", CaptureStop));
             items.Add(("tour", "shift+M", ToggleTourPanel));
             items.Add(("play", "P", () => PlayTour(0)));
@@ -1950,7 +1968,7 @@ public sealed class SceneView : Control
             items.Add(("search", "/", () => OpenSearch?.Invoke()));
             items.Add(("pull requests", "P", () => OpenReviewPanel(branches: false)));
             items.Add(("branches", "G", () => OpenReviewPanel(branches: true)));
-            items.Add(("boards", "O", () => _boards?.Show()));
+            items.Add(("workspace", "tab", ToggleWorkspace));
             items.Add(("notes", "L", OpenNotes));
             items.Add(("fit", "F", FitAll));
         }
@@ -2546,6 +2564,8 @@ public sealed class SceneView : Control
         _boardStore = store;
         _boards = panel;
         panel.Open += OpenBoard;
+        // Home is the map: leaving whatever board is open, generated or not
+        panel.HomeRequested += () => { if (_scene.ActiveBoard is not null) LeaveBoard(); Focus(); };
         panel.CreateRequested += CreateBoard;
         panel.DeleteRequested += picked => _prompt?.Ask(
             picked.Count == 1
@@ -2676,6 +2696,16 @@ public sealed class SceneView : Control
         if (Where(b) == before) return false;
         _boardStore?.Save(b);
         return true;
+    }
+
+    /// <summary>open or close the workspace panel. Tab, from anywhere - the
+    /// window hands it over before any control can take it as "next field".</summary>
+    public void ToggleWorkspace()
+    {
+        if (_boards is null) return;
+        _boards.Toggle();
+        if (!Reveal.Showing(_boards)) Focus();
+        InvalidateVisual();
     }
 
     void CreateBoard()
@@ -3608,7 +3638,7 @@ public sealed class SceneView : Control
             return;
         }
 
-        if (_scene.ActiveBoard is not null && Editing && !_spaceDown && !_secondary)
+        if (_scene.ActiveBoard is not null && Editing && !_secondary)
         {
             var (wx, wy) = WorldAt(e.GetPosition(this));
 
@@ -4237,28 +4267,15 @@ public sealed class SceneView : Control
         GlideTo(wx - ((float)p.X - vw / 2) / s, wy - ((float)p.Y - vh / 2) / s, s);
     }
 
-    protected override void OnKeyUp(KeyEventArgs e)
-    {
-        if (e.Key != Key.Space || !_spaceDown) return;
-        _spaceDown = false;
-        ApplyCursor();
-    }
-
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // tab turns the spotlight on or off. Handled here, or Avalonia takes
-        // tab to mean "move focus to the next control"
-        if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None)
+        // space turns the spotlight on or off, wherever you are - a tour
+        // included, whose stops still step with the arrows. It used to be
+        // hold-to-pan while editing a board; tab took the spotlight's old key
+        // for the workspace panel
+        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None)
         {
             ToggleSpotlight();
-            e.Handled = true;
-            return;
-        }
-
-        // hold space to pan without leaving edit mode
-        if (e.Key == Key.Space && _scene.ActiveBoard is not null && _tour is null)
-        {
-            if (!_spaceDown) { _spaceDown = true; ApplyCursor(); }
             e.Handled = true;
             return;
         }
@@ -4377,7 +4394,6 @@ public sealed class SceneView : Control
                 case Key.OemCloseBrackets: StepTool(1); return;
                 case Key.OemOpenBrackets: StepTool(-1); return;
                 case Key.F: FitBoard(); InvalidateVisual(); return;
-                case Key.O: _boards?.Show(); InvalidateVisual(); return;
                 case Key.M when e_shift: ToggleTourPanel(); return;
                 case Key.M: CaptureStop(); return;
                 case Key.P: PlayTour(Reveal.Showing(_stops) ? Math.Max(0, _stops!.Selected) : 0); return;
@@ -4397,14 +4413,13 @@ public sealed class SceneView : Control
             case Key.C: ToggleChangeBoard(); break;
             case Key.D: _scene.ShowFolders = !_scene.ShowFolders; break;
             case Key.OemPeriod: ToggleHidden(); break;
-            case Key.O: _boards?.Show(); break;
             case Key.A: AddViewToBoard(); break;
             case Key.I: Annotate(); break;
             case Key.E: SetEditing(!Editing); break;
             case Key.S: SetWheelZoom(!WheelZoom); break;
             case Key.L: OpenNotes(); break;
             case Key.P: OpenReviewPanel(branches: false); break;
-            case Key.Space or Key.Right when _tour is not null: Step(1); break;
+            case Key.Right when _tour is not null: Step(1); break;
             case Key.Left when _tour is not null: Step(-1); break;
             case Key.OemQuestion:
                 OpenSearch?.Invoke();

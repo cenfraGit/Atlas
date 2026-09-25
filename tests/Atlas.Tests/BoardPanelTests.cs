@@ -58,7 +58,7 @@ public class BoardPanelTests
     }
 
     static List<string> Layout(BoardOverlay panel) =>
-        panel.Rows.Select(r => r.IsHeader ? $"[{r.Group}]" : r.Board!.Name).ToList();
+        panel.Rows.Select(r => r.IsHome ? "Home" : r.IsHeader ? $"[{r.Group}]" : r.Board!.Name).ToList();
 
     static Point Centre(Rig r, int row)
     {
@@ -73,7 +73,7 @@ public class BoardPanelTests
     public void WithNoStoredOrderGroupsAreUngroupedFirstThenByName()
     {
         using var r = Open();
-        Assert.Equal(["[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
+        Assert.Equal(["Home", "[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
     }
 
     /// <summary>a heading can be pressed - that is how a group is dragged -
@@ -104,7 +104,7 @@ public class BoardPanelTests
         r.Window.MouseDown(from, MouseButton.Left);
         r.Window.MouseMove(to, RawInputModifiers.LeftMouseButton);
 
-        Assert.Equal(["[]", "loose", "[alpha]", "b1", "a1", "a2"], Layout(r.Panel));
+        Assert.Equal(["Home", "[]", "loose", "[alpha]", "b1", "a1", "a2"], Layout(r.Panel));
         r.Window.MouseUp(to, MouseButton.Left);
 
         var b1 = r.Reloaded().Boards.Single(b => b.Name == "b1");
@@ -125,7 +125,7 @@ public class BoardPanelTests
         Assert.True(r.View.Escape());
         r.Window.MouseUp(to, MouseButton.Left);
 
-        Assert.Equal(["[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
+        Assert.Equal(["Home", "[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
         Assert.Equal("beta", r.Reloaded().Boards.Single(b => b.Name == "b1").Group);
         Assert.True(Reveal.Showing(r.Panel));           // the drag, not the panel
     }
@@ -143,7 +143,7 @@ public class BoardPanelTests
         r.Window.MouseMove(to, RawInputModifiers.LeftMouseButton);
         r.Window.MouseUp(to, MouseButton.Left);
 
-        Assert.Equal(["[beta]", "b1", "[]", "loose", "[alpha]", "a1", "a2"], Layout(r.Panel));
+        Assert.Equal(["Home", "[beta]", "b1", "[]", "loose", "[alpha]", "a1", "a2"], Layout(r.Panel));
         Assert.Equal(["beta", "", "alpha"], r.Reloaded().Groups());
         Assert.True(File.Exists(Path.Combine(r.Repo.Path, ".atlas", "groups.json")));
     }
@@ -174,21 +174,24 @@ public class BoardPanelTests
         r.Window.MouseMove(new Point(at.X, at.Y + 2), RawInputModifiers.LeftMouseButton);
         r.Window.MouseUp(at, MouseButton.Left);
 
-        Assert.Equal(["[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
+        Assert.Equal(["Home", "[]", "loose", "[alpha]", "a1", "a2", "[beta]", "b1"], Layout(r.Panel));
         Assert.False(File.Exists(Path.Combine(r.Repo.Path, ".atlas", "groups.json")));
     }
 
-    /// <summary>up from the first board stays on it, rather than landing on
-    /// the heading above and leaving nothing selected.</summary>
+    /// <summary>up from the first board goes to Home, over the heading
+    /// between them, and stays there; down steps over headings too.</summary>
     [AvaloniaFact]
-    public void UpFromTheFirstBoardStaysOnIt()
+    public void UpAndDownStepOverHeadingsAndStopAtHome()
     {
         using var r = Open();
         r.Panel.HandleKey(Key.Up);
         r.Panel.HandleKey(Key.Up);
 
-        Assert.Equal("loose", Assert.Single(r.Panel.Selected).Name);
+        Assert.Empty(r.Panel.Selected);                 // Home is not a board
+        Assert.Equal(0, r.Panel.GetVisualDescendants().OfType<ListBox>().Single().SelectedIndex);
 
+        r.Panel.HandleKey(Key.Down);
+        Assert.Equal("loose", Assert.Single(r.Panel.Selected).Name);
         r.Panel.HandleKey(Key.Down);                    // over the alpha heading
         Assert.Equal("a1", Assert.Single(r.Panel.Selected).Name);
     }

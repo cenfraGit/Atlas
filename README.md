@@ -95,8 +95,9 @@ method. This is the unit everything else works on.
 **Put it on a board.** The map is laid out for you and never rearranged by
 hand; a board is where you arrange things yourself. Secondary click your
 selection and pick *Add file to board*, or press `A` to send whatever you are
-looking at to the board you last had open. `O` lists your boards: select one
-and click *open*.
+looking at to the board you last had open. `Tab` opens the **workspace** from
+anywhere: Home - the map - at the top, then your boards by group. Select one
+and click *open*; long names wrap, and the panel's right edge drags wider.
 
 **Work on a board.** Press `E` for edit mode. Drag windows and notes around,
 drag an empty patch to sweep up several at once, and resize from any corner -
@@ -110,7 +111,7 @@ height, so a long thin divider is as available as a square.
 
 `N` adds a note, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
 snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
-Hold space to pan without leaving edit mode. The `<` button top left goes
+The `<` button top left goes
 back to the map, and the camera returns exactly where you left it.
 
 **`Esc` cancels, it does not leave.** It closes whatever is innermost - a
@@ -171,7 +172,7 @@ go.
 
 **Walk someone through a board.** On a board, frame the view you want and
 press `M`: that is a stop. Move, `M` again, and so on. `P` plays the stops in
-order like slides, flying between them - space and the arrows step, `Esc`
+order like slides, flying between them - the arrows step, `Esc`
 stops. `shift+M` opens the list of stops down the right: click one to look
 at it, double click to play from it, drag to reorder, and rename or delete
 from the buttons. A stop remembers the *region* you were looking at, so it
@@ -205,10 +206,10 @@ your team gets everything you wrote.
 | `E` | edit on or off |
 | `S` | wheel zooms, or wheel scrolls |
 | `ctrl+Z` / `ctrl+Y` | undo / redo on a board |
-| space (board) | hold to pan while editing |
 | `Y` | draw an arrow on a board |
 | `Esc` | cancel the innermost thing: dialog, panel, tool, selection |
-| `Tab` | spotlight: dim everything but a circle round the pointer, for explaining on a call; `Alt`+wheel sizes it, `Tab` or `Esc` turns it off |
+| `Tab` | the workspace: Home and every board, from anywhere |
+| space | spotlight: dim everything but a circle round the pointer, for explaining on a call; `Alt`+wheel sizes it, space or `Esc` turns it off |
 | `<` or alt+left | back to the map from a board |
 | Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |
@@ -233,8 +234,8 @@ your team gets everything you wrote.
 | `M` | capture the view as a tour stop (on a board) |
 | `shift+M` | the board's tour: its stops, to preview, reorder, rename, delete |
 | `P` | play the board's tour (on a board) |
-| space, arrows | next / previous stop while a tour is playing |
-| `O` | boards panel; `C` new, `F2` rename, `F3` group, Delete removes; drag a board between groups, or a group heading to reorder groups; `Esc` cancels a drag |
+| arrows | next / previous stop while a tour is playing |
+| in the workspace | `C` new, `F2` rename, `F3` group, Delete removes; drag a board between groups, or a group heading to reorder groups; `Esc` cancels a drag |
 | `A` | add the current file to the last opened board |
 | `N` | add a board note (while on a board) |
 | `F` | fit the whole map, or the whole board |
@@ -468,8 +469,8 @@ rubberband that fades out when released. The band owns its result: shrink it
 back off something and that something is let go again, while ctrl or shift
 keeps whatever was already picked before the drag started. Everything picked moves together, snaps to the grid live as you drag rather
 than jumping at the end - resizing too, so edges line up as well as corners, and each one carries a grip at its lower right that resizes
-the **box** without touching the font. Hold space to pan without leaving edit
-mode. A grid shows while editing and disappears in pan mode.
+the **box** without touching the font. A grid shows while editing and
+disappears in pan mode.
 
 The bar along the top adds a board note, a rectangle, an arrow or a file -
 `file` opens the same fuzzy search the map uses and drops the chosen file on

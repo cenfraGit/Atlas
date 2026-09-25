@@ -230,6 +230,12 @@ stops.
       first then by name, which is what every repo looked like before.
 - [x] Headings are set apart: capitals, accent colour, a count, a rule above.
       They are never left selected, and up and down step over them.
+- [x] It is the **workspace** now: Home (the map) pinned first - selectable,
+      never dragged or dropped on - then the boards. `Tab` toggles it from
+      anywhere, taken by the window in the tunnel phase (`App.WireKeys`) so a
+      focused list cannot read it as "next control"; not inside a TextBox.
+      Long names wrap, and a grip on the right edge drags the width.
+      `Space` is the spotlight, and hold-space-to-pan is gone.
 - [x] Both panels drew only their first rows: a virtualizing list handed its
       rows while hidden never realised the rest. A panel of a few dozen rows
       uses a plain `StackPanel` for its items. **Any new list in a panel that

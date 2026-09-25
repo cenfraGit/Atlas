@@ -6,7 +6,7 @@ using SkiaSharp;
 
 namespace Atlas.Tests;
 
-/// <summary>a spotlight for explaining something on a call: tab dims
+/// <summary>a spotlight for explaining something on a call: space dims
 /// everything but a circle round the pointer, so the people watching look
 /// where you point.</summary>
 [Collection("render")]
@@ -73,7 +73,7 @@ public class SpotlightTests
     }
 
     [AvaloniaFact]
-    public void TabTurnsItOnItFollowsThePointerAndEscapeTurnsItOff()
+    public void SpaceTurnsItOnItFollowsThePointerAndEscapeTurnsItOff()
     {
         using var repo = SampleRepo.Build();
         var scene = new Scene(Scanner.Build(repo.Path));
@@ -86,7 +86,7 @@ public class SpotlightTests
         view.Focus();
 
         window.MouseMove(new Avalonia.Point(100, 100));
-        window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        window.KeyPress(Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
         Assert.Equal(new SKPoint(100, 100), scene.Spotlight);
 
         window.MouseMove(new Avalonia.Point(300, 250));

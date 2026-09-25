@@ -940,6 +940,30 @@ public sealed class Scene : IDisposable
         _ => new SKColor(0xe0, 0x5b, 0x5b),
     };
 
+    /// <summary>where the spotlight is, in screen pixels, or null when it is
+    /// off. For explaining something on a call: everything but a circle round
+    /// the pointer is dimmed, so the people watching look where you point.</summary>
+    public SKPoint? Spotlight;
+
+    /// <summary>the circle's radius in screen pixels. Screen rather than board
+    /// units, so it frames the same amount of screen at any zoom.</summary>
+    public float SpotlightRadius = 130;
+
+    /// <summary>dim the whole view except a soft-edged circle, with a faint
+    /// ring at its edge. Drawn last and in screen space, over everything.</summary>
+    void DrawSpotlight(SKCanvas canvas, float vw, float vh)
+    {
+        if (Spotlight is not { } at) return;
+        float r = SpotlightRadius, soft = r * 0.3f;
+        var dark = new SKColor(0, 0, 0, 190);
+        using var shader = SKShader.CreateRadialGradient(at, r + soft,
+            [SKColors.Transparent, SKColors.Transparent, dark], [0f, r / (r + soft), 1f], SKShaderTileMode.Clamp);
+        using var shade = new SKPaint { Shader = shader };
+        canvas.DrawRect(0, 0, vw, vh, shade);
+        using var ring = new SKPaint { IsStroke = true, StrokeWidth = 1.5f, IsAntialias = true, Color = new SKColor(0xff, 0xd1, 0x66, 120) };
+        canvas.DrawCircle(at, r, ring);
+    }
+
     public void Draw(SKCanvas canvas, float vw, float vh)
     {
         var sw = Stopwatch.StartNew();
@@ -948,6 +972,7 @@ public sealed class Scene : IDisposable
         if (ActiveBoard is not null)
         {
             DrawBoard(canvas, vw, vh);
+            DrawSpotlight(canvas, vw, vh);
             canvas.Flush();
             Frames++;
             lock (Samples) { if (Samples.Count < 400) Samples.Add(sw.Elapsed.TotalMilliseconds); }
@@ -1057,6 +1082,7 @@ public sealed class Scene : IDisposable
         DrawRubberband(canvas);
 
         canvas.Restore();
+        DrawSpotlight(canvas, vw, vh);
         canvas.Flush();
         Frames++;
         lock (Samples) { if (Samples.Count < 400) Samples.Add(sw.Elapsed.TotalMilliseconds); }

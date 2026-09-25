@@ -208,6 +208,7 @@ your team gets everything you wrote.
 | space (board) | hold to pan while editing |
 | `Y` | draw an arrow on a board |
 | `Esc` | cancel the innermost thing: dialog, panel, tool, selection |
+| `Tab` | spotlight: dim everything but a circle round the pointer, for explaining on a call; `Alt`+wheel sizes it, `Tab` or `Esc` turns it off |
 | `<` or alt+left | back to the map from a board |
 | Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |

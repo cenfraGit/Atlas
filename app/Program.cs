@@ -740,6 +740,16 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    /// <summary>the spotlight, on or off, at the pointer.</summary>
+    public void ToggleSpotlight()
+    {
+        _scene.Spotlight = _scene.Spotlight is null
+            ? new SkiaSharp.SKPoint((float)_pointer.X, (float)_pointer.Y)
+            : null;
+        Toast(_scene.Spotlight is null ? "spotlight off" : "spotlight - tab or esc to turn off, alt+wheel to size");
+        InvalidateVisual();
+    }
+
     static string Describe(Scan scan)
     {
         var what = scan.ShowingHidden ? "everything" : "source";
@@ -778,6 +788,8 @@ public sealed class SceneView : Control
         // first you had to press Escape twice to be rid of one search
         Layers.Add("matches", () => _scene.Find is not null, ClearFind);
         Layers.Add("selection", HasSelection, ClearSelection);
+        // outermost: presenting is the last thing Escape should interrupt
+        Layers.Add("spotlight", () => _scene.Spotlight is not null, ToggleSpotlight);
         // deliberately no "board" layer. Escape closes what is open - a
         // dialog, a menu, an armed tool, a selection - and leaving the board
         // is not closing anything; it is going somewhere. That is alt+left
@@ -3870,6 +3882,11 @@ public sealed class SceneView : Control
     {
         var p = e.GetPosition(this);
         _pointer = p;
+        if (_scene.Spotlight is not null)
+        {
+            _scene.Spotlight = new SkiaSharp.SKPoint((float)p.X, (float)p.Y);
+            InvalidateVisual();
+        }
         if (_scene.ActiveBoard is null) UpdateHoverLine(p);
         else if (!_drag) HoverHandles(p);
 
@@ -4083,6 +4100,15 @@ public sealed class SceneView : Control
         _flight = null;
         var p = e.GetPosition(this);
 
+        // alt+wheel sizes the spotlight while it is on
+        if (_scene.Spotlight is not null && e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        {
+            _scene.SpotlightRadius = Math.Clamp(_scene.SpotlightRadius * (e.Delta.Y > 0 ? 1.15f : 1 / 1.15f), 40, 600);
+            e.Handled = true;
+            InvalidateVisual();
+            return;
+        }
+
         // a tilt wheel or a trackpad swipe reads sideways in either mode
         if (Math.Abs(e.Delta.X) > 0.01)
         {
@@ -4126,6 +4152,15 @@ public sealed class SceneView : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // tab turns the spotlight on or off. Handled here, or Avalonia takes
+        // tab to mean "move focus to the next control"
+        if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None)
+        {
+            ToggleSpotlight();
+            e.Handled = true;
+            return;
+        }
+
         // hold space to pan without leaving edit mode
         if (e.Key == Key.Space && _scene.ActiveBoard is not null && _tour is null)
         {

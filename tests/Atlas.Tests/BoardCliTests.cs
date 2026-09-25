@@ -174,7 +174,7 @@ public class BoardCliTests
         // n1 would have landed on b, which is right of a; n2 on n1
         Assert.True(items["n1"].Y > items["b"].Y);
         Assert.True(items["n2"].Y > items["n1"].Y);
-        Assert.DoesNotContain("warning", output);
+        Assert.Contains("no warnings", output);
     }
 
     [Fact]
@@ -234,7 +234,72 @@ public class BoardCliTests
         Assert.Contains(Enumerable.Range(0, 800), x => bmp.GetPixel(x, bmp.Height / 2) != bg);
     }
 
+    /// <summary>a stop made by framing items follows them, so moving a
+    /// window does not leave the tour looking at empty canvas.</summary>
+    [Fact]
+    public void AStopReframesWhenItsItemsMove()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow a Loop.cs First\nwindow b Loop.cs Second(0)\nstop s --frame a\nstop all\n").Code);
+        Assert.Equal(0, Run(repo, "doc", "move a --at 5000,0\n").Code);
+
+        var board = Stored(repo, "doc");
+        var a = board.Items.Single(i => i.Id == "a");
+        Assert.Equal(a.X + a.W / 2, board.Stops[0].X, 1);
+        // the whole-board stop grew to take the move in
+        Assert.True(board.Stops[1].X + board.Stops[1].W / 2 >= a.X + a.W);
+    }
+
+    /// <summary>a heading is as wide as its words: at the old fixed width a
+    /// title at heading size wrapped onto three lines.</summary>
+    [Fact]
+    public void ALabelIsAsWideAsItsWords()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nlabel t \"How anchoring works, from end to end\" --text-size 40\n").Code);
+
+        var t = Stored(repo, "doc").Items.Single();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        Assert.Equal(Scene.LineStep(40), scene.ItemHeight(t), 1);
+        Assert.True(t.W > 520);
+    }
+
+    /// <summary>--row lines up with X's top whatever hangs off the row, where
+    /// --right-of a note placed lower down started a staircase.</summary>
+    [Fact]
+    public void RowPlacementKeepsTheRowLevel()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", """
+            new
+            window a Loop.cs First
+            note n "down the side" --on a:10
+            window b Loop.cs Second(0) --row a
+            """).Code);
+
+        var items = Stored(repo, "doc").Items.ToDictionary(i => i.Id);
+        Assert.Equal(items["a"].Y, items["b"].Y);
+        Assert.True(items["b"].X > items["n"].X + items["n"].W);
+    }
+
+    [Fact]
+    public void ShowWarnsAboutAnArrowThroughSomething()
+    {
+        using var repo = Repo();
+        var (code, output, err) = Run(repo, "doc", """
+            new
+            note a "left" --at 0,0
+            note mid "in the way" --at 500,0
+            note b "right" --at 1000,0
+            arrow x a b
+            show
+            """);
+        Assert.True(code == 0, err);
+        Assert.Contains("arrow x crosses mid", output);
+    }
+
     [Theory]
+    [InlineData("note n \"line one\\nline two\"", new[] { "note", "n", "line one\nline two" })]
     [InlineData("note n \"two words\" --on w:5", new[] { "note", "n", "two words", "--on", "w:5" })]
     [InlineData("label t 'it\\'s' ", new[] { "label", "t", "it's" })]
     [InlineData("note n \"\"", new[] { "note", "n", "" })]

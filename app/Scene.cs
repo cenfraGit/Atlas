@@ -1836,6 +1836,16 @@ public sealed class Scene : IDisposable
         return wrapped;
     }
 
+    /// <summary>how wide a line of board words is, unwrapped. Measures, so
+    /// off the draw loop only where there is no draw loop - the command
+    /// line sizes a label to fit its words with it.</summary>
+    public float TextWidth(string line, float size)
+    {
+        TextMeasures++;
+        using var paint = new SKPaint { Typeface = _mono, TextSize = size, IsAntialias = true };
+        return paint.MeasureText(line);
+    }
+
     /// <summary>word wrap. the caller owns the returned paint.</summary>
     List<string> Wrap(string text, float max, float size, out SKPaint paint)
     {

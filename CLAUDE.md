@@ -482,6 +482,15 @@ covered by `AnchorTests` and works.
       created is deleted again.
 - [x] `show` (outline and overlap warnings) and `render` (a PNG of the
       board or one stop), so the agent can check what it made.
+- [x] From a trial where an agent documented part of Atlas with only the
+      help text: `\n` in script text, `--row`, labels as wide as their
+      words, `--text-size` everywhere (`--size` is a box's WxH), stops that
+      remember the items they frame (`Stop.Items`) and reframe on every
+      commit, and `show` warning about an arrow crossing an item.
+- [ ] Arrow labels and window captions - the agent wanted both, and the app
+      draws neither, so it is an app feature before it is a command.
+- [ ] In the trial render one tall amber frame came out pale grey. Not
+      looked into yet.
 - [ ] The open app does not notice a board changed on disk. Watching
       `.atlas/boards` would let you watch an agent build one.
 - [ ] An MCP server over the same commands, if a client wants one; the CLI

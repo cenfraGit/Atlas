@@ -27,7 +27,8 @@ public static class BoardCli
           atlas board help
 
           --repo defaults to the current folder. <board> is a board's name or id.
-          Lines starting with # in a script are comments. Quote anything with spaces.
+          Lines starting with # in a script are comments. Quote anything with spaces;
+          \n inside text is a line break.
 
         board
           new [--group G] [--replace]        make the board (--replace empties an existing one)
@@ -39,13 +40,16 @@ public static class BoardCli
           window <id> <file> [<symbol>] [--lines 40-72] [--width 620]
               a window onto real code. <file> is a path or a unique end of one
               (Auth.cs, src/Auth.cs). <symbol> is a declaration: Login,
-              AuthService.Login, Login(2) for an overload. No symbol and no
-              --lines shows the whole file. Line numbers are 1-based, as in an editor.
-          note <id> "<text>" [--on <window>:<where>] [--width 360]
+              AuthService.Login, or Login(2) for the overload with two
+              parameters. No symbol and no --lines shows the whole file. Line
+              numbers are 1-based, as in an editor. Code reads at its natural
+              size at width 620; wider scales it up.
+          note <id> "<text>" [--on <window>:<where>] [--width 360] [--text-size 8]
               a card of text. --on puts it beside that window at that code.
-          label <id> "<text>" [--size 24]    a heading: words with no card
+          label <id> "<text>" [--text-size 24] [--width W]
+              a heading: words with no card, as wide as its words unless --width.
           box <id> [--around <window>:<where>] [--shape rect|ellipse|diamond]
-                   [--text T] [--size 300x140] [--fill none|border|<colour>]
+                   [--text T] [--text-size S] [--size 300x140] [--fill none|border|<colour>]
               a shape. --around frames lines of a window and stays on that code
               as it changes.
           arrow <id> <from> <to> [--from-side top|right|bottom|left] [--to-side ...]
@@ -53,19 +57,24 @@ public static class BoardCli
 
           <where> is a symbol in that window's file, or lines: 51 or 51-60.
 
+        text size is in board units: code is 6, and so is any text not given one.
+        Notes read well at 8-11, headings at 18-40.
+
         placing - on window, note, label and box (default: right of the last item)
           --right-of X   --left-of X   --below X   --above X   [--gap 60]
+          --row X        same top as X, right of everything already in X's row
           --at x,y       raw board coordinates, if you really need them
           Anything placed this way is nudged down until it overlaps nothing.
 
         editing
-          set <id> [--color C] [--fill F] [--text T] [--width W] [--size S]
+          set <id> [--color C] [--fill F] [--text T] [--width W] [--text-size S]
           move <id> <placing>                a window takes what is drawn on it along
           rm <id>
 
         tours
           stop "<title>" [--frame a,b,...] [--at N] [--pad 80]
               a tour stop framing those items (the whole board without --frame).
+              It follows them: move or resize them and the stop reframes.
               Stops play in order; --at N inserts at position N (1-based).
           unstop N
 
@@ -153,7 +162,9 @@ public static class BoardCli
     sealed class CliError(string message) : Exception(message);
 
     /// <summary>a command line split into words: spaces separate, double or
-    /// single quotes group, and a backslash before a quote keeps it.</summary>
+    /// single quotes group, a backslash before a quote keeps it, and \n is a
+    /// line break - a script has one command per line, so a note of several
+    /// lines had no other way in.</summary>
     public static List<string> Split(string line)
     {
         var words = new List<string>();
@@ -164,6 +175,7 @@ public static class BoardCli
         {
             char c = line[i];
             if (c == '\\' && i + 1 < line.Length && line[i + 1] is '"' or '\'') { sb.Append(line[++i]); any = true; }
+            else if (c == '\\' && i + 1 < line.Length && line[i + 1] == 'n') { sb.Append('\n'); i++; any = true; }
             else if (quote != '\0') { if (c == quote) quote = '\0'; else sb.Append(c); }
             else if (c is '"' or '\'') { quote = c; any = true; }
             else if (char.IsWhiteSpace(c)) { if (any) words.Add(sb.ToString()); sb.Clear(); any = false; }
@@ -217,7 +229,23 @@ public static class BoardCli
 
         public void Commit()
         {
-            if (_board is not null) _store.Save(_board);
+            if (_board is null) return;
+            foreach (var stop in _board.Stops) Reframe(stop);
+            _store.Save(_board);
+        }
+
+        /// <summary>a stop made by framing items is put round them again,
+        /// wherever they are now. One whose items are all gone keeps the
+        /// region it had.</summary>
+        void Reframe(Stop stop)
+        {
+            if (stop.Items is null) return;
+            var items = stop.Items.Count == 0
+                ? _board!.Items
+                : _board!.Items.Where(i => stop.Items.Contains(i.Id)).ToList();
+            if (items.Count == 0) return;
+            var r = Around(items, stop.Pad);
+            (stop.X, stop.Y, stop.W, stop.H) = (r.MidX, r.MidY, r.Width, r.Height);
         }
 
         public void Abandon()
@@ -274,6 +302,7 @@ public static class BoardCli
             {
                 if (!opt.ContainsKey("replace"))
                     throw new CliError($"board \"{_board.Name}\" already exists - add --replace to empty it, or edit it as it is");
+                Console.WriteLine($"emptied: {_board.Items.Count} items and {_board.Stops.Count} stops removed");
                 _board.Items.Clear();
                 _board.Stops.Clear();
             }
@@ -298,7 +327,9 @@ public static class BoardCli
                 var s = b.Stops[i];
                 Console.WriteLine($"  {i + 1}. {s.Name}  centre {F(s.X)},{F(s.Y)}  {F(s.W)}x{F(s.H)}");
             }
-            foreach (var w in Warnings()) Console.WriteLine("warning: " + w);
+            var warnings = Warnings().ToList();
+            foreach (var w in warnings) Console.WriteLine("warning: " + w);
+            if (warnings.Count == 0) Console.WriteLine("no warnings (checked: overlaps, arrows crossing items, loose ties)");
         }
 
         string Describe(BoardItem it)
@@ -354,9 +385,28 @@ public static class BoardCli
                     if (rx.IntersectsWith(ry)) yield return $"{x.Id} overlaps {y.Id}";
                 }
             foreach (var it in Board.Items.Where(i => i.Kind == "arrow"))
+            {
                 foreach (var end in new[] { it.From, it.To })
                     if (end is not null && Board.Items.All(i => i.Id != end))
                         yield return $"arrow {it.Id} is tied to {end}, which is not on the board";
+
+                // sampled rather than solved: a few dozen points along the
+                // shaft, against each box shrunk a little so an end resting
+                // on its own item's edge does not count
+                var (a, b) = Scene.ArrowEnds(it);
+                foreach (var o in solid)
+                {
+                    if (o.Id == it.From || o.Id == it.To) continue;
+                    var r = BoxOf(o);
+                    r.Inflate(-4, -4);
+                    for (int k = 1; k < 40; k++)
+                        if (r.Contains(a.X + (b.X - a.X) * k / 40f, a.Y + (b.Y - a.Y) * k / 40f))
+                        {
+                            yield return $"arrow {it.Id} crosses {o.Id}";
+                            break;
+                        }
+                }
+            }
         }
 
         void Render(List<string> pos, Dictionary<string, string> opt)
@@ -454,8 +504,12 @@ public static class BoardCli
             var it = NewItem(pos, kind);
             if (pos.Count < 2) throw new CliError($"{(kind == "text" ? "label" : kind)} needs its text in quotes");
             it.Text = pos[1];
-            it.W = opt.TryGetValue("width", out var w) ? Float(w, "--width") : width;
-            if (opt.TryGetValue("size", out var s)) it.Size = Float(s, "--size");
+            if (opt.TryGetValue("text-size", out var s)) it.Size = Float(s, "--text-size");
+            it.W = opt.TryGetValue("width", out var w) ? Float(w, "--width")
+                // a heading wrapped because nobody could know how wide its
+                // words were: here there is no draw loop, so measure them
+                : kind == "text" ? it.Text.Split('\n').Max(l => Scene.TextWidth(l, Scene.SizeOf(it))) + 8
+                : width;
             if (opt.TryGetValue("color", out var c)) it.Color = Colour(c);
             it.H = 0;
 
@@ -487,6 +541,7 @@ public static class BoardCli
                 _ => throw new CliError($"--shape is rect, ellipse or diamond, not {shape}"),
             });
             if (opt.TryGetValue("text", out var t)) it.Text = t;
+            if (opt.TryGetValue("text-size", out var ts)) it.Size = Float(ts, "--text-size");
             it.Color = opt.TryGetValue("color", out var c) ? Colour(c) : "#ffd166";
             if (opt.TryGetValue("fill", out var fill)) it.Fill = Fill(fill);
 
@@ -538,7 +593,7 @@ public static class BoardCli
         {
             if (pos.Count == 0) throw new CliError("set <id> --color ... ");
             var it = Item(pos[0]);
-            if (opt.Count == 0) throw new CliError("set needs something to change: --color --fill --text --width --size");
+            if (opt.Count == 0) throw new CliError("set needs something to change: --color --fill --text --width --text-size");
             foreach (var (k, v) in opt)
                 switch (k)
                 {
@@ -546,10 +601,10 @@ public static class BoardCli
                     case "fill": it.Fill = Fill(v); break;
                     case "text": it.Text = v; break;
                     case "width": it.W = Float(v, "--width"); break;
-                    case "size": it.Size = Float(v, "--size"); break;
+                    case "text-size": it.Size = Float(v, "--text-size"); break;
                     default: throw new CliError($"set cannot change --{k}");
                 }
-            Console.WriteLine(Describe(it));
+            Console.WriteLine($"set {it.Id}: {string.Join(", ", opt.Keys)}");
         }
 
         void Move(List<string> pos, Dictionary<string, string> opt)
@@ -583,7 +638,11 @@ public static class BoardCli
             if (items.Count == 0) throw new CliError("nothing to frame - the board is empty");
             float pad = opt.TryGetValue("pad", out var p) ? Float(p, "--pad") : 80;
             var r = Around(items, pad);
-            var stop = new Stop { Name = pos[0], X = r.MidX, Y = r.MidY, W = r.Width, H = r.Height };
+            var stop = new Stop
+            {
+                Name = pos[0], X = r.MidX, Y = r.MidY, W = r.Width, H = r.Height, Pad = pad,
+                Items = ids is null ? [] : items.Select(i => i.Id).ToList(),
+            };
             int at = opt.TryGetValue("at", out var a) ? Math.Clamp(Int(a, "--at") - 1, 0, Board.Stops.Count) : Board.Stops.Count;
             Board.Stops.Insert(at, stop);
             Console.WriteLine($"stop {at + 1}. {stop.Name}");
@@ -619,6 +678,17 @@ public static class BoardCli
             else if (opt.TryGetValue("left-of", out id)) { var o = BoxOf(Item(id)); (it.X, it.Y) = (o.Left - gap - it.W, o.Top); }
             else if (opt.TryGetValue("below", out id)) { var o = BoxOf(Item(id)); (it.X, it.Y) = (o.Left, o.Bottom + gap); }
             else if (opt.TryGetValue("above", out id)) { var o = BoxOf(Item(id)); (it.X, it.Y) = (o.Left, o.Top - gap - h); }
+            else if (opt.TryGetValue("row", out id))
+            {
+                // the row is everything level with X and to the right of it,
+                // so a note hung off a window further down does not start a
+                // staircase the way --right-of that note would
+                var o = BoxOf(Item(id));
+                float right = Board.Items.Where(i => i != it && i.Kind != "arrow" && i.Host is null)
+                    .Select(BoxOf).Where(b => b.Left >= o.Left && b.Top < o.Top + Math.Max(h, 1) && b.Bottom > o.Top)
+                    .Select(b => b.Right).DefaultIfEmpty(o.Right).Max();
+                (it.X, it.Y) = (right + gap, o.Top);
+            }
             else
             {
                 var prev = _last ?? Board.Items.LastOrDefault(i => i.Kind != "arrow" && i.Host is null && i != it);
@@ -785,7 +855,7 @@ public static class BoardCli
 
         static string Short(string? s)
         {
-            s = (s ?? "").ReplaceLineEndings(" ");
+            s = (s ?? "").ReplaceLineEndings("\\n");
             return s.Length > 50 ? s[..47] + "..." : s;
         }
     }

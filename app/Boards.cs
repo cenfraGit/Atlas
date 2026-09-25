@@ -170,6 +170,15 @@ public sealed class Stop
     [JsonPropertyName("w")] public float W { get; set; }
     [JsonPropertyName("h")] public float H { get; set; }
 
+    /// <summary>the ids of the items it frames, when it was made by framing
+    /// them (`atlas board stop --frame`), so the region can be worked out
+    /// again after they move. Null for a stop captured from the view, which
+    /// is the region and nothing else.</summary>
+    [JsonPropertyName("items")] public List<string>? Items { get; set; }
+
+    /// <summary>and how much room round them, for the same reason.</summary>
+    [JsonPropertyName("pad")] public float Pad { get; set; }
+
     /// <summary>the view as it is now.</summary>
     public static Stop Of(float camX, float camY, float camS, float vw, float vh) =>
         new() { X = camX, Y = camY, W = vw / camS, H = vh / camS };

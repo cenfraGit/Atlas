@@ -220,6 +220,7 @@ your team gets everything you wrote.
 | `[` `]` (board) | pen thickness |
 | `G` (board) | snap to grid on or off, for moving and resizing alike |
 | Delete (board) | remove what is picked |
+| `ctrl+[` `ctrl+]` (board) | send what is picked back, or forward, one step; with `shift`, all the way |
 | `1` `2` `3` | rectangle, ellipse, diamond on a board |
 | `4` | label on a board |
 | `ctrl+V` (board) | paste an image from the clipboard |

@@ -1058,8 +1058,10 @@ public sealed class SceneView : Control
             items.Add(ContextActions.Submenu("Text size", TextSizes(picked)));
         if (picked.Count > 0)
         {
-            items.Add(ContextActions.Item("Bring to front", BringToFront));
-            items.Add(ContextActions.Item("Send to back", SendToBack));
+            items.Add(ContextActions.Item("Bring to front  ctrl+shift+]", BringToFront));
+            items.Add(ContextActions.Item("Bring forward  ctrl+]", () => Restack(1)));
+            items.Add(ContextActions.Item("Send backward  ctrl+[", () => Restack(-1)));
+            items.Add(ContextActions.Item("Send to back  ctrl+shift+[", SendToBack));
             items.Add(ContextActions.Item("Copy  ctrl+C", () => CopyPicked(picked)));
             items.Add(ContextActions.Item(picked.Count > 1 ? "Remove these" : "Remove", DeletePicked));
         }
@@ -3476,6 +3478,20 @@ public sealed class SceneView : Control
         Saved("brought to front");
     }
 
+    /// <summary>one step back or forward, rather than all the way.</summary>
+    void Restack(int by)
+    {
+        if (_scene.ActiveBoard is not { } board || _scene.Picked.Count == 0) return;
+        // on a copy first, so undo records only a step that moved something
+        var order = board.Items.ToList();
+        if (!Scene.Restack(order, _scene.Picked, by)) return;
+        Remember();
+        board.Items.Clear();
+        board.Items.AddRange(order);
+        _boardStore?.Save(board);
+        Saved(by < 0 ? "sent backward" : "brought forward");
+    }
+
     void SendToBack()
     {
         if (_scene.ActiveBoard is not { } board || _scene.Picked.Count == 0) return;
@@ -4446,6 +4462,12 @@ public sealed class SceneView : Control
                 // a board adds a window. The key fell through to the map's
                 // A, which refuses outright while a board is open
                 case Key.A: OpenSearch?.Invoke(); return;
+                // with ctrl, the drawing order - one step, or with shift all
+                // the way - the keys the usual drawing tools use for it
+                case Key.OemCloseBrackets when _ctrl && e_shift: BringToFront(); return;
+                case Key.OemOpenBrackets when _ctrl && e_shift: SendToBack(); return;
+                case Key.OemCloseBrackets when _ctrl: Restack(1); return;
+                case Key.OemOpenBrackets when _ctrl: Restack(-1); return;
                 case Key.OemCloseBrackets: StepTool(1); return;
                 case Key.OemOpenBrackets: StepTool(-1); return;
                 case Key.F: FitBoard(); InvalidateVisual(); return;

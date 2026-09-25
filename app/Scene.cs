@@ -1740,6 +1740,35 @@ public sealed class Scene : IDisposable
     /// <summary>the outlined shapes. They share everything but the path they
     /// trace: same box, same fill, same picking, same resize grip, so adding
     /// one is a case in a switch rather than a new kind of thing.</summary>
+    /// <summary>move what is picked one step back (-1) or forward (+1) in
+    /// the drawing order - the list order, back to front. Each picked item
+    /// swaps with the unpicked neighbour on that side, so a picked group
+    /// keeps its own order and one already at the end stays there. False
+    /// when nothing could move.</summary>
+    public static bool Restack(List<BoardItem> items, ISet<string> picked, int by)
+    {
+        bool moved = false;
+        if (by < 0)
+        {
+            for (int i = 1; i < items.Count; i++)
+                if (picked.Contains(items[i].Id) && !picked.Contains(items[i - 1].Id))
+                {
+                    (items[i - 1], items[i]) = (items[i], items[i - 1]);
+                    moved = true;
+                }
+        }
+        else
+        {
+            for (int i = items.Count - 2; i >= 0; i--)
+                if (picked.Contains(items[i].Id) && !picked.Contains(items[i + 1].Id))
+                {
+                    (items[i + 1], items[i]) = (items[i], items[i + 1]);
+                    moved = true;
+                }
+        }
+        return moved;
+    }
+
     public static bool IsShape(string kind) => kind is "shape" or "ellipse" or "diamond";
 
     /// <summary>kinds whose words are the user's, and so can be typed into

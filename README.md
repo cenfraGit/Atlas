@@ -97,7 +97,9 @@ hand; a board is where you arrange things yourself. Secondary click your
 selection and pick *Add file to board*, or press `A` to send whatever you are
 looking at to the board you last had open. `Tab` opens the **workspace** from
 anywhere: Home - the map - at the top, then your boards by group. Select one
-and click *open*; long names wrap, and the panel's right edge drags wider.
+and click *open*; long names wrap. Every side panel - the workspace, the
+tour, the commits - drags wider from its inner edge, and the bars, toggles
+and dialogs move over to stay clear of whatever is open.
 
 **Work on a board.** Press `E` for edit mode. Drag windows and notes around,
 drag an empty patch to sweep up several at once, and resize from any corner -

@@ -41,9 +41,9 @@ public sealed class TourPanel : Border
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1, 0, 0, 0);
-        // clear of the mode islands in the top right corner, which sit over
-        // this panel and hid its buttons, and of the hint bar along the bottom
-        Padding = new Thickness(12, 84, 12, 12);
+        // clear of the hint bar along the bottom. The mode islands used to
+        // sit over its top and it left room for them; they move aside now
+        Padding = new Thickness(12);
         Margin = new Thickness(0, 0, 0, 30);
         Width = 300;
         HorizontalAlignment = HorizontalAlignment.Right;
@@ -93,6 +93,7 @@ public sealed class TourPanel : Border
                 _list,
             },
         };
+        PanelGrip.Attach(this, onLeft: false);
     }
 
     static Control Docked(Control c, Dock side)

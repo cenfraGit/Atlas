@@ -81,6 +81,10 @@ public static class Reveal
 
     /// <summary>whether the panel is open. False the moment it starts closing,
     /// even though it is on screen for another frame or two.</summary>
+    /// <summary>something was opened or closed - for moving whatever sits
+    /// beside a side panel out of its way, the moment it starts to move.</summary>
+    public static event Action? Changed;
+
     public static bool Showing(Control? c) =>
         c is not null && Known.TryGetValue(c, out var s) && s.Shown;
 
@@ -115,6 +119,7 @@ public static class Reveal
             c.Opacity = 1;
             c.RenderTransform = TransformOperations.Identity;
         }, DispatcherPriority.Render);
+        Changed?.Invoke();
     }
 
     public static void Hide(Control c)
@@ -137,6 +142,7 @@ public static class Reveal
             if (state.Turn != turn || state.Shown) return;
             c.IsVisible = false;
         }, TimeSpan.FromMilliseconds(OutMs));
+        Changed?.Invoke();
     }
 
     /// <summary>where the panel sits before it opens. An edge-anchored panel

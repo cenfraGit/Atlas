@@ -65,7 +65,6 @@ public sealed class BoardOverlay : Border
         BorderThickness = new Thickness(0, 0, 1, 0);
         Padding = new Thickness(12);
         Width = 340;
-        MinWidth = MinW;
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Stretch;
 
@@ -115,28 +114,6 @@ public sealed class BoardOverlay : Border
             Children = { _open, _rename, _group, _delete, create },
         };
 
-        // a grip down the right edge drags the width: names are long, and a
-        // fixed panel either wasted space or cut them off
-        var grip = new Border
-        {
-            Width = 6, Background = Brushes.Transparent,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, -12, -13, -12),
-            Cursor = new Cursor(StandardCursorType.SizeWestEast),
-        };
-        grip.PointerPressed += (_, e) =>
-        {
-            _resizeFrom = e.GetPosition(this).X - Width;
-            e.Pointer.Capture(grip);
-            e.Handled = true;
-        };
-        grip.PointerMoved += (_, e) =>
-        {
-            if (_resizeFrom is not { } from) return;
-            Width = Math.Clamp(e.GetPosition(this).X - from, MinW, MaxW);
-        };
-        grip.PointerReleased += (_, e) => { _resizeFrom = null; e.Pointer.Capture(null); };
-
         var content = new StackPanel
         {
             Children =
@@ -156,11 +133,9 @@ public sealed class BoardOverlay : Border
                 },
             },
         };
-        Child = new Grid { Children = { content, grip } };
+        Child = content;
+        PanelGrip.Attach(this, onLeft: true);
     }
-
-    const double MinW = 240, MaxW = 900;
-    double? _resizeFrom;
 
     static Button Make(string text, Action run)
     {

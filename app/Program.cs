@@ -129,6 +129,8 @@ public sealed class App : Application
             root.Children.Add(editor);
 
             view.BuildLayers();
+            MakeRoom([boards], [tour, commits],
+                [search, notes, boardBar, penBar, eraserBar, hints, islands, reviews, grep, prompt]);
 
             var window = new Window
             {
@@ -210,6 +212,32 @@ public sealed class App : Application
                     Walk(sub + "\\", rest[name.Length..], found);
             }
         }
+    }
+
+    /// <summary>keep everything that is not a side panel clear of the side
+    /// panels: each control's margin is its own plus the width of whatever is
+    /// open on each side, so the corner toggles, the bars and the dialogs
+    /// move over by exactly what a panel covers - and follow it as it is
+    /// dragged wider. A centred dialog stays centred in what is left. Things
+    /// used to sit wherever they were put and the panels slid over them.</summary>
+    public static void MakeRoom(Border[] left, Border[] right, Control[] others)
+    {
+        var own = others.ToDictionary(c => c, c => c.Margin);
+        void Push()
+        {
+            double l = left.Where(p => Reveal.Showing(p)).Sum(p => p.Width);
+            double r = right.Where(p => Reveal.Showing(p)).Sum(p => p.Width);
+            foreach (var c in others)
+            {
+                var m = own[c];
+                var want = new Thickness(m.Left + l, m.Top, m.Right + r, m.Bottom);
+                if (c.Margin != want) c.Margin = want;
+            }
+        }
+        Reveal.Changed += Push;
+        foreach (var p in left.Concat(right))
+            p.PropertyChanged += (_, e) => { if (e.Property == Avalonia.Layout.Layoutable.WidthProperty) Push(); };
+        Push();
     }
 
     /// <summary>the keys the window takes before any control can: Escape,

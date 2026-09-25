@@ -33,10 +33,7 @@ public sealed class CommitsPanel : Border
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1, 0, 0, 0);
-        // clear of the mode islands, which sit over this panel's top right
-        // corner - under it, in review mode where this is always open, the
-        // wheel-mode indicator could not be seen at all
-        Padding = new Thickness(12, 84, 12, 12);
+        Padding = new Thickness(12);
         Width = 380;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Stretch;
@@ -67,6 +64,7 @@ public sealed class CommitsPanel : Border
                 _list,
             },
         };
+        PanelGrip.Attach(this, onLeft: false);
     }
 
     static Control Dock(Control c, Dock side)

@@ -19,7 +19,7 @@ public class CanvasBalanceTests
         var repo = SampleRepo.Build();
         var scene = new Scene(Scanner.Build(repo.Path));
         var board = new Board { Id = "b", Name = "busy" };
-        board.Items.Add(new BoardItem { Id = "w1", Kind = "file", File = SampleRepo.LongFile, Line = 0, EndLine = 20, X = 0, Y = 0, W = 620 });
+        board.Items.Add(new BoardItem { Id = "w1", Kind = "file", File = SampleRepo.LongFile, Line = 0, EndLine = 20, X = 0, Y = 0, W = 620, Text = "a title" });
         board.Items.Add(new BoardItem { Id = "w2", Kind = "file", File = SampleRepo.LongFile, Line = 40, EndLine = 60, X = 700, Y = 0, W = 620 });
         board.Items.Add(new BoardItem { Id = "n", Kind = "note", Text = "after the windows", X = 0, Y = 600, W = 300, H = 80 });
         board.Items.Add(new BoardItem { Id = "r", Kind = "removed", File = "gone.cs", Text = "a\nb", X = 700, Y = 600, W = 620, H = 60 });

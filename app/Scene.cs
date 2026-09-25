@@ -2203,7 +2203,24 @@ public sealed class Scene : IDisposable
                 canvas.DrawRect(0, 0, it.W, headH, head);
                 var name = f.P[(f.P.LastIndexOf('/') + 1)..];
                 label.TextSize = 14;
-                canvas.DrawText($"{name}:{from + 1}", 8, 18, label);
+                // a title, when the window has one, says what the code is
+                // for; the file and line follow it, dimmer, for finding it.
+                // Clipped to the header so a long title cannot run out of it
+                canvas.Save();
+                canvas.ClipRect(new SKRect(0, 0, it.W, headH));
+                if (it.Id == EditingItem) { }
+                else if (string.IsNullOrWhiteSpace(it.Text)) canvas.DrawText($"{name}:{from + 1}", 8, 18, label);
+                else
+                {
+                    var title = it.Text.ReplaceLineEndings(" ");
+                    canvas.DrawText(title, 8, 18, label);
+                    float after = 8 + label.MeasureText(title) + 14;
+                    var was = label.Color;
+                    label.Color = was.WithAlpha(120);
+                    canvas.DrawText($"{name}:{from + 1}", after, 18, label);
+                    label.Color = was;
+                }
+                canvas.Restore();
             }
             canvas.DrawRect(0, headH, it.W, bodyH, body);
 

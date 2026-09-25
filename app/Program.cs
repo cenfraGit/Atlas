@@ -491,7 +491,8 @@ public sealed class SceneView : Control
             // anything with words in it, which now includes the shapes: a
             // rectangle you double click is a rectangle you are naming
             // and an arrow, whose words are its label
-            if ((_scene.ArrowAt(bx, by) ?? _scene.ItemAt(bx, by)) is { } words && HasText(words)) BeginEdit(words);
+            if ((_scene.ArrowAt(bx, by) ?? _scene.ItemAt(bx, by)) is { } words &&
+                (HasText(words) || words.Kind == "file" && by < words.Y + Scene.WinHeadH)) BeginEdit(words);
             return;
         }
         if (_scene.Tier < 3 || !Editing) return;
@@ -806,7 +807,10 @@ public sealed class SceneView : Control
         if (picked.Count == 1 && HasText(picked[0]))
             items.Add(ContextActions.Item("Edit text", () => BeginEdit(picked[0])));
         if (picked.Count == 1 && picked[0].Kind == "file")
+        {
+            items.Add(ContextActions.Item("Edit title", () => BeginEdit(picked[0])));
             items.Add(ContextActions.Item("Change line range...", () => EditRange(picked[0])));
+        }
         if (picked.Count == 2)
             items.Add(ContextActions.Item("Connect these", () => Connect(picked[0], picked[1])));
 
@@ -1376,7 +1380,8 @@ public sealed class SceneView : Control
         // the one place that opens an editor, so the one place that has to
         // know a board being read is not a board being written
         if (!Editing) { Toast("press E to edit this board"); return; }
-        if (!HasText(it)) return;
+        // a window's words are its title, in its header
+        if (!HasText(it) && it.Kind != "file") return;
 
         // stale from whatever was edited last; the draw loop refills it
         _scene.EditingHeight = 0;
@@ -1452,6 +1457,13 @@ public sealed class SceneView : Control
         float h = _scene.EditingHeight > 0 ? _scene.EditingHeight
             : it.H > 0 ? it.H
             : 64;
+        if (it.Kind == "file")
+            return (
+                (it.X - _scene.CamX) * s + Bounds.Width / 2,
+                (it.Y - _scene.CamY) * s + Bounds.Height / 2,
+                it.W * s,
+                Scene.WinHeadH * s,
+                14 * s);
         if (it.Kind == "arrow")
         {
             // an arrow's box is a phantom; its label sits on the middle of

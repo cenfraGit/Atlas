@@ -37,13 +37,14 @@ public static class BoardCli
                                              draw the board (or one stop) to an image - look at it
 
         items - every item has an id you choose; later commands refer to it
-          window <id> <file> [<symbol>] [--lines 40-72] [--width 620]
+          window <id> <file> [<symbol>] [--lines 40-72] [--width 620] [--title "..."]
               a window onto real code. <file> is a path or a unique end of one
               (Auth.cs, src/Auth.cs). <symbol> is a declaration: Login,
               AuthService.Login, or Login(2) for the overload with two
               parameters. No symbol and no --lines shows the whole file. Line
               numbers are 1-based, as in an editor. Code reads at its natural
-              size at width 620; wider scales it up.
+              size at width 620; wider scales it up. --title names it in its
+              header, ahead of the file and line.
           note <id> "<text>" [--on <window>:<where>] [--width 360] [--text-size 8]
               a card of text. --on puts it beside that window at that code.
           label <id> "<text>" [--text-size 24] [--width W]
@@ -68,7 +69,7 @@ public static class BoardCli
           Anything placed this way is nudged down until it overlaps nothing.
 
         editing
-          set <id> [--color C] [--fill F] [--text T] [--width W] [--text-size S]
+          set <id> [--color C] [--fill F] [--text T] [--title T] [--width W] [--text-size S]
           move <id> <placing>                a window takes what is drawn on it along
           rm <id>
 
@@ -349,7 +350,8 @@ public static class BoardCli
                     if (i < 0) return $"window {it.Id}  missing: {it.File}  {where}";
                     var (from, to) = Scene.RangeOf(it, Scene.Data.Files[i]);
                     var sym = it.Symbol is null ? "" : $" ({Clean(it.Symbol)})";
-                    return $"window {it.Id}  {Scene.Data.Files[i].P}:{from + 1}-{to + 1}{sym}  {where}";
+                    var title = string.IsNullOrEmpty(it.Text) ? "" : $"  \"{Short(it.Text)}\"";
+                    return $"window {it.Id}{title}  {Scene.Data.Files[i].P}:{from + 1}-{to + 1}{sym}  {where}";
                 }
                 case "arrow":
                     return $"arrow {it.Id}  {it.From ?? "(loose)"} -> {it.To ?? "(loose)"}" +
@@ -497,6 +499,7 @@ public static class BoardCli
             it.Line = from;
             it.EndLine = to;
             it.W = opt.TryGetValue("width", out var w) ? Float(w, "--width") : 620;
+            if (opt.TryGetValue("title", out var title)) it.Text = title;
             Place(it, opt);
             Board.Items.Add(it);
             Scene.Reanchor(it);
@@ -606,7 +609,7 @@ public static class BoardCli
                 {
                     case "color": it.Color = Colour(v); break;
                     case "fill": it.Fill = Fill(v); break;
-                    case "text": it.Text = v; break;
+                    case "text" or "title": it.Text = v; break;
                     case "width": it.W = Float(v, "--width"); break;
                     case "text-size": it.Size = Float(v, "--text-size"); break;
                     default: throw new CliError($"set cannot change --{k}");

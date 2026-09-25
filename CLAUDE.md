@@ -490,8 +490,9 @@ covered by `AnchorTests` and works.
 - [x] Arrow labels: an arrow's `Text`, drawn on the middle of the shaft
       over a patch of board colour, typed into by double clicking the
       arrow, and `arrow ... --text` from the command line.
-- [ ] Window captions - the agent wanted to name a window ("Resolve: the
-      ladder") rather than have only `Scene.cs:280` in its header.
+- [x] Window titles: a file window's `Text`, first in its header with the
+      file and line after it, dimmer. Double click the header (or "Edit
+      title"), or `window ... --title`.
 - [ ] In the trial render one tall amber frame came out pale grey. Not
       looked into yet.
 - [x] The open app takes in boards changed on disk (`SceneView.WatchBoards`,

@@ -294,6 +294,12 @@ because a rule that survives one edit can still drift on the second.
       fade. **Open is a `Reveal.Showing` question now, not an `IsVisible`
       one** - a panel on its way out is still visible and must not answer
       Escape. Any new overlay calls `Reveal.Attach` in its constructor.
+- [x] Side panels drag wider from their inner edge (`PanelGrip`), and
+      everything else moves clear of them (`App.MakeRoom`): each control's
+      margin is its own plus the width open on each side, recomputed on
+      `Reveal.Changed` and on a width change. **A new overlay goes in the
+      `MakeRoom` list, and a new side panel gets a grip and goes in its
+      side's list.**
 - [x] `Layers` owns dismissal and the window sees Escape in the tunnel phase,
       so a dialog can no longer strand itself by losing focus. **Any new
       overlay must be registered in `BuildLayers` or it inherits the old

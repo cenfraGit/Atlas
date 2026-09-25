@@ -381,8 +381,8 @@ covered by `AnchorTests` and works.
       file does not, and anything that records a line number there is
       counting rows. Annotating is not offered in review mode today; if it
       is, it wants the unspliced line.
-- [ ] The debug readout in the top left sits under the "map" back button on
-      a board, so both are unreadable.
+- [x] The debug readout sat under the "map" button on a board; it moves
+      below the button while the button is up.
 - [x] The gathered view rebuilds whenever the change set does. Picking a
       commit in the panel used to leave the previous commit's windows up,
       so only the files both commits happened to touch appeared to change.
@@ -493,8 +493,9 @@ covered by `AnchorTests` and works.
 - [x] Window titles: a file window's `Text`, first in its header with the
       file and line after it, dimmer. Double click the header (or "Edit
       title"), or `window ... --title`.
-- [ ] In the trial render one tall amber frame came out pale grey. Not
-      looked into yet.
+- [x] The "pale grey" frame in the trial render was a shape border at its
+      default alpha of 150 beside a note's solid one - by design, see
+      "How solid a colour is lives in the colour". Not a bug.
 - [x] The open app takes in boards changed on disk (`SceneView.WatchBoards`,
       `BoardStore.Refresh`), so an agent's board appears as it is built.
 - [ ] An MCP server over the same commands, if a client wants one; the CLI

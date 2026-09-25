@@ -453,9 +453,12 @@ public sealed class SceneView : Control
         var line2 = $"{_scene.Data.Files.Count} files  {_scene.Data.Folders.Count} folders  " +
                     $"{_scene.VisibleCards} visible  {_scene.ChunksBuilt} built" +
                     (_scene.BuiltThisFrame > 0 ? $"  +{_scene.BuiltThisFrame}" : "");
-        Text(ctx, line1, 12, 10, Color.FromRgb(0xff, 0xd1, 0x66));
-        Text(ctx, line2, 12, 26, Color.FromRgb(0x35, 0x70, 0x8f));
-        if (_benchText.Length > 0) Text(ctx, _benchText, 12, 46, Color.FromRgb(0x5f, 0xd3, 0xf3));
+        // below the "map" button while it is up: both sat in the top left
+        // corner, one over the other, and neither could be read
+        int top = Reveal.Showing(_back) ? (int)_back!.Bounds.Bottom + 8 : 10;
+        Text(ctx, line1, 12, top, Color.FromRgb(0xff, 0xd1, 0x66));
+        Text(ctx, line2, 12, top + 16, Color.FromRgb(0x35, 0x70, 0x8f));
+        if (_benchText.Length > 0) Text(ctx, _benchText, 12, top + 36, Color.FromRgb(0x5f, 0xd3, 0xf3));
         DrawCaption(ctx);
     }
 

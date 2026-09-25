@@ -1929,9 +1929,6 @@ public sealed class SceneView : Control
         {
             items.Add(("undo", "ctrl+Z", Undo));
             items.Add(("redo", "ctrl+Y", Redo));
-            items.Add(("add file", "/", () => OpenSearch?.Invoke()));
-            items.Add(("board note", "N", AddNote));
-            items.Add(("rectangle", "T", AddShape));
             items.Add(("boards", "O", () => _boards?.Show()));
             items.Add(("tour stop", "M", CaptureStop));
             items.Add(("tour", "shift+M", ToggleTourPanel));

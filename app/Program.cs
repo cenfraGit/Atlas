@@ -449,6 +449,7 @@ public sealed class SceneView : Control
         _scene.StopsShown = Reveal.Showing(_stops) && _tour is null && !_scene.BoardReadOnly;
         _scene.StopPicked = _stops?.Selected ?? -1;
         StepSpotlight(now);
+        StepRubberband(now);
         context.Custom(new SceneOp(new Rect(0, 0, w, h), _scene, w, h));
         if (_scene.Samples.Count > 0)
         {
@@ -464,7 +465,7 @@ public sealed class SceneView : Control
 
         // only the benchmark free-runs; otherwise input and pending work drive redraws
         // a toast has to expire off-frame, so keep drawing while one is up
-        if (_phase >= 0 || _flight is not null || _glide.Running || ToastShowing || SpotFading ||
+        if (_phase >= 0 || _flight is not null || _glide.Running || ToastShowing || SpotFading || _bandFadeAt >= 0 ||
             (_autoBench && !_benchDone))
             Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Background);
         else
@@ -1264,18 +1265,28 @@ public sealed class SceneView : Control
         }
     }
 
+    /// <summary>when the last rubberband was let go, while it fades, or -1.
+    /// Worked out from the clock each frame, as the spotlight is. It was a
+    /// timer per release that nothing stopped, so a band begun while the last
+    /// was still fading was faded to nothing and cleared by the old timer -
+    /// invisible until let go, when its own fade began at full.</summary>
+    double _bandFadeAt = -1;
+    const double BandFade = 0.14;
+
     void FadeRubberband()
     {
-        _bandFade = 1f;
-        var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        timer.Tick += (_, _) =>
-        {
-            _bandFade -= 0.12f;
-            _scene.RubberbandFade = Math.Max(0, _bandFade);
-            if (_bandFade <= 0) { _scene.Rubberband = null; timer.Stop(); }
-            InvalidateVisual();
-        };
-        timer.Start();
+        _bandFadeAt = _clock.Elapsed.TotalSeconds;
+        InvalidateVisual();
+    }
+
+    void StepRubberband(double now)
+    {
+        if (_bandFadeAt < 0) return;
+        double t = (now - _bandFadeAt) / BandFade;
+        _scene.RubberbandFade = (float)Math.Max(0, 1 - t);
+        if (t < 1) return;
+        _scene.Rubberband = null;
+        _bandFadeAt = -1;
     }
 
     /// <summary>the plain arrow means you are looking; the move cursor means
@@ -1448,7 +1459,6 @@ public sealed class SceneView : Control
     readonly List<int> _bandBaseFiles = [];
     readonly Dictionary<string, (float X, float Y)> _unsnapped = [];
     Point _bandStart;
-    float _bandFade = 1f;
     public bool SnapToGrid;
     const float GridStep = 40f;
 
@@ -3638,6 +3648,7 @@ public sealed class SceneView : Control
             _bandStart = e.GetPosition(this);
             _scene.Rubberband = new SkiaSharp.SKRect(mx, my, mx, my);
             _scene.RubberbandFade = 1f;
+            _bandFadeAt = -1;
             _drag = true;
             _last = _bandStart;
             _clickCount = e.ClickCount;
@@ -3748,6 +3759,7 @@ public sealed class SceneView : Control
                 _bandStart = e.GetPosition(this);
                 _scene.Rubberband = new SkiaSharp.SKRect(wx, wy, wx, wy);
                 _scene.RubberbandFade = 1f;
+                _bandFadeAt = -1;
                 _drag = true;
                 _last = _bandStart;
                 InvalidateVisual();

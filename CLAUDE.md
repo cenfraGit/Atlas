@@ -809,6 +809,15 @@ line wrote the board used to save the app's copy over its work. A changed
 board is updated in place, never replaced, because the open board, the
 panel and `_lastBoard` all hold the object. Covered by `BoardReloadTests`.
 
+**Looking at a board does not write it.** Opening one fills in what an
+older or hand-made board lacks - file keys, anchors, pins - and used to
+save for that alone, which turned a board someone had only opened into a
+diff of every line. `SceneView.FollowCode` saves only when something moved;
+what was filled in rides along with the next real edit. And a save writes
+only what differs from a fresh object (`BoardStore.OmitFresh`, compared
+against a new instance, so a real zero where the default is not zero is
+kept), with `+` and `'` unescaped. Covered by `BoardFormatTests`.
+
 **What the app writes is what git stores.** `.gitattributes` pins the
 repository to LF (`*.cmd` and `*.bat` excepted - cmd.exe is the one thing
 still entitled to CRLF), and the JSON stores set `NewLine = "\n"` because

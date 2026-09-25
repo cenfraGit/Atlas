@@ -737,8 +737,7 @@ public sealed class SceneView : Control
         _scene.ShowScan(fresh, whole || folders ? null : touched);
 
         // the open board's windows follow their code, as they do on opening it
-        if (_scene.ActiveBoard is { } b && !_scene.BoardReadOnly && _scene.AnchorBoard(b))
-            _boardStore?.Save(b);
+        if (_scene.ActiveBoard is { } b && !_scene.BoardReadOnly) FollowCode(b);
         InvalidateVisual();
     }
 
@@ -2663,6 +2662,25 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
+    /// <summary>put a board back on its code, and save it only if that moved
+    /// something. Whether anything moved is judged by where things are, not
+    /// by whether the anchoring filled anything in: a board without
+    /// fingerprints or anchors - made by hand, or by an older Atlas - gets
+    /// them now, and saving for that alone rewrote the whole file of a board
+    /// someone had only opened. What was filled in stays in memory and goes
+    /// out with the next edit that saves.</summary>
+    bool FollowCode(Board b)
+    {
+        static string Where(Board b) => string.Join(";", b.Items.Select(i =>
+            $"{i.X},{i.Y},{i.W},{i.H},{i.X2},{i.Y2},{i.Line},{i.EndLine}"));
+        var before = Where(b);
+        _scene.EnsureKeys(b);
+        _scene.AnchorBoard(b);
+        if (Where(b) == before) return false;
+        _boardStore?.Save(b);
+        return true;
+    }
+
     void CreateBoard()
     {
         if (_boardStore is null || _prompt is null) return;
@@ -2688,10 +2706,7 @@ public sealed class SceneView : Control
         // every window is put back on the code it was opened on - lines may
         // have been inserted above it since, which would otherwise leave it
         // showing different code with the drawings still over the old spot
-        bool keys = _scene.EnsureKeys(b);
-        bool moved = _scene.AnchorBoard(b);
-        if (keys || moved) _boardStore?.Save(b);
-        if (moved) Toast("windows followed their code");
+        if (FollowCode(b)) Toast("windows followed their code");
         _scene.Grid = Editing ? GridStep : 0;
         _scene.Picked.Clear();
         _history.Clear();

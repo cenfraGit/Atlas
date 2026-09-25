@@ -1,6 +1,8 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Atlas;
 
@@ -218,8 +220,38 @@ public sealed class BoardStore
         // and a file written with CRLF on windows shows up as modified in git
         // the moment the app saves it, however little changed
         NewLine = "\n",
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // a board is read in diffs, so "shift+M" and "Atlas's" are written
+        // as they are rather than as \u002B and \u0027
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitFresh } },
     };
+
+    /// <summary>leave out any value a freshly made object already has.
+    ///
+    /// Every item used to carry every field - "x2": 0, "fromSide": -1, a
+    /// dozen more - so a board is mostly noise in a diff, and one written by
+    /// hand, with only the fields it needed, turned into a rewrite of every
+    /// item the first time it was saved. Compared against a fresh instance
+    /// rather than against zero, so a field whose default is not zero (a
+    /// window's width, "the whole file" as -1) is left out when it has that
+    /// default and read back to it - and a real zero is written, not lost.</summary>
+    static void OmitFresh(JsonTypeInfo info)
+    {
+        if (info.Kind != JsonTypeInfoKind.Object || info.CreateObject is null) return;
+        var fresh = info.CreateObject();
+        foreach (var p in info.Properties)
+        {
+            if (p.Get is null) continue;
+            var usual = p.Get(fresh);
+            // collections are always written: two empty lists are not equal
+            // by reference, and an empty board still wants its "items"
+            if (usual is System.Collections.IEnumerable and not string) continue;
+            // and what an item is, even a file window's default "file": a
+            // reader of the json should not have to know the default
+            if (p.Name == "kind") continue;
+            p.ShouldSerialize = (_, value) => !Equals(value, usual);
+        }
+    }
 
     public List<Board> Boards { get; } = [];
     public string Dir { get; private set; } = "";

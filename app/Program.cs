@@ -288,6 +288,12 @@ public sealed class SceneView : Control
     Point _pressAt;
     double _dragDist;
 
+    /// <summary>whether a press on an item has travelled far enough to be a
+    /// drag. Until it has, nothing moves: a click wobbles by a pixel or two,
+    /// and that used to nudge the item and rewrite the board's file.</summary>
+    bool _grabbed;
+    const double GrabSlop = 4;
+
     Flight? _flight;
     double _flightT0;
     readonly Glide _glide = new();
@@ -3283,6 +3289,8 @@ public sealed class SceneView : Control
                 _shapeFrom = new SkiaSharp.SKPoint(wx, wy);
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3296,6 +3304,8 @@ public sealed class SceneView : Control
                 Strokes.Add(_scene.StrokeDraft, wx, wy);
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3305,6 +3315,8 @@ public sealed class SceneView : Control
                 EraseAt(wx, wy);
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3313,6 +3325,8 @@ public sealed class SceneView : Control
                 _scene.ArrowDraft = (new SkiaSharp.SKPoint(wx, wy), new SkiaSharp.SKPoint(wx, wy));
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3323,6 +3337,8 @@ public sealed class SceneView : Control
                 _scene.ShowAnchors = true;
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3333,6 +3349,8 @@ public sealed class SceneView : Control
                 _resizeEdge = -1;
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3347,6 +3365,8 @@ public sealed class SceneView : Control
                 _resizeEdge = wall.Edge;
                 _drag = true;
                 _last = e.GetPosition(this);
+                _pressAt = _last;
+                _grabbed = false;
                 return;
             }
 
@@ -3392,6 +3412,7 @@ public sealed class SceneView : Control
         _panVx = _panVy = 0;
         _panAt = -1;
         _dragDist = 0;
+        _grabbed = false;
         _axis = 0;
         _dragOrigin = e.GetPosition(this);
         _pressAt = e.GetPosition(this);
@@ -3518,7 +3539,7 @@ public sealed class SceneView : Control
         // an arrow whose end was dragged: its start is what it is pinned by,
         // so a loose one is pinned again where it now starts, and one tied at
         // both ends goes where its ties take it and needs no pin at all
-        if (_arrowEnd is { } bent)
+        if (_arrowEnd is { } bent && _grabbed)
         {
             if (bent.From is null || bent.To is null) _scene.PinOver(bent);
             else bent.Host = null;
@@ -3531,12 +3552,12 @@ public sealed class SceneView : Control
         // what a drawing is about is whatever it was let go of on top of,
         // so this is where it gains a window - or loses one, by being
         // dragged off onto bare canvas
-        if (_dragItem is not null) RepinPicked();
+        if (_dragItem is not null && _grabbed) RepinPicked();
         // and a resize changes what a drawing covers as much as a move does.
         // It was left out, so the anchors stayed as they were when the box
         // was drawn, and reopening the board put the old size back. A file
         // window records its own crop as it goes, and pins nothing of its own
-        if (_resizing is { Kind: not "file" } resized)
+        if (_resizing is { Kind: not "file" } resized && _grabbed)
         {
             _scene.PinOver(resized);
             _boardDirty = true;
@@ -3622,6 +3643,13 @@ public sealed class SceneView : Control
         else if (!_drag) HoverHandles(p);
 
         if (!_drag) return;
+        if ((_dragItem ?? _resizing ?? _arrowEnd) is not null && !_grabbed)
+        {
+            // _last stays at the press, so the first real move carries the
+            // whole distance and nothing lags behind the pointer
+            if (Math.Abs(p.X - _pressAt.X) + Math.Abs(p.Y - _pressAt.Y) < GrabSlop) return;
+            _grabbed = true;
+        }
         _dragDist += Math.Abs(p.X - _last.X) + Math.Abs(p.Y - _last.Y);
 
         if (_scene.ShapeDraft is { } shaping)

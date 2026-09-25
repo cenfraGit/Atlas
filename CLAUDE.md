@@ -730,6 +730,14 @@ box used to fling its connectors across the board. `Remove` cuts such a tie
 and writes the end's current position back first. Four call sites became one;
 keep it that way.
 
+**A press is not a drag until it has travelled.** A click on an item
+wobbles by a pixel or two, and that used to move it - and the release
+re-pinned and saved the board whether anything moved or not, so clicking a
+box rewrote its file. A move, resize or arrow-end drag waits for
+`GrabSlop` pixels from the press (`_grabbed`), and the release re-pins only
+after one. A new grab gesture checks `_grabbed` the same way. Covered by
+`DragSlopTests`.
+
 **Undo records at the first mutation, not on press.** `Mutating()` takes one
 snapshot per gesture, the first time a handler is about to change something.
 Recording on press meant selecting three things left three undo steps that

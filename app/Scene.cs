@@ -2492,6 +2492,7 @@ public sealed class Scene : IDisposable
                 p2.X - head * MathF.Cos(ang - 0.4f), p2.Y - head * MathF.Sin(ang - 0.4f)), line);
             canvas.DrawLine(p2, new SKPoint(
                 p2.X - head * MathF.Cos(ang + 0.4f), p2.Y - head * MathF.Sin(ang + 0.4f)), line);
+            DrawArrowLabel(canvas, it, p1, p2, line.Color);
 
             // ends are grabbable once the arrow is picked. A tied end is drawn
             // hollow: there is no point dragging it, and the ring says which
@@ -2513,6 +2514,34 @@ public sealed class Scene : IDisposable
             line.Color = new SKColor(0x5f, 0xd3, 0xf3, 200);
             line.StrokeWidth = ArrowShaft;
             canvas.DrawLine(draft.A, draft.B, line);
+        }
+    }
+
+    /// <summary>an arrow's words, centred on its shaft, on a patch of the
+    /// board's own colour so the line stops either side of them rather than
+    /// running through. Every other item had words and an arrow could not,
+    /// so saying what a connection *means* - "calls", "reuses the ladder" -
+    /// took a note parked beside it and moved separately for ever after.</summary>
+    void DrawArrowLabel(SKCanvas canvas, BoardItem it, SKPoint p1, SKPoint p2, SKColor colour)
+    {
+        if (string.IsNullOrEmpty(it.Text)) return;
+        float size = SizeOf(it), step = LineStep(size);
+        var lines = it.Text.Split(LF);
+        float h = lines.Length * step;
+        var mid = new SKPoint((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2);
+        if (it.Id == EditingItem) { EditingHeight = h; return; }
+
+        TextMeasures++;
+        using var font = new SKPaint { Typeface = _mono, TextSize = size, IsAntialias = true, Color = colour };
+        float w = lines.Max(l => font.MeasureText(l));
+        float pad = size * 0.4f;
+        using var patch = new SKPaint { Color = BoardBg, IsAntialias = true };
+        canvas.DrawRoundRect(mid.X - w / 2 - pad, mid.Y - h / 2 - pad / 2, w + pad * 2, h + pad, pad, pad, patch);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            float lw = font.MeasureText(lines[i]);
+            // the baseline sits where the type's body is centred in its step
+            canvas.DrawText(lines[i], mid.X - lw / 2, mid.Y - h / 2 + i * step + (step + size * 0.7f) / 2, font);
         }
     }
 

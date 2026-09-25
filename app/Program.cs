@@ -490,7 +490,8 @@ public sealed class SceneView : Control
             var (bx, by) = WorldAt(e.GetPosition(this));
             // anything with words in it, which now includes the shapes: a
             // rectangle you double click is a rectangle you are naming
-            if (_scene.ItemAt(bx, by) is { } words && HasText(words)) BeginEdit(words);
+            // and an arrow, whose words are its label
+            if ((_scene.ArrowAt(bx, by) ?? _scene.ItemAt(bx, by)) is { } words && HasText(words)) BeginEdit(words);
             return;
         }
         if (_scene.Tier < 3 || !Editing) return;
@@ -1325,7 +1326,7 @@ public sealed class SceneView : Control
     static bool HasLineWidth(BoardItem it) =>
         Strokes.Is(it) || Scene.IsShape(it.Kind) || it.Kind is "arrow" or "note";
 
-    static bool HasText(BoardItem it) => Scene.HasText(it.Kind);
+    static bool HasText(BoardItem it) => Scene.HasText(it.Kind) || it.Kind == "arrow";
 
     List<BoardItem> PickedLines() =>
         _scene.ActiveBoard is not { } b
@@ -1451,6 +1452,21 @@ public sealed class SceneView : Control
         float h = _scene.EditingHeight > 0 ? _scene.EditingHeight
             : it.H > 0 ? it.H
             : 64;
+        if (it.Kind == "arrow")
+        {
+            // an arrow's box is a phantom; its label sits on the middle of
+            // the shaft, so the editor does too. ArrowEnds is arithmetic -
+            // safe here, unlike anything that measures
+            var (a, b) = _scene.ArrowEnds(it);
+            float lh = _scene.EditingHeight > 0 ? _scene.EditingHeight : Scene.LineStep(Scene.SizeOf(it));
+            const float Wide = 220;
+            return (
+                ((a.X + b.X) / 2 - Wide / 2 - _scene.CamX) * s + Bounds.Width / 2,
+                ((a.Y + b.Y) / 2 - lh / 2 - _scene.CamY) * s + Bounds.Height / 2,
+                Wide * s,
+                lh * s,
+                Scene.SizeOf(it) * s);
+        }
         return (
             (it.X - _scene.CamX) * s + Bounds.Width / 2,
             (it.Y - _scene.CamY) * s + Bounds.Height / 2,

@@ -487,8 +487,11 @@ covered by `AnchorTests` and works.
       words, `--text-size` everywhere (`--size` is a box's WxH), stops that
       remember the items they frame (`Stop.Items`) and reframe on every
       commit, and `show` warning about an arrow crossing an item.
-- [ ] Arrow labels and window captions - the agent wanted both, and the app
-      draws neither, so it is an app feature before it is a command.
+- [x] Arrow labels: an arrow's `Text`, drawn on the middle of the shaft
+      over a patch of board colour, typed into by double clicking the
+      arrow, and `arrow ... --text` from the command line.
+- [ ] Window captions - the agent wanted to name a window ("Resolve: the
+      ladder") rather than have only `Scene.cs:280` in its header.
 - [ ] In the trial render one tall amber frame came out pale grey. Not
       looked into yet.
 - [x] The open app takes in boards changed on disk (`SceneView.WatchBoards`,

@@ -52,8 +52,9 @@ public static class BoardCli
                    [--text T] [--text-size S] [--size 300x140] [--fill none|border|<colour>]
               a shape. --around frames lines of a window and stays on that code
               as it changes.
-          arrow <id> <from> <to> [--from-side top|right|bottom|left] [--to-side ...]
+          arrow <id> <from> <to> [--text "calls"] [--from-side top|right|bottom|left] [--to-side ...]
               a connector tied to two items; it follows them when they move.
+              --text labels it, on the middle of the line.
 
           <where> is a symbol in that window's file, or lines: 51 or 51-60.
 
@@ -351,7 +352,8 @@ public static class BoardCli
                     return $"window {it.Id}  {Scene.Data.Files[i].P}:{from + 1}-{to + 1}{sym}  {where}";
                 }
                 case "arrow":
-                    return $"arrow {it.Id}  {it.From ?? "(loose)"} -> {it.To ?? "(loose)"}{colour}";
+                    return $"arrow {it.Id}  {it.From ?? "(loose)"} -> {it.To ?? "(loose)"}" +
+                           (string.IsNullOrEmpty(it.Text) ? "" : $"  \"{Short(it.Text)}\"") + colour;
                 case "note" or "text":
                     return $"{(it.Kind == "text" ? "label" : "note")} {it.Id}  \"{Short(it.Text)}\"  {where}{Pinned(it)}{colour}";
                 default:
@@ -588,6 +590,8 @@ public static class BoardCli
             if (opt.TryGetValue("from-side", out var fs)) it.FromSide = Side(fs);
             if (opt.TryGetValue("to-side", out var ts)) it.ToSide = Side(ts);
             if (opt.TryGetValue("color", out var c)) it.Color = Colour(c);
+            if (opt.TryGetValue("text", out var t)) it.Text = t;
+            if (opt.TryGetValue("text-size", out var size)) it.Size = Float(size, "--text-size");
             Board.Items.Add(it);
             Console.WriteLine(Describe(it));
         }

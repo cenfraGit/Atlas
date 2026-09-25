@@ -50,6 +50,11 @@ directories, secrets (`.env`, `*.pem`, `id_rsa`) and OS litter.
 **`.`** shows the lot and rescans - `node_modules` is not a few extra cards,
 it is most of the map, so the layout is rebuilt around whatever is now on it.
 
+The map follows the disk while it is open: change, add or delete a file and
+it is rescanned a second later, in the background, without moving the camera
+or making the rest of the map flicker. Build output and the other hidden
+folders are not watched.
+
 Whatever is skipped is counted and said out loud. A map that quietly omits
 part of a repo is worse than one that shows something ugly.
 
@@ -217,6 +222,7 @@ your team gets everything you wrote.
 | `C` | gather the changed code onto one view (while reviewing) |
 | `R` | while reviewing: show or hide the removed lines, in red where they were |
 | `]` `[` | next / previous commit while reviewing |
+| double-click (board, editing) | type into a note, shape or label; on an arrow, its label; on a window's header, its title |
 | click a line | pick it (at reading zoom; on a board, while editing) |
 | shift-click | extend the picked range |
 | double-click | pick the whole enclosing method |
@@ -341,6 +347,12 @@ units - not a zoom level. Playing fits that region into whatever part of the
 window is free, so a stop captured full screen still frames the same things
 in a small window, or with the stops panel open down the side.
 
+While the tour panel is open, every stop is drawn on the board as a faint
+dashed frame with its number in the corner, the selected one brighter, so
+the list can be read against what it frames. A stop made from the command
+line (`stop --frame a,b`) also remembers the items it frames, and is fitted
+round them again whenever the command line saves the board.
+
 There used to be bookmarks and tours on the map as well. They went: a
 bookmark was a tour with one stop, and something worth pointing somebody at
 belongs on a board, next to the notes about it.
@@ -356,7 +368,17 @@ back. Opening one whose commits were never fetched fetches them
 Opening one lights up every changed file across the whole map, coloured green
 through red by how much of its churn was additions. `]` and `[` walk the
 commits, and the camera flies to whatever that commit touched. At reading
-zoom, added lines get a green band and deletions a red tick.
+zoom, added lines are tinted green and **removed lines are put back as text,
+tinted red, where they were** - the review's copy of each changed file has
+them spliced in, so a card or window simply contains them, syntax coloured,
+with the old line numbers in the gutter. `R` takes them out again. Stepping
+to one commit keeps the whole change's layout and marks that commit's
+removals with a thin red line, so nothing shifts under you as you step.
+
+Reading a target - its commits, its diff, every file of its tree - happens
+in the background, and so does `R`: the window stays usable while git works,
+and the panel opens at once, saying it is reading, and fills in when the
+answer arrives.
 
 The commits of whatever is open are listed in a panel down the right: click a
 commit to switch to it, or step with `[` and `]`. Its sha, author, date and
@@ -370,8 +392,10 @@ the working tree, not to somebody else's branch.
 **`C` gathers the changed code onto one view.** The map answers where a change
 landed, which is the question worth asking first; it does not answer what the
 change said, and on a large repo the changed files are nowhere near each
-other. `C` lays out just the parts that were touched - one window per hunk,
-context either side, nearby hunks merged, biggest churn first - and `]` and
+other. `C` lays out every changed file as one whole window - real code, with
+the removed lines in it and the changes glowing - biggest churn first, and
+opens looking at the first change rather than at line one. A file the change
+deleted has no window, so it appears as a red block of its old text. `]` and
 `[` walk the commits without leaving. It is generated and read only: it is not
 in the boards panel, nothing is written to `.atlas/`, and `C` again puts the
 map back exactly where you left it.
@@ -451,8 +475,14 @@ The bar along the top adds a board note, a rectangle, an arrow or a file -
 the board. Arrows are drawn freely: arm the tool, drag, and the line follows
 the mouse; once placed, either end can be dragged elsewhere.
 
+A press does not become a drag until the pointer has travelled a few
+pixels, so clicking something to pick it never nudges it - or rewrites the
+board's file for a move nobody made.
+
 Clicking a line inside a file window picks it, shift extends the range, and
-double-clicking a note opens its text. A note written on a board shows its
+double-clicking a note, shape or label types into it where it sits. An arrow
+takes a label the same way, drawn on the middle of the line, and a file
+window takes a title in its header, ahead of the file name and line. A note written on a board shows its
 words there, not only a tint. Secondary click offers only what applies to
 *everything* picked - colour, copy, remove - plus
 editing a note's text or a file window's line range when exactly one is
@@ -558,46 +588,99 @@ lives on **boards**: small canvases that *reference* files rather than
 containing them, stored one JSON file per board under `.atlas/boards/` so
 two people editing different boards never conflict.
 
-A board item is either a **file window** - a path plus a line range, drawn by
-the same card code as the map, just clipped and scaled - or a **note**. The
+A board item is a **file window** - a path plus a line range, drawn by the
+same card code as the map, just clipped and scaled - or something drawn:
+notes, labels, rectangles, ellipses, diamonds, arrows, freehand ink, images. The
 same file can appear on any number of boards, and adding files to the repo
 disturbs none of them. A window whose file is gone draws as `missing` rather
 than vanishing.
+
+A board changed on disk - by the command line, a pull, a teammate - is read
+again while it is open, and the canvas shows it. If Atlas was about to save
+over such a change, it does not: the disk wins.
 
 Opening a board keeps the map camera, so leaving with `Esc` puts you back
 exactly where you were. A board draws on an indigo background instead of the
 map's blue-black, so it is obvious which one you are looking at.
 
-### Boards from the command line
+### Boards from the command line, for AI agents
 
-`Atlas.exe board` builds and edits boards without opening a window, so an
-agent can document a codebase as a board with a tour through it. It talks in
-ids, files, symbols and line numbers - never in anchors or pixel heights -
-and the real anchoring code fills in the rest, so the board stays on its code
-as the code changes.
+`Atlas.exe board` builds and edits boards without opening a window. It is
+meant for a coding agent - Claude Code or anything else with a shell - to
+read a codebase and leave behind a board that explains it, with a tour
+through it, which a person then opens in Atlas.
+
+It exists because a board's json is not something to write by hand. A file
+window carries an anchor (the declaration it sits in, how far down it,
+fingerprints of the nearby lines, a key for the file), and a box round a
+method needs the exact height of that method's lines at that window's
+scale. An agent writing the file would guess both, and the board would drift
+the first time the code moved. The commands talk in **ids the agent picks,
+files, symbols and line numbers**, and Atlas's own anchoring code works out
+the rest - so the board stays on its code as the code changes, exactly as
+one made by hand does.
+
+**Setup.** Build once, then run the exe from the repo being documented (or
+pass `--repo`). It never writes `data/scan.json`, so it does not change what
+Atlas opens next.
 
 ```bash
-Atlas.exe board help                         # the whole guide, written for an agent
-Atlas.exe board "How login works" < script.txt
+dotnet build app                                    # once
+app/bin/Debug/net10.0/Atlas.exe board help          # the full guide, written for an agent
 ```
+
+**Pointing an agent at it.** `board help` is the whole manual - commands,
+placement, sizes, colours, a checklist for a good board - and it is what an
+agent should read first. Something like this in a prompt, or in the
+documented repo's `CLAUDE.md` / `AGENTS.md`, is enough:
+
+```
+To document this codebase visually, use Atlas boards. Run
+`<path to Atlas>/app/bin/Debug/net10.0/Atlas.exe board help` and follow it.
+Render the board and look at the images before calling it done.
+```
+
+**What a script looks like.** One command per line, piped in; `#` starts a
+comment, `\n` in text is a line break.
 
 ```
 new --group docs
-label title "How login works" --size 30
-window login Auth.cs AuthService.Login --below title
+label title "How login works" --text-size 30
+window login Auth.cs AuthService.Login --below title --title "Entry point"
 box why --around login:51-54 --color red
-note n1 "the session starts here" --on login:51
-window token TokenStore.cs Issue --right-of login
-arrow a1 login token
+note n1 "the session starts here" --on login:51 --text-size 9
+window token TokenStore.cs Issue --row login
+arrow a1 login token --text "issues"
 stop "Entry point" --frame login,n1
-render board.png
+stop "Where the token comes from" --frame login,token
+render board.png --stops
 ```
 
-A script is all or nothing: a mistake on any line saves nothing and says
-which line, so the fixed script can simply be run again. `show` prints an
-outline with overlap warnings, and `render` draws the board or one stop to a
-PNG, so a model that can see images can check its own work. It runs from the
-repo's folder (or `--repo`), and does not touch `data/scan.json`.
+```bash
+Atlas.exe board "How login works" < script.txt
+```
+
+What makes it workable for a model:
+
+- **All or nothing.** A mistake on any line saves nothing and names the line,
+  and the error says what is there instead (`no "Logn" in Auth.cs - there is:
+  AuthService.Login(1), AuthService.Logout(0)`), so the agent fixes the
+  script and runs it again.
+- **Placement without coordinates.** `--right-of`, `--below`, `--row`, or
+  nothing at all; anything placed that way is nudged until it overlaps
+  nothing. `--at x,y` exists as an escape hatch.
+- **It can check its own work.** `show` prints every item, where it is and
+  what code it shows, with warnings for overlaps and arrows crossing things.
+  `render` draws the board, one stop, or chosen items to a PNG - a model that
+  can see images looks at it and fixes what reads badly.
+- **Editing boards people made.** `set`, `move`, `rm`, `stop`, `unstop` work
+  on any board, and the open app picks up the change on its own.
+
+Status: working and tested, and tried end to end by an agent that learned it
+from `board help` alone and built a ten-stop board explaining how anchoring
+works; what it tripped on was fixed. Symbols are found by Roslyn, so they
+work in C#; other languages use `--lines`. There is no MCP server - the
+command line covers every agent with a shell.
 
 ### Images
 
@@ -631,16 +714,12 @@ both own one surface - auto-layout has to regenerate when the repo changes,
 and manual placement breaks the moment it does. Arbitrary arrangement is
 meant to live on *boards*: small hand-made canvases that reference files
 rather than containing them, so the same file can appear on many boards and
-adding files to the repo disturbs none of them. Not built yet.
+adding files to the repo disturbs none of them. See Boards.
 
 ## Not built yet
 
-- **Watching the disk.** Edits made while Atlas is open are not noticed. The
-  scan and the highlighting are from when you opened it; annotations
-  re-anchor on the next launch, so nothing is lost, but the view goes stale.
 - **Portals.** Jumping from a place in one file to a related place in
   another, as a first-class thing rather than a tour stop.
-- **Drawing.** A board has rectangles and arrows, not a diagram tool.
 - **Other languages.** The map, search, highlighting and boards work for
   every extension the scanner reads. Symbol anchoring is C# only - Roslyn
   parses the declarations. Elsewhere a note falls back to its surrounding

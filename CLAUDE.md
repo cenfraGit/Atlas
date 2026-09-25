@@ -426,8 +426,12 @@ covered by `AnchorTests` and works.
       public method, so a key that reaches for git meanwhile waits rather
       than sharing libgit2's handle; a result that arrives after another
       target was picked is dropped.
-- [ ] Toggling removed lines (`R`) and the review panel's own lists
-      (`MergedPrs`, `Branches`) still read git on the UI thread.
+- [x] Toggling removed lines (`R`) reads the tree again off the UI thread,
+      refused while a read is still under way (`_reading`) so it cannot
+      land the other setting; the review panel opens at once and fills in
+      when its list has been read.
+- [ ] Stepping commits (`[`, `]`) still diffs on the UI thread. One commit
+      is usually quick; the whole change (`-1`) can be slow on a big one.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
       is of what is there now. The change view shows it now, as its old
       text; the map still has nowhere to put it - probably at the folder
@@ -436,9 +440,8 @@ covered by `AnchorTests` and works.
       the commits panel is always open - the wheel-mode indicator cannot be
       seen at all. `S` toasts now, which covers it, but the islands should
       not be under a panel in the first place.
-- [ ] Opening a panel or the commit list takes a visible moment with no sign
-      that anything is happening, so it reads as broken until it appears.
-      Needs a spinner, or the list up front and its contents filled in.
+- [x] The review panel and the commit list appear at once, saying they
+      are reading, and fill in when git answers.
 
 ### Finding things
 

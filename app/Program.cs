@@ -1939,13 +1939,30 @@ public sealed class SceneView : Control
         if (_reviews is null) return;
         _git ??= GitReview.Open(_scene.Data.Root);
         if (_git is null) { Toast("this repo is not under git"); return; }
-        Toast(branches ? "reading branches..." : "reading pull requests...");
 
-        var targets = branches ? _git.Branches() : _git.MergedPrs();
-        _reviews.Show(targets, _git.HeadName, branches ? "branches" : "pull requests");
+        // the panel now, the list when it is read: off the UI thread, since
+        // finding merged pull requests walks hundreds of commits
+        var what = branches ? "branches" : "pull requests";
+        int turn = ++_listing;
+        _reviews.Loading(what);
         _caption = "";
-        if (!branches) AskForOpenPrs(targets);
+        var git = _git;
+        Task.Run(() => (Targets: branches ? git.Branches() : git.MergedPrs(), Head: git.HeadName))
+            .ContinueWith(t => Dispatcher.UIThread.Post(() =>
+            {
+                if (turn != _listing || _reviews is null || !Reveal.Showing(_reviews)) return;
+                if (t.IsFaulted)
+                {
+                    _reviews.Show([], "", what);
+                    Toast($"could not read the {what}: {t.Exception?.GetBaseException().Message}");
+                    return;
+                }
+                _reviews.Show(t.Result.Targets, t.Result.Head, what);
+                if (!branches) AskForOpenPrs(t.Result.Targets);
+            }));
     }
+
+    int _listing;
 
     int _askingPrs;
 
@@ -2005,6 +2022,7 @@ public sealed class SceneView : Control
         if (_git is null) return;
 
         int turn = ++_opening;
+        _reading = true;
         _commitsPanel?.Loading(target.Label);
         _caption = $"{target.Label}   -   reading the tree at this commit...";
         InvalidateVisual();
@@ -2027,6 +2045,7 @@ public sealed class SceneView : Control
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (turn != _opening || _git is null) return;   // superseded
+                    _reading = false;
                     _target = target;
                     _prCommits = commits;
                     _commitAt = -1;
@@ -2040,6 +2059,7 @@ public sealed class SceneView : Control
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (turn != _opening) return;
+                    _reading = false;
                     _caption = "";
                     Toast($"could not read {target.Label}: {ex.Message}");
                 });
@@ -2047,8 +2067,15 @@ public sealed class SceneView : Control
         });
     }
 
-    /// <summary>the repo laid out as it was at the target's head, with the
-    /// whole change's removed lines spliced back in when they are shown.
+    /// <summary>the repo laid out as it was at the target's head. Without this
+    /// a branch older than a restructure changes paths that no longer exist,
+    /// and lights up nothing at all.
+    ///
+    /// With removed lines shown, each changed file's text has what the whole
+    /// change took out put back where it was, so the cards contain it: the
+    /// snapshot is temporary anyway, thrown away when review ends. Built once
+    /// for the whole change - stepping through the commits keeps it, rather
+    /// than rebuilding a layout that would shift under you at every step.
     /// Nothing here touches Skia or the scene, so it runs on any thread.</summary>
     static (Scan Data, Dictionary<string, string[]> Text, Dictionary<string, Splice> Splices)? BuildTree(
         GitReview git, ReviewTarget target, ChangeSet? whole, ScanOptions opts, bool removed, string root)
@@ -2061,22 +2088,6 @@ public sealed class SceneView : Control
             ? Splice.All(snapshot, whole)
             : (snapshot, new Dictionary<string, Splice>());
         return (Scanner.BuildFrom(root, text), text, splices);
-    }
-
-    /// <summary>draw the repo as it was at the target's head. Without this a
-    /// branch older than a restructure changes paths that no longer exist,
-    /// and lights up nothing at all.
-    ///
-    /// With removed lines shown, each changed file's text has what the whole
-    /// change took out put back where it was, so the cards contain it: the
-    /// snapshot is temporary anyway, thrown away when review ends. Built once
-    /// for the whole change - stepping through the commits keeps it, rather
-    /// than rebuilding a layout that would shift under you at every step.</summary>
-    void ShowTree(ReviewTarget target, ChangeSet? whole)
-    {
-        if (_git is null) return;
-        if (BuildTree(_git, target, whole, _scanOptions, _showRemoved, _scene.Data.Root) is { } t)
-            _scene.ShowSnapshot(t.Data, path => t.Text.GetValueOrDefault(path), t.Splices);
     }
 
     /// <summary>show or hide the commit list. It is a full height strip down
@@ -2672,18 +2683,47 @@ public sealed class SceneView : Control
     void ToggleRemoved()
     {
         if (_git is null || _target is null) return;
+        // one read at a time: a toggle racing the open it follows could land
+        // the tree with the other setting from the one the key now says
+        if (_reading) { Toast("still reading - a moment"); return; }
         _showRemoved = !_showRemoved;
-        // the text itself changes, so the tree is drawn again - with the
-        // camera left where it is: this is the same change, seen another way
-        float x = _scene.CamX, y = _scene.CamY, s = _scene.CamS;
-        ShowTree(_target, _git.Whole(_target));
-        ShowChanges(_commitAt < 0 ? _git.Whole(_target) : _git.OfCommit(_prCommits[_commitAt]));
-        if (_scene.BoardReadOnly) RebuildChangeBoard(frame: false);
-        else (_scene.CamX, _scene.CamY, _scene.CamS) = (x, y, s);
-        Toast(_showRemoved ? "removed lines shown" : "removed lines hidden");
-        RefreshHints();
-        InvalidateVisual();
+        Toast(_showRemoved ? "putting the removed lines back..." : "taking the removed lines out...");
+
+        // the text itself changes, so the tree is read again - off the UI
+        // thread, as opening it was. A pick of another target meanwhile wins
+        int turn = ++_opening;
+        _reading = true;
+        var git = _git;
+        var target = _target;
+        var commit = _commitAt >= 0 ? _prCommits[_commitAt] : null;
+        var opts = _scanOptions;
+        bool removed = _showRemoved;
+        var root = _scene.Data.Root;
+        Task.Run(() =>
+        {
+            var whole = git.Whole(target);
+            return (Tree: BuildTree(git, target, whole, opts, removed, root), Set: commit is null ? whole : git.OfCommit(commit));
+        }).ContinueWith(t => Dispatcher.UIThread.Post(() =>
+        {
+            if (turn != _opening) return;
+            _reading = false;
+            if (t.IsFaulted) { Toast($"could not read {target.Label} again: {t.Exception?.GetBaseException().Message}"); return; }
+
+            // with the camera left where it is: this is the same change,
+            // seen another way
+            float x = _scene.CamX, y = _scene.CamY, s = _scene.CamS;
+            if (t.Result.Tree is { } tree) _scene.ShowSnapshot(tree.Data, path => tree.Text.GetValueOrDefault(path), tree.Splices);
+            ShowChanges(t.Result.Set);
+            if (_scene.BoardReadOnly) RebuildChangeBoard(frame: false);
+            else (_scene.CamX, _scene.CamY, _scene.CamS) = (x, y, s);
+            Toast(_showRemoved ? "removed lines shown" : "removed lines hidden");
+            RefreshHints();
+            InvalidateVisual();
+        }));
     }
+
+    /// <summary>a review target's tree is being read in the background.</summary>
+    bool _reading;
 
     /// <summary>after stepping to another commit, gather that one instead.</summary>
     void RebuildChangeBoard(bool frame = true)

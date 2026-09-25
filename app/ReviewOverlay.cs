@@ -56,6 +56,18 @@ public sealed class ReviewOverlay : Border
         Reveal.Show(this);
     }
 
+    /// <summary>open straight away while the list is read. Walking the
+    /// history for merged pull requests takes a moment on a long one, and a
+    /// panel that only appeared once it was done read as a key that did
+    /// nothing.</summary>
+    public void Loading(string what)
+    {
+        _targets = [];
+        _list.ItemsSource = new List<string>();
+        _hint.Text = $"reading {what}...";
+        Reveal.Show(this);
+    }
+
     static string Pad(string s, int width) =>
         s.Length <= width ? s.PadRight(width) : s[..(width - 1)] + "…";
 

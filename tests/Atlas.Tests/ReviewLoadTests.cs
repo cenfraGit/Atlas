@@ -53,6 +53,74 @@ public class ReviewLoadTests
         Assert.Contains(scene.Review!.Files, f => f.Path == "app/Panel.cs");
     }
 
+    /// <summary>R reads the tree again with the removed lines taken out, or
+    /// put back - off the UI thread too, with the old view up meanwhile.</summary>
+    [AvaloniaFact]
+    public void TheRemovedLinesToggleLandsLater()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        view.OpenTarget(review.MergedPrs().Single());
+        Assert.True(Until(() => scene.OnSnapshot && scene.Review is not null));
+        Assert.NotEmpty(scene.Splices);                 // shown by default
+
+        view.HandleKey(Avalonia.Input.Key.R);
+        Assert.NotEmpty(scene.Splices);                 // still the old view
+        Assert.True(Until(() => scene.Splices.Count == 0), "the removed lines never went");
+
+        view.HandleKey(Avalonia.Input.Key.R);
+        Assert.True(Until(() => scene.Splices.Count > 0), "the removed lines never came back");
+    }
+
+    /// <summary>R while the target is still being read is refused, rather
+    /// than racing the read and landing the other setting.</summary>
+    [AvaloniaFact]
+    public void TheToggleWaitsForTheOpenToFinish()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        var pr = review.MergedPrs().Single();
+        view.OpenTarget(pr);
+        view.OpenTarget(pr);                            // _target is set by the first to land
+        Assert.True(Until(() => scene.Review is not null));
+        view.OpenTarget(pr);                            // and now one is under way again
+
+        view.HandleKey(Avalonia.Input.Key.R);
+
+        Assert.True(Until(() => scene.OnSnapshot && scene.Review is not null));
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while (DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        Assert.NotEmpty(scene.Splices);
+    }
+
+    /// <summary>the review panel opens at once and fills in when the list
+    /// has been read.</summary>
+    [AvaloniaFact]
+    public void TheBranchListOpensAtOnceAndFillsIn()
+    {
+        using var git = new GitFixture();
+        var scene = new Scene(Scanner.Build(git.Path));
+        var store = BoardStore.Load(git.Path);
+        var view = new SceneView(scene);
+        var panel = new ReviewOverlay { Transitions = null };
+        view.AttachBoards(store, new BoardOverlay(store));
+        view.AttachReview(panel, new CommitsPanel());
+        view.BuildLayers();
+        var grid = new Grid();
+        grid.Children.Add(view);
+        grid.Children.Add(panel);
+        var window = new Window { Width = 800, Height = 600, Content = grid };
+        window.Show();
+        var list = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(panel).OfType<ListBox>().Single();
+
+        view.HandleKey(Avalonia.Input.Key.G);
+
+        Assert.True(Reveal.Showing(panel));
+        Assert.True(Until(() => list.ItemCount > 0), "the branches never arrived");
+    }
+
     /// <summary>picking a second target before the first has arrived shows
     /// the second: the first one's result is thrown away when it lands.</summary>
     [AvaloniaFact]

@@ -11,8 +11,8 @@ public class SceneTests
     [InlineData(0.055f, 1)]   // cards
     [InlineData(0.44f, 1)]
     [InlineData(0.45f, 2)]    // bars
-    [InlineData(1.89f, 2)]
-    [InlineData(1.9f, 3)]     // text
+    [InlineData(0.99f, 2)]
+    [InlineData(1.0f, 3)]     // text
     [InlineData(12f, 3)]
     public void TheLodThresholdsAreWhereTheyAreDocumented(float zoom, int tier) =>
         Assert.Equal(tier, Scene.TierFor(zoom));

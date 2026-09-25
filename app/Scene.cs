@@ -68,7 +68,12 @@ public sealed record ScanOptions(bool ShowHidden = false)
 public sealed class Scene : IDisposable
 {
     const float T_CARD = 0.055f, T_BARS = 0.45f;
-    public const float T_TEXT = 1.9f;
+    // code stays text three or four wheel notches further out than it did
+    // (1.9), a notch being x1.2: at 1.0 a line is three pixels tall, which
+    // is fuzz rather than words but still reads as code rather than blocks.
+    // It costs: a screen of cards drew in ~8ms at 1.9 and ~22ms at 1.0 on
+    // this repo, past a 60fps frame. Raise it again if panning stutters
+    public const float T_TEXT = 1.0f;
 
     /// <summary>which level of detail a zoom falls in: 0 folders, 1 cards,
     /// 2 bars, 3 text. Pulled out of the draw loop so the thresholds can be
@@ -3383,7 +3388,9 @@ public sealed class Scene : IDisposable
     {
         var b = ContentBounds();
         float fit = Math.Min(vw / Math.Max(1, b.Width), vh / Math.Max(1, b.Height));
-        return Math.Clamp(fit * 0.35f, 0.006f, 1f);
+        // never less room than 0.5x: a small board, fitting at 2x, stopped
+        // zooming out at 1x, which left it filling the window
+        return Math.Clamp(fit * 0.35f, 0.006f, 0.5f);
     }
 
     public void Stress()

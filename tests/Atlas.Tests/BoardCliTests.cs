@@ -66,10 +66,11 @@ public class BoardCliTests
     public void AWindowByItsSymbolShowsThatDeclarationAndIsAnchored()
     {
         using var repo = Repo();
-        var (code, _, err) = Run(repo, "doc", "new\nwindow w Loop.cs First\n");
+        var (code, _, err) = Run(repo, "doc", "new\nwindow w Loop.cs First --title \"the loop\"\n");
         Assert.True(code == 0, err);
 
         var w = Stored(repo, "doc").Items.Single();
+        Assert.Equal("the loop", w.Text);
         Assert.Equal((P, 4, 12), (w.File, w.Line, w.EndLine));
         Assert.Equal("Demo.Loop.First(0)", w.Symbol);
         Assert.NotNull(w.Key);

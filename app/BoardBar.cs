@@ -10,11 +10,9 @@ namespace Atlas;
 public sealed class BoardBar : Border
 {
     readonly StackPanel _row;
-    readonly Button _snap;
     readonly Dictionary<string, Button> _tools = [];
 
     public event Action<string>? Add;
-    public event Action? ToggleSnap;
 
     public BoardBar()
     {
@@ -30,11 +28,13 @@ public sealed class BoardBar : Border
         _row = new StackPanel { Orientation = Orientation.Horizontal };
         foreach (var (label, kind) in new[]
                  {
-                     ("note  N", "note"), ("rect  1", "shape"),
-                     ("ellipse  2", "ellipse"), ("diamond  3", "diamond"),
-                     ("text  4", "text"), ("arrow  Y", "arrow"),
-                     ("brush  B", "brush"), ("eraser  X", "eraser"),
-                     ("file  A", "file"),
+                     // words first, then shapes, then lines, then what comes
+                     // from elsewhere. Snap is not here: it is in the top
+                     // right with edit, where it is shown whatever is armed
+                     ("note  N", "note"), ("text  4", "text"),
+                     ("rect  1", "shape"), ("ellipse  2", "ellipse"), ("diamond  3", "diamond"),
+                     ("arrow  Y", "arrow"), ("brush  B", "brush"), ("eraser  X", "eraser"),
+                     ("file  A", "file"), ("image", "image"),
                  })
         {
             var b = Make(label);
@@ -42,10 +42,6 @@ public sealed class BoardBar : Border
             _tools[kind] = b;
             _row.Children.Add(b);
         }
-
-        _snap = Make("snap  G");
-        _snap.Click += (_, _) => ToggleSnap?.Invoke();
-        _row.Children.Add(_snap);
 
         Child = _row;
     }
@@ -65,10 +61,9 @@ public sealed class BoardBar : Border
 
     /// <summary>a tool that stays armed has to look armed, or you draw a
     /// stroke you did not mean to the next time you drag.</summary>
-    public void Reflect(bool editing, bool snap, string? armed = null)
+    public void Reflect(bool editing, string? armed = null)
     {
         Reveal.Set(this, editing);
-        _snap.Foreground = snap ? Ui.Accent : Ui.Dim;
         foreach (var (kind, button) in _tools)
             button.Foreground = kind == armed ? Ui.Accent : Ui.Dim;
     }

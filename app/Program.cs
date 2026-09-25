@@ -1735,7 +1735,6 @@ public sealed class SceneView : Control
     {
         _boardBar = bar;
         bar.Add += AddOfKind;
-        bar.ToggleSnap += () => SetSnap(!SnapToGrid);
     }
 
     BackButton? _back;
@@ -1788,7 +1787,7 @@ public sealed class SceneView : Control
         // every change that comes through here
         MouseModeChanged?.Invoke();
         bool editing = _scene.ActiveBoard is not null && Editing;
-        _boardBar?.Reflect(editing, SnapToGrid,
+        _boardBar?.Reflect(editing,
             _armShape ?? (_armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null));
         _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
         // each tool shows its own settings, and only while it is armed
@@ -1809,6 +1808,7 @@ public sealed class SceneView : Control
             case "brush": ArmBrush(); break;
             case "eraser": ArmEraser(); break;
             case "file": OpenSearch?.Invoke(); break;
+            case "image": AddImageFromDisk(); break;
         }
     }
 

@@ -1369,8 +1369,23 @@ public sealed class SceneView : Control
         }
     }
 
+    /// <summary>frame the whole board. The glide goes first: a wheel notch
+    /// or a flick still easing the camera would pull it straight back off the
+    /// framing, which is how F after a fling kept drifting where it had been
+    /// going instead of fitting.</summary>
+    void FitBoard()
+    {
+        _glide.Stop();
+        _flight = null;
+        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+    }
+
     void FlyTo(float x, float y, float s)
     {
+        // a deliberate move wins over momentum. The flight holds the glide
+        // off while it runs, but a flight too short to animate sets the
+        // camera directly, and the glide then dragged it away again
+        _glide.Stop();
         _flight = Flight.To((float)Bounds.Width, _scene.CamX, _scene.CamY, _scene.CamS, x, y, s);
         _flightT0 = _clock.Elapsed.TotalMilliseconds;
         if (_flight is null) { _scene.CamX = x; _scene.CamY = y; _scene.CamS = s; }
@@ -1907,7 +1922,7 @@ public sealed class SceneView : Control
             items.Add(("previous commit", "[", () => { StepCommit(-1); RebuildChangeBoard(); }));
             items.Add(("next commit", "]", () => { StepCommit(1); RebuildChangeBoard(); }));
             items.Add(("commits", "H", ToggleCommits));
-            items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
+            items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
             items.Add((_showRemoved ? "hide removed" : "show removed", "R", ToggleRemoved));
             items.Add(("back to the map", "C", LeaveBoard));
         }
@@ -1922,7 +1937,7 @@ public sealed class SceneView : Control
             items.Add(("tour stop", "M", CaptureStop));
             items.Add(("tour", "shift+M", ToggleTourPanel));
             items.Add(("play", "P", () => PlayTour(0)));
-            items.Add(("fit", "F", () => { _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); }));
+            items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
             items.Add(("back to map", "alt+←", LeaveBoard));
         }
         else if (_scene.Review is not null)
@@ -2683,7 +2698,7 @@ public sealed class SceneView : Control
         _lastBoard = b;
         RefreshBoardBar();
         RefreshHints();
-        _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+        FitBoard();
         _caption = b.Name;
         Focus();
         InvalidateVisual();
@@ -2734,7 +2749,7 @@ public sealed class SceneView : Control
     {
         if (ChangeBoard.FirstChange(board, set, _scene) is not { } spot)
         {
-            _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height);
+            FitBoard();
             return;
         }
         _scene.CamX = spot.X;
@@ -4311,7 +4326,7 @@ public sealed class SceneView : Control
                 case Key.C when _ctrl: CopyPicked(PickedItems()); return;
                 case Key.C: LeaveBoard(); return;
                 case Key.R: ToggleRemoved(); return;
-                case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
+                case Key.F: FitBoard(); InvalidateVisual(); return;
                 case Key.S: SetWheelZoom(!WheelZoom); InvalidateVisual(); return;
                 case Key.H: ToggleCommits(); return;
                 case Key.OemQuestion: OpenSearch?.Invoke(); return;
@@ -4349,7 +4364,7 @@ public sealed class SceneView : Control
                 case Key.A: OpenSearch?.Invoke(); return;
                 case Key.OemCloseBrackets: StepTool(1); return;
                 case Key.OemOpenBrackets: StepTool(-1); return;
-                case Key.F: _scene.FitBoard((float)Bounds.Width, (float)Bounds.Height); InvalidateVisual(); return;
+                case Key.F: FitBoard(); InvalidateVisual(); return;
                 case Key.O: _boards?.Show(); InvalidateVisual(); return;
                 case Key.M when e_shift: ToggleTourPanel(); return;
                 case Key.M: CaptureStop(); return;

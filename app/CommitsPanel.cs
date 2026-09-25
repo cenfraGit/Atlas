@@ -33,7 +33,10 @@ public sealed class CommitsPanel : Border
         Background = Ui.PanelBg;
         BorderBrush = Ui.Edge;
         BorderThickness = new Thickness(1, 0, 0, 0);
-        Padding = new Thickness(12);
+        // clear of the mode islands, which sit over this panel's top right
+        // corner - under it, in review mode where this is always open, the
+        // wheel-mode indicator could not be seen at all
+        Padding = new Thickness(12, 84, 12, 12);
         Width = 380;
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Stretch;
@@ -42,6 +45,10 @@ public sealed class CommitsPanel : Border
         {
             Background = Brushes.Transparent, BorderThickness = new Thickness(0),
             FontFamily = Ui.Mono, FontSize = 12, Foreground = Ui.Fore,
+            // every row: the virtualizing default, handed its rows while the
+            // panel slid in, drew only the first - the "all commits" row -
+            // and none of the commits. A pull request is tens of them
+            ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new StackPanel()),
         };
         _list.SelectionChanged += (_, _) =>
         {

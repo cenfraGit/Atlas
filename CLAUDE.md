@@ -445,10 +445,10 @@ covered by `AnchorTests` and works.
       is of what is there now. The change view shows it now, as its old
       text; the map still has nowhere to put it - probably at the folder
       that lost it.
-- [ ] The mode islands sit behind a side panel, so in review mode - where
-      the commits panel is always open - the wheel-mode indicator cannot be
-      seen at all. `S` toasts now, which covers it, but the islands should
-      not be under a panel in the first place.
+- [x] The mode islands sit over both side panels, which leave room at
+      their top for them; in review mode they were under the commits panel
+      and could not be seen. The commits list also drew only its first row
+      - the same virtualising bug the tour and boards panels had.
 - [x] The review panel and the commit list appear at once, saying they
       are reading, and fill in when git answers.
 

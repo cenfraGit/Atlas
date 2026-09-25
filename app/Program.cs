@@ -120,8 +120,9 @@ public sealed class App : Application
             root.Children.Add(penBar);
             root.Children.Add(eraserBar);
             root.Children.Add(hints);
-            root.Children.Add(islands);
+            // the islands after both side panels, so they sit over them
             root.Children.Add(commits);
+            root.Children.Add(islands);
             root.Children.Add(reviews);
             root.Children.Add(grep);
             root.Children.Add(prompt);

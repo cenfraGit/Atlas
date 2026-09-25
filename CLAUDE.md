@@ -471,6 +471,22 @@ covered by `AnchorTests` and works.
       stays as a fallback for repos that never got round to ignoring their
       build output, and for folders that are not repos at all.
 
+### Boards for agents (`BoardCli.cs`)
+
+- [x] `Atlas.exe board "<board>" <command>`, or a script on stdin. The
+      commands name code (file, symbol, 1-based lines) and ids the agent
+      chooses; `Reanchor` and `PinOver` do the anchoring, so a board made
+      this way drifts no more than one made by hand. The help text is the
+      agent's documentation - keep it in step with the commands.
+- [x] All or nothing: a script that fails saves nothing, and a board it
+      created is deleted again.
+- [x] `show` (outline and overlap warnings) and `render` (a PNG of the
+      board or one stop), so the agent can check what it made.
+- [ ] The open app does not notice a board changed on disk. Watching
+      `.atlas/boards` would let you watch an agent build one.
+- [ ] An MCP server over the same commands, if a client wants one; the CLI
+      covers every agent with a shell.
+
 ### Samples and fixtures
 
 - [x] A third sample board, "Everything at once": every kind of item,
@@ -517,6 +533,10 @@ on it). Everything else is small and single-purpose.
 cd app && dotnet run -- ../path/to/some/repo    # open Atlas on a repo
 dotnet test tests/Atlas.Tests                   # the unit suite
 ```
+
+`Atlas.exe board help` is the command line for making boards without a
+window (`BoardCli.cs`). It is single threaded, so unlike the app it may
+measure text wherever it likes, and it never writes `data/scan.json`.
 
 `run.cmd` opens Atlas on itself; `test.cmd` runs the unit suite. With no
 argument Atlas reopens whatever `data/scan.json` last pointed at. A folder

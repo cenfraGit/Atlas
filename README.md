@@ -567,6 +567,37 @@ Opening a board keeps the map camera, so leaving with `Esc` puts you back
 exactly where you were. A board draws on an indigo background instead of the
 map's blue-black, so it is obvious which one you are looking at.
 
+### Boards from the command line
+
+`Atlas.exe board` builds and edits boards without opening a window, so an
+agent can document a codebase as a board with a tour through it. It talks in
+ids, files, symbols and line numbers - never in anchors or pixel heights -
+and the real anchoring code fills in the rest, so the board stays on its code
+as the code changes.
+
+```bash
+Atlas.exe board help                         # the whole guide, written for an agent
+Atlas.exe board "How login works" < script.txt
+```
+
+```
+new --group docs
+label title "How login works" --size 30
+window login Auth.cs AuthService.Login --below title
+box why --around login:51-54 --color red
+note n1 "the session starts here" --on login:51
+window token TokenStore.cs Issue --right-of login
+arrow a1 login token
+stop "Entry point" --frame login,n1
+render board.png
+```
+
+A script is all or nothing: a mistake on any line saves nothing and says
+which line, so the fixed script can simply be run again. `show` prints an
+outline with overlap warnings, and `render` draws the board or one stop to a
+PNG, so a model that can see images can check its own work. It runs from the
+repo's folder (or `--repo`), and does not touch `data/scan.json`.
+
 ### Images
 
 A board takes images too: `ctrl+V` pastes whatever is on the clipboard, and

@@ -23,6 +23,7 @@ public static class Program
     {
         // tests live in tests/Atlas.Tests and run with `dotnet test`
         if (args.Contains("--samples")) { Samples.Run(args); return; }
+        if (args.Length > 0 && args[0] is "board" or "boards") { Environment.ExitCode = BoardCli.Run(args); return; }
 
         // before anything can throw. A WinExe has no console, so without this
         // an unhandled exception is a window that vanishes with no message.

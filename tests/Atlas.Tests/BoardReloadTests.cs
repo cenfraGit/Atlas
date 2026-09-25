@@ -210,6 +210,35 @@ public class BoardReloadTests
         Assert.Null(scene.ActiveBoard);
     }
 
+    /// <summary>a folder with no .atlas is not given one by being opened -
+    /// and the first board made from outside is still noticed.</summary>
+    [AvaloniaFact]
+    public void OpeningAFolderLeavesNoAtlasBehindButTheFirstBoardIsSeen()
+    {
+        using var repo = SampleRepo.Build();
+        var atlas = Path.Combine(repo.Path, ".atlas");
+        Assert.False(Directory.Exists(atlas));
+        var scene = new Scene(Scanner.Build(repo.Path));
+        var store = BoardStore.Load(repo.Path);
+        var view = new SceneView(scene);
+        view.AttachBoards(store, new BoardOverlay(store));
+        view.BuildLayers();
+        new Window { Content = view }.Show();
+
+        view.WatchBoards();
+        Assert.False(Directory.Exists(atlas), "watching the folder created .atlas");
+
+        Elsewhere(repo).Create("from outside");
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (store.Boards.Count == 0 && DateTime.UtcNow < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(20);
+        }
+        Assert.Equal("from outside", Assert.Single(store.Boards).Name);
+        view.Close();
+    }
+
     /// <summary>and the watcher itself: a write from outside reaches the
     /// open board with nobody calling anything.</summary>
     [AvaloniaFact]

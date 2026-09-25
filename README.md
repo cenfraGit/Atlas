@@ -20,6 +20,11 @@ runs the tests. Or from a shell:
 cd app && dotnet run -- ../path/to/some/repo
 ```
 
+Or start it with no folder at all: it opens an empty workspace with **open
+folder...** and the folders you opened lately, one click each. The
+workspace (`Tab`) has *open folder...* too, to switch repo without
+restarting.
+
 You point it at a folder - the root of a project - and that is the whole
 setup. If the folder is a git repo, review mode turns itself on; if it is
 not, `P` says so and everything else works the same.
@@ -65,12 +70,11 @@ and annotations. Every path in it is repo-relative, so it works wherever the rep
 is cloned. **Commit this folder** - that is how the rest of your team gets
 what you wrote. Nothing needs adding to that repo's `.gitignore`.
 
-**In Atlas's own folder: `data/scan.json`.** The cached layout, so
-`dotnet run` with no argument reopens the last repo. It records the absolute
-path of the folder it scanned - the one machine-specific thing Atlas writes -
-and this repo's `.gitignore` already excludes it. A cache written on another
-machine is noticed and replaced rather than drawn, so a fresh clone opens on
-Atlas itself instead of failing.
+**In Atlas's own folder: `data/recent.json`.** The folders you opened lately,
+for the empty workspace to list - the one machine-specific thing Atlas
+writes, and this repo's `.gitignore` already excludes it. Opening a folder
+never writes anything into it: an `.atlas` appears only once you make a
+board or a note.
 
 ## Using it
 
@@ -626,8 +630,7 @@ the rest - so the board stays on its code as the code changes, exactly as
 one made by hand does.
 
 **Setup.** Build once, then run the exe from the repo being documented (or
-pass `--repo`). It never writes `data/scan.json`, so it does not change what
-Atlas opens next.
+pass `--repo`).
 
 ```bash
 dotnet build app                                    # once

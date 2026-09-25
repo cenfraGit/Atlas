@@ -70,8 +70,7 @@ it buys robustness - but an old board must still open where it was, and the
 way to know is to load one and compare against the previous commit, not to
 reason about it. That is how the end-anchor change found it was collapsing
 old windows. A fallback of one `??` for a field older boards lack is fine; a
-parallel code path for an old format is not. `data/scan.json` is still free
-to change shape.
+parallel code path for an old format is not.
 
 ### Boards as a diagramming surface
 
@@ -547,6 +546,11 @@ covered by `AnchorTests` and works.
 
 ### Samples and fixtures
 
+- [ ] The sample annotation on `Scanner.cs` still says the scan is "cached
+      to data/scan.json"; there is no cache any more. Change the text in
+      `Samples.cs` and regenerate with `--samples` (which also rewrites the
+      sample boards in today's leaner format).
+
 - [x] A third sample board, "Everything at once": every kind of item,
       overlapping, an empty frame over the lot, connectors with one end
       loose. What breaks in edit mode breaks on a board like that.
@@ -573,7 +577,7 @@ syntax-highlighted source. It is a desktop app, not a library.
 ```
 app/                 the whole application, one flat folder, no sub-projects
 tests/Atlas.Tests/   xunit suite (hermetic - builds its own fixtures)
-data/scan.json       layout cache, machine specific, gitignored
+data/recent.json     folders opened lately, machine specific, gitignored
 .atlas/              boards (and their tours), annotations, for the repo being read
 ```
 
@@ -594,10 +598,15 @@ dotnet test tests/Atlas.Tests                   # the unit suite
 
 `Atlas.exe board help` is the command line for making boards without a
 window (`BoardCli.cs`). It is single threaded, so unlike the app it may
-measure text wherever it likes, and it never writes `data/scan.json`.
+measure text wherever it likes.
 
 `run.cmd` opens Atlas on itself; `test.cmd` runs the unit suite. With no
-argument Atlas reopens whatever `data/scan.json` last pointed at. A folder
+argument Atlas opens an empty workspace (`Shell.ShowWelcome`) listing the
+folders opened lately, and `Shell.Open` swaps one folder's whole view for
+another's - so anything that outlives a view (a watcher, the git handle, a
+static event) is let go of in `SceneView.Close` or the `MakeRoom` unhook.
+It used to reopen whatever a scan cache last pointed at, which is how an
+ignored path argument went unnoticed. A folder
 passed with a trailing backslash arrives as `C:\repo"` (the backslash
 escapes the closing quote), so `App.RepoFrom` cleans the argument up rather
 than trusting it, and says so when a path-looking argument is not a folder -
@@ -871,12 +880,11 @@ scripts pattern in `uitest.ps1`. Do not conclude the app cannot be launched
 from a failure to launch it; check the crash log first, because a startup
 bug looks exactly like a missing desktop.
 
-**Driving the app rewrites `data/scan.json`.** Any launch with a folder
-scans it and saves the scan as the one a bare launch reopens. Driving Atlas
-on its own folder, or a scratch one, changes what the user's next launch
-opens - and a path argument that was silently being ignored went unnoticed
-for exactly that reason, because the fallback happened to be the folder
-meant. Say so when a session has done it.
+**Opening a folder writes nothing into it.** Not even an empty
+`.atlas/boards`: the board watcher waits for `.atlas` to appear rather than
+creating it. A test that opens a missing folder must use a path inside its
+own temp folder - an early version of the shell built a view onto a
+missing path and the watcher created it on the real drive.
 
 **Driving the app writes to `.atlas/`.** The sample boards are committed, so
 a note added while testing lands in a tracked file. Check `git status` after

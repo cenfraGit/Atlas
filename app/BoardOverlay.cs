@@ -51,6 +51,9 @@ public sealed class BoardOverlay : Border
 
     /// <summary>go to the map.</summary>
     public event Action? HomeRequested;
+
+    /// <summary>open another folder in place of this one.</summary>
+    public event Action? OpenFolderRequested;
     public event Action? CreateRequested;
     public event Action<Board>? RenameRequested;
     public event Action<Board>? GroupRequested;
@@ -106,12 +109,14 @@ public sealed class BoardOverlay : Border
         _group = Make("group", () => { if (One is { } b) GroupRequested?.Invoke(b); });
         _delete = Make("delete", () => { var s = Selected; if (s.Count > 0) DeleteRequested?.Invoke(s); });
         var create = Make("new", () => CreateRequested?.Invoke());
+        var folder = Make("open folder...", () => { Close(); OpenFolderRequested?.Invoke(); });
+        folder.Foreground = Ui.Fore;
 
         var buttons = new WrapPanel
         {
             Orientation = Orientation.Horizontal,
             Margin = new Thickness(0, 0, 0, 10),
-            Children = { _open, _rename, _group, _delete, create },
+            Children = { _open, _rename, _group, _delete, create, folder },
         };
 
         var content = new StackPanel

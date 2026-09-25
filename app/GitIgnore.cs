@@ -5,7 +5,7 @@ namespace Atlas;
 /// <summary>asks the repo what is not its source.
 ///
 /// A hardcoded list of noisy directories gets node_modules and bin right and
-/// knows nothing about anything else - Atlas's own data/scan.json is
+/// knows nothing about anything else - Atlas's own data folder is
 /// gitignored and still landed on the map. A repo already declares what is
 /// not part of it, in a file designed for exactly that, with nested rules and
 /// negations and a syntax nobody should reimplement. So this asks libgit2,

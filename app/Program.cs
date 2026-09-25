@@ -49,88 +49,8 @@ public sealed class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var args = Environment.GetCommandLineArgs();
-            var scene = new Scene(LoadScan(args));
-            if (args.Contains("--stress")) scene.Stress();
             var goTo = Array.IndexOf(args, "--goto");
             var startCam = goTo >= 0 && goTo + 1 < args.Length ? args[goTo + 1] : null;
-            var view = new SceneView(scene, args.Contains("--bench"), startCam);
-            var search = new SearchOverlay(scene);
-            search.Chosen += view.OnFileChosen;
-            view.OpenSearch = search.Open;
-            view.SearchOpen = () => Reveal.Showing(search);
-            view.CloseSearch = search.Close;
-
-            var prompt = new PromptOverlay();
-            view.AttachPrompt(prompt);
-            var tour = new TourPanel();
-            view.AttachTour(tour);
-
-            var reviews = new ReviewOverlay();
-            var commits = new CommitsPanel();
-            view.AttachReview(reviews, commits);
-
-            var noteStore = AnnotationStore.Load(scene.Data.Root);
-            scene.Notes = noteStore;
-            var notes = new AnnotationOverlay(noteStore, scene);
-            notes.Chosen += view.FlyToAnnotation;
-            notes.EditRequested += view.EditAnnotation;
-            view.AttachNotes(noteStore, notes);
-
-            var boardStore = BoardStore.Load(scene.Data.Root);
-            var boards = new BoardOverlay(boardStore);
-            view.AttachBoards(boardStore, boards);
-            view.WatchBoards();
-            view.WatchRepo();
-
-            var hints = new HintBar();
-            view.AttachHints(hints);
-
-            var boardBar = new BoardBar();
-            view.AttachBoardBar(boardBar);
-
-
-            var penBar = new PenBar(SceneView.Colours);
-            view.AttachPenBar(penBar);
-
-            var eraserBar = new EraserBar();
-            view.AttachEraserBar(eraserBar);
-
-            var grep = new GrepOverlay();
-            view.AttachGrep(grep);
-
-            var editor = new InlineEditor();
-            view.AttachEditor(editor);
-
-            var islands = new ModeIslands();
-            islands.EditChanged += view.SetEditing;
-            islands.ZoomChanged += view.SetWheelZoom;
-            islands.SnapChanged += view.SetSnap;
-            view.MouseModeChanged += () => islands.Reflect(view.Editing, view.WheelZoom, view.SnapToGrid, view.OnEditableBoard);
-            islands.Reflect(view.Editing, view.WheelZoom, view.SnapToGrid, view.OnEditableBoard);
-
-            var root = new Grid();
-            root.Children.Add(view);
-            root.Children.Add(search);
-            root.Children.Add(tour);
-            root.Children.Add(boards);
-            root.Children.Add(notes);
-            root.Children.Add(boardBar);
-            root.Children.Add(penBar);
-            root.Children.Add(eraserBar);
-            root.Children.Add(hints);
-            // the islands after both side panels, so they sit over them
-            root.Children.Add(commits);
-            root.Children.Add(islands);
-            root.Children.Add(reviews);
-            root.Children.Add(grep);
-            root.Children.Add(prompt);
-            // over everything: it is inside an item, and an item is on the
-            // canvas under all of these
-            root.Children.Add(editor);
-
-            view.BuildLayers();
-            MakeRoom([boards], [tour, commits],
-                [search, notes, boardBar, penBar, eraserBar, hints, islands, reviews, grep, prompt]);
 
             var window = new Window
             {
@@ -138,15 +58,20 @@ public sealed class App : Application
                 Width = 1400,
                 Height = 900,
                 Background = Brushes.Black,
-                Content = root,
             };
-
-            WireKeys(window, view);
+            var shell = new Shell(window, Path.Combine(Shell.DataDir(), "recent.json"));
 
             // now the framework is up, so the dispatcher is the real one,
             // and there is somewhere to say it out loud
             Crash.InstallOnUiThread(msg => Dispatcher.UIThread.Post(() =>
-                view.Toast($"something went wrong - {msg}")));
+                shell.Current?.Toast($"something went wrong - {msg}")));
+
+            // a folder on the command line opens it; without one, the welcome
+            // asks. It used to reopen whatever was scanned last, from a cache
+            var repo = RepoFrom(args.Skip(1));
+            var asked = args.Skip(1).FirstOrDefault(a => !a.StartsWith("--") && LooksLikePath(a));
+            shell.ShowWelcome(repo is null && asked is not null ? $"not a folder: {asked}" : null);
+            if (repo is not null) shell.Open(repo, args.Contains("--bench"), startCam, args.Contains("--stress"));
 
             desktop.MainWindow = window;
         }
@@ -220,7 +145,7 @@ public sealed class App : Application
     /// move over by exactly what a panel covers - and follow it as it is
     /// dragged wider. A centred dialog stays centred in what is left. Things
     /// used to sit wherever they were put and the panels slid over them.</summary>
-    public static void MakeRoom(Border[] left, Border[] right, Control[] others)
+    public static Action MakeRoom(Border[] left, Border[] right, Control[] others)
     {
         var own = others.ToDictionary(c => c, c => c.Margin);
         void Push()
@@ -238,19 +163,25 @@ public sealed class App : Application
         foreach (var p in left.Concat(right))
             p.PropertyChanged += (_, e) => { if (e.Property == Avalonia.Layout.Layoutable.WidthProperty) Push(); };
         Push();
+        // the event is static; a folder closed must stop answering it
+        return () => Reveal.Changed -= Push;
     }
 
     /// <summary>the keys the window takes before any control can: Escape,
     /// peeled off the layer stack, and Tab, the workspace. Public so a test
     /// can wire a window the way the app does.</summary>
-    public static void WireKeys(Window window, SceneView view)
+    public static void WireKeys(Window window, SceneView view) => WireKeys(window, () => view);
+
+    /// <summary>the same, for whichever view is current: the shell swaps views
+    /// when another folder opens, and wires the window once.</summary>
+    public static void WireKeys(Window window, Func<SceneView?> current)
     {
         // tunnel, so the window sees Escape on the way *down* to whatever
         // holds focus. A dialog that owns the key can only handle it while
         // it owns focus, and that is exactly how dialogs got stranded
         window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
         {
-            if (e.Key != Key.Escape) return;
+            if (e.Key != Key.Escape || current() is not { } view) return;
             if (view.Escape()) e.Handled = true;
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
 
@@ -261,65 +192,12 @@ public sealed class App : Application
         window.AddHandler(InputElement.KeyDownEvent, (_, e) =>
         {
             if (e.Key != Key.Tab || e.KeyModifiers != KeyModifiers.None) return;
-            if (window.FocusManager?.GetFocusedElement() is TextBox) return;
+            if (window.FocusManager?.GetFocusedElement() is TextBox || current() is not { } view) return;
             view.ToggleWorkspace();
             e.Handled = true;
         }, RoutingStrategies.Tunnel);
     }
 
-    static Scan LoadScan(string[] args)
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !Directory.Exists(Path.Combine(dir.FullName, "data")) &&
-               !Directory.EnumerateFiles(dir.FullName, "Atlas.sln*").Any())
-            dir = dir.Parent;
-        var cache = Path.Combine(dir?.FullName ?? ".", "data", "scan.json");
-
-        // first non-flag argument is a repo to scan; otherwise reuse the last scan
-        var repo = RepoFrom(args.Skip(1));
-        if (repo is null && args.Skip(1).FirstOrDefault(a => !a.StartsWith("--") && LooksLikePath(a)) is { } asked)
-            Console.WriteLine($"not a folder: {asked} - opening the last scan instead");
-        if (repo is not null)
-        {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            using var ignore = GitIgnore.For(repo);
-            var fresh = Scanner.Build(repo, new ScanOptions
-            {
-                Ignored = ignore is null ? null : ignore.Ignored,
-            });
-            Scanner.Save(fresh, cache);
-            Console.WriteLine($"scanned {fresh.Files.Count} files, {fresh.Folders.Count} folders " +
-                              $"in {sw.ElapsedMilliseconds}ms -> {cache}");
-            if (fresh.Skipped > 0)
-                Console.WriteLine($"{fresh.Skipped} skipped as binary or too large. " +
-                                  "'.' shows build output and dotfiles too.");
-            return fresh;
-        }
-        // the cache records the folder it scanned, which is the one thing in it
-        // that belongs to this machine. with no cache, or one written on
-        // another machine, fall back to Atlas itself rather than failing
-        if (File.Exists(cache))
-        {
-            using var fs = File.OpenRead(cache);
-            var cached = JsonSerializer.Deserialize<Scan>(fs)!;
-
-            // a cache written by an older Atlas can deserialise into something
-            // shaped right and empty - folders were called districts once -
-            // and a map with files but nowhere to put them draws nothing
-            if (cached.Files.Count > 0 && cached.Folders.Count == 0)
-                Console.WriteLine("the cached scan is from an older Atlas; rescanning.");
-            else if (Directory.Exists(cached.Root))
-                return cached;
-            else
-                Console.WriteLine($"the cached scan points at {cached.Root}, which is not here.");
-        }
-
-        var self = dir?.FullName ?? ".";
-        Console.WriteLine($"no scan yet: reading {self}. pass a folder to open a different repo.");
-        var own = Scanner.Build(self);
-        Scanner.Save(own, cache);
-        return own;
-    }
 }
 
 public sealed class SceneView : Control
@@ -2656,12 +2534,26 @@ public sealed class SceneView : Control
     public void WatchBoards()
     {
         if (_boardStore is null) return;
+        var atlas = Path.GetDirectoryName(_boardStore.Dir)!;
         try
         {
-            // a repo with no boards yet has no folder to watch, and the
-            // first board may well come from outside
-            Directory.CreateDirectory(_boardStore.Dir);
-            _boardWatch = new FileSystemWatcher(Path.GetDirectoryName(_boardStore.Dir)!)
+            // a folder with no .atlas yet has nothing to watch, and the first
+            // board may well come from outside - so watch for .atlas to
+            // appear, and watch it once it has. It used to be created here,
+            // which put an .atlas into any folder that was merely opened
+            if (!Directory.Exists(atlas))
+            {
+                _boardWatch = new FileSystemWatcher(Path.GetDirectoryName(atlas)!, ".atlas");
+                _boardWatch.Created += (_, _) => Dispatcher.UIThread.Post(() =>
+                {
+                    _boardWatch?.Dispose();
+                    WatchBoards();
+                    ScheduleReload();
+                });
+                _boardWatch.EnableRaisingEvents = true;
+                return;
+            }
+            _boardWatch = new FileSystemWatcher(atlas)
             {
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
@@ -2743,6 +2635,19 @@ public sealed class SceneView : Control
         if (Where(b) == before) return false;
         _boardStore?.Save(b);
         return true;
+    }
+
+    /// <summary>let go of what outlives the window: the watchers on the
+    /// folder and its boards, and the git handle. The shell calls this when
+    /// another folder opens in its place.</summary>
+    public void Close()
+    {
+        _repoWatch?.Dispose();
+        _repoWatch = null;
+        _boardWatch?.Dispose();
+        _boardWatch = null;
+        _git?.Dispose();
+        _git = null;
     }
 
     /// <summary>go to the map - Home - from whatever board is open,

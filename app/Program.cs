@@ -1964,8 +1964,7 @@ public sealed class SceneView : Control
     {
         if (_git is null || _target is null) return;
         if (index == _commitAt) return;
-        _commitAt = Math.Clamp(index, -1, _prCommits.Count - 1);
-        ShowChanges(_commitAt < 0 ? _git.Whole(_target) : _git.OfCommit(_prCommits[_commitAt]));
+        ShowCommit(Math.Clamp(index, -1, _prCommits.Count - 1));
     }
 
     void OpenReviewPanel(bool branches)
@@ -2083,6 +2082,8 @@ public sealed class SceneView : Control
                     _target = target;
                     _prCommits = commits;
                     _commitAt = -1;
+                    _whole = whole;
+                    ++_stepping;
                     if (tree is { } t) _scene.ShowSnapshot(t.Data, path => t.Text.GetValueOrDefault(path), t.Splices);
                     _commitsPanel?.Show(target.Label, _prCommits);
                     ShowChanges(whole);
@@ -2141,8 +2142,38 @@ public sealed class SceneView : Control
         if (_git is null || _target is null || _prCommits.Count == 0) return;
         int next = Math.Clamp(_commitAt + by, -1, _prCommits.Count - 1);
         if (next == _commitAt) return;
-        _commitAt = next;
-        ShowChanges(next < 0 ? _git.Whole(_target) : _git.OfCommit(_prCommits[next]));
+        ShowCommit(next);
+    }
+
+    /// <summary>the whole change of the target that is open, as read when it
+    /// was opened. Stepping back to it is the slowest diff there is - every
+    /// commit at once - and it was worked out again on every visit.</summary>
+    ChangeSet? _whole;
+
+    int _stepping;
+
+    /// <summary>show one commit, or the whole change for -1. One commit's
+    /// diff is read off the UI thread; holding a key down steps faster than
+    /// git answers, so a step overtaken before it starts does no work and
+    /// one that lands late is dropped - only the last one shows.</summary>
+    void ShowCommit(int at)
+    {
+        if (_git is null || _target is null) return;
+        _commitAt = at;
+        int turn = ++_stepping;
+        if (at < 0 && _whole is not null) { ShowChanges(_whole); return; }
+
+        var git = _git;
+        var target = _target;
+        var commit = at >= 0 ? _prCommits[at] : null;
+        Task.Run(() => Volatile.Read(ref _stepping) != turn ? null
+                : commit is null ? git.Whole(target) : git.OfCommit(commit))
+            .ContinueWith(t => Dispatcher.UIThread.Post(() =>
+            {
+                if (turn != _stepping || _target != target) return;
+                if (t.IsFaulted) { Toast($"could not read that commit: {t.Exception?.GetBaseException().Message}"); return; }
+                ShowChanges(t.Result);
+            }));
     }
 
     void ShowChanges(ChangeSet? set)
@@ -2184,6 +2215,7 @@ public sealed class SceneView : Control
         _commitsPanel?.Close();
         RefreshHints();
         _target = null;
+        _whole = null;
         _prCommits = [];
         _commitAt = -1;
         _caption = "";
@@ -2729,13 +2761,15 @@ public sealed class SceneView : Control
         _reading = true;
         var git = _git;
         var target = _target;
-        var commit = _commitAt >= 0 ? _prCommits[_commitAt] : null;
+        int at = _commitAt;
+        var commit = at >= 0 ? _prCommits[at] : null;
+        var cached = _whole;
         var opts = _scanOptions;
         bool removed = _showRemoved;
         var root = _scene.Data.Root;
         Task.Run(() =>
         {
-            var whole = git.Whole(target);
+            var whole = cached ?? git.Whole(target);
             return (Tree: BuildTree(git, target, whole, opts, removed, root), Set: commit is null ? whole : git.OfCommit(commit));
         }).ContinueWith(t => Dispatcher.UIThread.Post(() =>
         {
@@ -2747,7 +2781,9 @@ public sealed class SceneView : Control
             // seen another way
             float x = _scene.CamX, y = _scene.CamY, s = _scene.CamS;
             if (t.Result.Tree is { } tree) _scene.ShowSnapshot(tree.Data, path => tree.Text.GetValueOrDefault(path), tree.Splices);
-            ShowChanges(t.Result.Set);
+            // stepped to another commit while this was reading: show that one
+            if (at == _commitAt) ShowChanges(t.Result.Set);
+            else ShowCommit(_commitAt);
             if (_scene.BoardReadOnly) RebuildChangeBoard(frame: false);
             else (_scene.CamX, _scene.CamY, _scene.CamS) = (x, y, s);
             Toast(_showRemoved ? "removed lines shown" : "removed lines hidden");

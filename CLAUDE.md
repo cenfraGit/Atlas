@@ -437,8 +437,10 @@ covered by `AnchorTests` and works.
       refused while a read is still under way (`_reading`) so it cannot
       land the other setting; the review panel opens at once and fills in
       when its list has been read.
-- [ ] Stepping commits (`[`, `]`) still diffs on the UI thread. One commit
-      is usually quick; the whole change (`-1`) can be slow on a big one.
+- [x] Stepping commits reads one commit's diff off the UI thread
+      (`ShowCommit`), and the whole change is kept from when the target was
+      opened (`_whole`) rather than diffed again on every visit. A step
+      overtaken before it starts does no work; a late one is dropped.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
       is of what is there now. The change view shows it now, as its old
       text; the map still has nowhere to put it - probably at the folder

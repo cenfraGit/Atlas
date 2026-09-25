@@ -121,6 +121,55 @@ public class ReviewLoadTests
         Assert.True(Until(() => list.ItemCount > 0), "the branches never arrived");
     }
 
+    /// <summary>stepping to a commit reads its diff off the UI thread, and
+    /// stepping back to the whole change is instant: it was read when the
+    /// target opened and is kept, where it used to be diffed again.</summary>
+    [AvaloniaFact]
+    public void SteppingReadsInTheBackgroundAndTheWholeChangeIsKept()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        var pr = review.MergedPrs().Single();
+        var commits = review.CommitsOf(pr);
+        view.OpenTarget(pr);
+        Assert.True(Until(() => scene.Review is not null));
+        var whole = Paths(scene.Review!);
+
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        var first = Paths(review.OfCommit(commits[0])!);
+        Assert.True(Until(() => Paths(scene.Review!) == first), "the commit never showed");
+
+        view.HandleKey(Avalonia.Input.Key.OemOpenBrackets);
+        Assert.Equal(whole, Paths(scene.Review!));      // no waiting: it was kept
+    }
+
+    /// <summary>held down, the key steps faster than git answers; whatever
+    /// lands late is dropped, and the last step is what shows.</summary>
+    [AvaloniaFact]
+    public void FastSteppingEndsOnTheLastStep()
+    {
+        using var git = new GitFixture();
+        var (view, scene) = Open(git);
+        using var review = GitReview.Open(git.Path)!;
+        var pr = review.MergedPrs().Single();
+        var commits = review.CommitsOf(pr);
+        view.OpenTarget(pr);
+        Assert.True(Until(() => scene.Review is not null));
+
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);    // 0
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);    // 1
+        view.HandleKey(Avalonia.Input.Key.OemOpenBrackets);     // 0
+
+        var want = Paths(review.OfCommit(commits[0])!);
+        Assert.True(Until(() => Paths(scene.Review!) == want));
+        var deadline = DateTime.UtcNow.AddSeconds(1);
+        while (DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+        Assert.Equal(want, Paths(scene.Review!));
+    }
+
+    static string Paths(ChangeSet set) => string.Join(",", set.Files.Select(f => f.Path).Order());
+
     /// <summary>picking a second target before the first has arrived shows
     /// the second: the first one's result is thrown away when it lands.</summary>
     [AvaloniaFact]

@@ -203,7 +203,7 @@ your team gets everything you wrote.
 | `Ctrl+F` | search what the files say; `Alt+R` regex, `Alt+W` whole word, `Enter`/`F3` next, `Shift` back |
 | `P` | pull requests |
 | `G` | branches ahead of the base |
-| `E` | edit on or off |
+| `E` | edit on or off - on a board, the top right shows edit and snap side by side, under wheel-zoom |
 | `S` | wheel zooms, or wheel scrolls |
 | `ctrl+Z` / `ctrl+Y` | undo / redo on a board |
 | `Y` | draw an arrow on a board |

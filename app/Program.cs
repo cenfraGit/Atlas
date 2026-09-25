@@ -106,8 +106,9 @@ public sealed class App : Application
             var islands = new ModeIslands();
             islands.EditChanged += view.SetEditing;
             islands.ZoomChanged += view.SetWheelZoom;
-            view.MouseModeChanged += () => islands.Reflect(view.Editing, view.WheelZoom);
-            islands.Reflect(view.Editing, view.WheelZoom);
+            islands.SnapChanged += view.SetSnap;
+            view.MouseModeChanged += () => islands.Reflect(view.Editing, view.WheelZoom, view.SnapToGrid, view.OnEditableBoard);
+            islands.Reflect(view.Editing, view.WheelZoom, view.SnapToGrid, view.OnEditableBoard);
 
             var root = new Grid();
             root.Children.Add(view);
@@ -1734,11 +1735,7 @@ public sealed class SceneView : Control
     {
         _boardBar = bar;
         bar.Add += AddOfKind;
-        bar.ToggleSnap += () =>
-        {
-            SnapToGrid = !SnapToGrid;
-            _boardBar?.Reflect(_scene.ActiveBoard is not null && Editing, SnapToGrid);
-        };
+        bar.ToggleSnap += () => SetSnap(!SnapToGrid);
     }
 
     BackButton? _back;
@@ -1773,8 +1770,23 @@ public sealed class SceneView : Control
         bar.WeightStepped += by => { StepWeight(by); Focus(); };
     }
 
+    /// <summary>snap to the grid on or off, from the key, the edit bar or the
+    /// island - all of which show it.</summary>
+    public void SetSnap(bool on)
+    {
+        SnapToGrid = on;
+        RefreshBoardBar();
+    }
+
+    /// <summary>a board that can be edited is open - not the map, and not the
+    /// generated change view.</summary>
+    public bool OnEditableBoard => _scene.ActiveBoard is not null && !_scene.BoardReadOnly;
+
     void RefreshBoardBar()
     {
+        // the islands show edit and snap only on a board, so they follow
+        // every change that comes through here
+        MouseModeChanged?.Invoke();
         bool editing = _scene.ActiveBoard is not null && Editing;
         _boardBar?.Reflect(editing, SnapToGrid,
             _armShape ?? (_armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null));
@@ -4394,8 +4406,7 @@ public sealed class SceneView : Control
                 case Key.D3: AddShape("diamond"); return;
                 case Key.D4: AddLabel(); return;
                 case Key.G:
-                    SnapToGrid = !SnapToGrid;
-                    RefreshBoardBar();
+                    SetSnap(!SnapToGrid);
                     Toast(SnapToGrid ? "snap on" : "snap off");
                     return;
                 case Key.C when _ctrl: CopyPicked(PickedItems()); return;

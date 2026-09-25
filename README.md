@@ -215,7 +215,7 @@ your team gets everything you wrote.
 | `X` | eraser on a board |
 | `shift+X` | eraser takes a whole stroke, or bites a hole in one |
 | `[` `]` (board) | pen thickness |
-| `G` (board) | snap to grid on or off |
+| `G` (board) | snap to grid on or off, for moving and resizing alike |
 | Delete (board) | remove what is picked |
 | `1` `2` `3` | rectangle, ellipse, diamond on a board |
 | `4` | label on a board |
@@ -467,7 +467,7 @@ Edit mode on a board behaves like a canvas app. A drag on empty space sweeps a
 rubberband that fades out when released. The band owns its result: shrink it
 back off something and that something is let go again, while ctrl or shift
 keeps whatever was already picked before the drag started. Everything picked moves together, snaps to the grid live as you drag rather
-than jumping at the end, and each one carries a grip at its lower right that resizes
+than jumping at the end - resizing too, so edges line up as well as corners, and each one carries a grip at its lower right that resizes
 the **box** without touching the font. Hold space to pan without leaving edit
 mode. A grid shows while editing and disappears in pan mode.
 

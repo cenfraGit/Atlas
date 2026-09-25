@@ -4032,6 +4032,14 @@ public sealed class SceneView : Control
         {
             Mutating();
             var (rx, ry) = WorldAt(p);
+            // the edge being dragged snaps as a move does, so boxes can be
+            // lined up by their sides and not only by where they start. Not a
+            // file window: its walls crop whole lines, and a grid would fight
+            if (SnapToGrid && _resizing.Kind != "file")
+            {
+                float cell = _scene.SnapStep(GridStep);
+                (rx, ry) = (MathF.Round(rx / cell) * cell, MathF.Round(ry / cell) * cell);
+            }
             float ratio = _scene.LastHeight(_resizing) / Math.Max(1, _resizing.W);
 
             if (_resizeEdge >= 0)

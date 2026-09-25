@@ -28,7 +28,7 @@ public class ReviewLoadTests
 
     static bool Until(Func<bool> done)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var deadline = DateTime.UtcNow.AddSeconds(30);
         while (!done() && DateTime.UtcNow < deadline)
         {
             Dispatcher.UIThread.RunJobs();

@@ -9,7 +9,13 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- the exe's own icon, in explorer and on a pinned taskbar button -->
+    <ApplicationIcon>atlas.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- and the window's, top left and in the taskbar while it runs -->
+    <AvaloniaResource Include="atlas.ico" />
+  </ItemGroup>
   <ItemGroup>
     <!-- so a test can reach a hook like InlineEditor.SetTextForTest without
          it having to be public on a type the app exposes -->

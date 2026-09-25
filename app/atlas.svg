@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Atlas: a folded map whose panels are ruled like code. atlas.ico is
+       rendered from this; edit here and regenerate (see CLAUDE.md) -->
+  <rect width="256" height="256" rx="56" fill="#0a1220"/>
+  <path d="M40 60 L96 44 L160 60 L216 44 L216 196 L160 212 L96 196 L40 212 Z" fill="#13213a"/>
+  <path d="M96 44 L96 196 M160 60 L160 212" stroke="#0a1220" stroke-width="6"/>
+  <path d="M40 60 L96 44 L160 60 L216 44 L216 196 L160 212 L96 196 L40 212 Z" fill="none" stroke="#5fd3f3" stroke-width="8" stroke-linejoin="round"/>
+  <g stroke-linecap="round" stroke-width="8">
+    <line x1="54" y1="92" x2="82" y2="86" stroke="#ffd166"/>
+    <line x1="54" y1="114" x2="76" y2="109" stroke="#5fd3f3" stroke-opacity=".8"/>
+    <line x1="54" y1="136" x2="84" y2="130" stroke="#5fd3f3" stroke-opacity=".8"/>
+    <line x1="110" y1="88" x2="146" y2="96" stroke="#b48ae8" stroke-opacity=".9"/>
+    <line x1="110" y1="110" x2="136" y2="116" stroke="#5fd3f3" stroke-opacity=".8"/>
+    <line x1="110" y1="132" x2="148" y2="140" stroke="#3fb96a" stroke-opacity=".9"/>
+    <line x1="174" y1="96" x2="202" y2="88" stroke="#5fd3f3" stroke-opacity=".8"/>
+    <line x1="174" y1="118" x2="196" y2="112" stroke="#ffd166"/>
+  </g>
+</svg>

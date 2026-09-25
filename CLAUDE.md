@@ -615,6 +615,15 @@ Git Bash, a Windows path loses every backslash (`C:UsersmeRepo`);
 `App.Unmangled` walks down from the drive to put them back, and takes the
 answer only when exactly one folder fits.
 
+The icon is `app/atlas.svg`, a folded map ruled like code; `app/atlas.ico`
+is rendered from it and is both the exe's icon (`ApplicationIcon`) and the
+window's (an `AvaloniaResource`). To change it, edit the SVG, render it at
+1024px with a transparent background (headless Edge:
+`msedge --headless=new --force-device-scale-factor=4 --window-size=256,256
+--default-background-color=00000000 --screenshot=out.png file:///.../atlas.svg`)
+and pack 256, 128, 64, 48, 32 and 16 into the .ico (Pillow:
+`img.save("atlas.ico", sizes=[(s, s) for s in ...])`).
+
 C# / .NET 10, Avalonia for the window and input, SkiaSharp for the canvas,
 TextMate grammars for highlighting, Roslyn for symbols, LibGit2Sharp for git.
 No other toolchain - clone and run.

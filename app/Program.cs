@@ -58,6 +58,7 @@ public sealed class App : Application
                 Width = 1400,
                 Height = 900,
                 Background = Brushes.Black,
+                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Atlas/atlas.ico"))),
             };
             var shell = new Shell(window, Path.Combine(Shell.DataDir(), "recent.json"));
 

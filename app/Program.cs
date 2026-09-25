@@ -422,6 +422,10 @@ public sealed class SceneView : Control
 
         if (EditingItem() is not null) QueuePlaceEditor();
 
+        // where the tour's stops are, while its panel is open - not while
+        // one is playing, when the frames would fly past on every step
+        _scene.StopsShown = Reveal.Showing(_stops) && _tour is null && !_scene.BoardReadOnly;
+        _scene.StopPicked = _stops?.Selected ?? -1;
         context.Custom(new SceneOp(new Rect(0, 0, w, h), _scene, w, h));
         if (_scene.Samples.Count > 0)
         {
@@ -3147,6 +3151,7 @@ public sealed class SceneView : Control
         panel.Play += PlayTour;
         panel.Capture += CaptureStop;
         panel.RenameRequested += RenameStop;
+        panel.Selecting += InvalidateVisual;
         panel.Changed += () =>
         {
             if (_scene.ActiveBoard is not { } b) return;
@@ -3161,6 +3166,8 @@ public sealed class SceneView : Control
         if (Reveal.Showing(_stops)) _stops.Close();
         else _stops.Show(b);
         Focus();
+        // the stop frames come and go with the panel
+        InvalidateVisual();
     }
 
     /// <summary>how much of the right of the canvas the tour panel covers.

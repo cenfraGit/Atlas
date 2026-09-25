@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json.Serialization;
 using SkiaSharp;
 
@@ -2281,10 +2282,48 @@ public sealed class Scene : IDisposable
         DrawShapeDraft(canvas);
         DrawAnchors(canvas, board);
         DrawArrows(canvas, board);
+        DrawStopFrames(canvas, board);
         DrawPickedItems(canvas, board);
         DrawRubberband(canvas);
 
         canvas.Restore();
+    }
+
+    /// <summary>whether to show where each tour stop is. Set by the view
+    /// while the tour panel is open: the list said "stop 4" and nothing on
+    /// the board said which region that was.</summary>
+    public bool StopsShown;
+
+    /// <summary>the stop selected in the panel, drawn brighter than the rest.</summary>
+    public int StopPicked = -1;
+
+    /// <summary>a faint dashed frame round each stop's region, numbered in
+    /// its corner. Screen sized, so a frame reads the same at any zoom.</summary>
+    void DrawStopFrames(SKCanvas canvas, Board board)
+    {
+        if (!StopsShown || board.Stops.Count == 0) return;
+        float px = 1f / CamS;
+        using var edge = new SKPaint
+        {
+            IsStroke = true, StrokeWidth = 1.2f * px, IsAntialias = true,
+            PathEffect = SKPathEffect.CreateDash([6 * px, 5 * px], 0),
+        };
+        using var chip = new SKPaint { IsAntialias = true };
+        using var number = new SKPaint { Typeface = _mono, TextSize = 12 * px, IsAntialias = true, Color = BoardBg };
+        for (int i = 0; i < board.Stops.Count; i++)
+        {
+            var s = board.Stops[i];
+            var colour = i == StopPicked ? new SKColor(0x5f, 0xd3, 0xf3, 230) : new SKColor(0x8a, 0xa0, 0xb0, 110);
+            edge.Color = colour;
+            var r = new SKRect(s.X - s.W / 2, s.Y - s.H / 2, s.X + s.W / 2, s.Y + s.H / 2);
+            canvas.DrawRect(r, edge);
+
+            var label = (i + 1).ToString(CultureInfo.InvariantCulture);
+            TextMeasures++;
+            chip.Color = colour;
+            canvas.DrawRect(r.Left, r.Top, number.MeasureText(label) + 8 * px, 16 * px, chip);
+            canvas.DrawText(label, r.Left + 4 * px, r.Top + 12 * px, number);
+        }
     }
 
     /// <summary>lines a change deleted, drawn between the windows either side

@@ -32,6 +32,9 @@ public sealed class TourPanel : Border
     public event Action<int>? RenameRequested;
     public event Action? Changed;
 
+    /// <summary>the selected row moved, so the board's frames need redrawing.</summary>
+    public event Action? Selecting;
+
     public TourPanel()
     {
         Reveal.Attach(this, Reveal.Edge.Right);
@@ -66,6 +69,7 @@ public sealed class TourPanel : Border
             ItemsPanel = new Avalonia.Controls.Templates.FuncTemplate<Panel?>(() => new StackPanel()),
         };
         _list.DoubleTapped += (_, _) => { if (Selected >= 0) Play?.Invoke(Selected); };
+        _list.SelectionChanged += (_, _) => Selecting?.Invoke();
         _list.AddHandler(PointerPressedEvent, OnPressed, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _list.AddHandler(PointerMovedEvent, OnMoved, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _list.AddHandler(PointerReleasedEvent, OnReleased, Avalonia.Interactivity.RoutingStrategies.Tunnel);

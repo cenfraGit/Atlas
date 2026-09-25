@@ -206,9 +206,9 @@ stops.
 - [x] Map bookmarks and tours are gone, with `bookmarks.json`. What survived
       is `Places` - framing a range of lines - which search, annotations
       and "add this view" use. Ids come from `BoardStore.NewId`.
-- [ ] Nothing on a board yet shows where its stops are. A faint numbered
-      frame per stop while the panel is open would make the list readable
-      at a glance.
+- [x] A faint dashed frame per stop, numbered, while the tour panel is open
+      (`Scene.StopsShown`); the selected stop is brighter. Hidden while a
+      tour plays. `atlas board render --stops` draws them too.
 
 ### Boards panel
 

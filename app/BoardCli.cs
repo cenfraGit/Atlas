@@ -33,8 +33,9 @@ public static class BoardCli
         board
           new [--group G] [--replace]        make the board (--replace empties an existing one)
           show                               outline: every item, where it is, warnings
-          render out.png [--stop N | --frame a,b] [--px 1600]
-                                             draw the board (or one stop) to an image - look at it
+          render out.png [--stop N | --frame a,b] [--px 1600] [--stops]
+                                             draw the board (or one stop) to an image - look at it.
+                                             --stops outlines every tour stop, numbered
 
         items - every item has an id you choose; later commands refer to it
           window <id> <file> [<symbol>] [--lines 40-72] [--width 620] [--title "..."]
@@ -292,7 +293,7 @@ public static class BoardCli
             {
                 if (!list[i].StartsWith("--") || list[i].Length == 2) { pos.Add(list[i]); continue; }
                 var key = list[i][2..];
-                if (key is "replace") { opt[key] = ""; continue; }
+                if (key is "replace" or "stops") { opt[key] = ""; continue; }
                 if (i + 1 >= list.Count) throw new CliError($"--{key} needs a value");
                 opt[key] = list[++i];
             }
@@ -442,6 +443,7 @@ public static class BoardCli
             scene.CamS = Math.Min(px / region.Width, py / region.Height);
             scene.CamX = region.MidX;
             scene.CamY = region.MidY;
+            scene.StopsShown = opt.ContainsKey("stops");
 
             using var bmp = new SKBitmap(px, py);
             using var canvas = new SKCanvas(bmp);

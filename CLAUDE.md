@@ -23,6 +23,13 @@ co-author:
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
 
+**The README moves with the feature.** Anything a user can see or type -
+a key, a command, a behaviour - goes into `README.md` in the same commit
+that lands it, and anything it says that stops being true comes out. It
+fell behind for a whole run of features once, still describing a change view
+and a "not built yet" list from weeks before; the TODO list here is not a
+substitute, because nobody reading the README sees it.
+
 **Pull before you start.** Another session works on this repo and pushes to
 the same branch, so the working tree is not where you left it. `git fetch`
 and `git pull --ff-only` first, then **read the new commits** - the messages

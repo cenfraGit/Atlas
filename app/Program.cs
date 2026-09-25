@@ -80,6 +80,7 @@ public sealed class App : Application
             var boards = new BoardOverlay(boardStore);
             view.AttachBoards(boardStore, boards);
             view.WatchBoards();
+            view.WatchRepo();
 
             var hints = new HintBar();
             view.AttachHints(hints);
@@ -613,6 +614,130 @@ public sealed class SceneView : Control
                 InvalidateVisual();
             });
         });
+    }
+
+    FileSystemWatcher? _repoWatch;
+    readonly HashSet<string> _touched = [];
+    int _rescanAsk;
+    bool _rescanning;
+
+    /// <summary>rescan when files change on disk. The scan was taken once, so
+    /// a file that grew had a stale card height on the map and a stale line
+    /// count everywhere that had not read it, and a new file never appeared.
+    ///
+    /// Only paths the scanner would include count - a build writing into
+    /// bin/ is not a reason to rescan - and a burst of changes is one rescan,
+    /// a second after the last of them.</summary>
+    public void WatchRepo()
+    {
+        var root = _scene.Data.Root;
+        try
+        {
+            _repoWatch = new FileSystemWatcher(root)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                               NotifyFilters.LastWrite | NotifyFilters.Size,
+                InternalBufferSize = 64 * 1024,
+            };
+            // a folder is "changed" whenever anything in it is, which is the
+            // file's event over again - and a folder path in the list means
+            // every cached text is dropped. Its renames still count
+            _repoWatch.Changed += (_, e) => { if (!Directory.Exists(e.FullPath)) Touched(root, e.FullPath); };
+            _repoWatch.Created += (_, e) => Touched(root, e.FullPath);
+            _repoWatch.Deleted += (_, e) => Touched(root, e.FullPath);
+            _repoWatch.Renamed += (_, e) => { Touched(root, e.OldFullPath); Touched(root, e.FullPath); };
+            // the buffer overflowed: something changed, and nobody knows what
+            _repoWatch.Error += (_, _) => Touched(root, null);
+            _repoWatch.EnableRaisingEvents = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"not watching {root}: {ex.Message}");
+        }
+    }
+
+    /// <summary>on a pool thread: note the path and ask for a rescan soon.</summary>
+    void Touched(string root, string? full)
+    {
+        string rel = "*";
+        if (full is not null)
+        {
+            rel = Path.GetRelativePath(root, full).Replace('\\', '/');
+            if (!Scanner.Wanted(rel, _scanOptions)) return;
+        }
+        lock (_touched) _touched.Add(rel);
+        ScheduleRescan(1000);
+    }
+
+    void ScheduleRescan(int ms)
+    {
+        int ask = Interlocked.Increment(ref _rescanAsk);
+        Task.Delay(ms).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+        {
+            if (ask == _rescanAsk) Rescan();
+        }));
+    }
+
+    /// <summary>scan again, off the UI thread, and put it on screen without
+    /// moving the camera. Waits out a drag, a scan already running, and a
+    /// commit being reviewed - that is a tree from history, not the working
+    /// copy - by asking again a little later.</summary>
+    public void Rescan()
+    {
+        if (_drag || _rescanning || _scene.OnSnapshot) { ScheduleRescan(2000); return; }
+        string[] touched;
+        lock (_touched) { touched = [.. _touched]; _touched.Clear(); }
+        if (touched.Length == 0) return;
+
+        _rescanning = true;
+        var root = _scene.Data.Root;
+        var opts = _scanOptions;
+        Task.Run(() =>
+        {
+            Scan fresh;
+            try
+            {
+                using var ignore = GitIgnore.For(root);
+                fresh = Scanner.Build(root, opts with { Ignored = ignore is null ? null : ignore.Ignored });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"rescan failed: {ex.Message}");
+                Dispatcher.UIThread.Post(() => _rescanning = false);
+                return;
+            }
+            Dispatcher.UIThread.Post(() => TakeRescan(fresh, touched));
+        });
+    }
+
+    void TakeRescan(Scan fresh, string[] touched)
+    {
+        _rescanning = false;
+        if (_scene.OnSnapshot || _drag)
+        {
+            lock (_touched) foreach (var p in touched) _touched.Add(p);
+            ScheduleRescan(2000);
+            return;
+        }
+
+        // a path the watcher saw that is in neither scan was gitignored, which
+        // the watcher cannot ask about from its thread - nothing to show
+        var paths = fresh.Files.Select(f => f.P).Concat(_scene.Data.Files.Select(f => f.P)).ToList();
+        bool whole = touched.Contains("*");
+        bool relevant = whole || touched.Any(t => paths.Any(p => p == t || p.StartsWith(t + "/", StringComparison.Ordinal)));
+        if (!relevant) return;
+
+        foreach (var t in touched) Symbols.Forget(Path.Combine(fresh.Root, t.Replace('/', Path.DirectorySeparatorChar)));
+        // a folder that moved takes files with it, and the paths the watcher
+        // named are the folder's: drop every cached text rather than guess
+        bool folders = touched.Any(t => !paths.Contains(t));
+        _scene.ShowScan(fresh, whole || folders ? null : touched);
+
+        // the open board's windows follow their code, as they do on opening it
+        if (_scene.ActiveBoard is { } b && !_scene.BoardReadOnly && _scene.AnchorBoard(b))
+            _boardStore?.Save(b);
+        InvalidateVisual();
     }
 
     static string Describe(Scan scan)

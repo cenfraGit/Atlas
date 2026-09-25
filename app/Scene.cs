@@ -67,7 +67,8 @@ public sealed record ScanOptions(bool ShowHidden = false)
 /// <summary>same level-of-detail rules and colours as the web prototype.</summary>
 public sealed class Scene : IDisposable
 {
-    const float T_CARD = 0.055f, T_BARS = 0.45f, T_TEXT = 1.9f;
+    const float T_CARD = 0.055f, T_BARS = 0.45f;
+    public const float T_TEXT = 1.9f;
 
     /// <summary>which level of detail a zoom falls in: 0 folders, 1 cards,
     /// 2 bars, 3 text. Pulled out of the draw loop so the thresholds can be
@@ -306,9 +307,14 @@ public sealed class Scene : IDisposable
     }
 
     /// <summary>swap the working-tree scan for another of the same repo, after
-    /// a rescan. Everything cached is keyed by file index or path, and both
-    /// have just changed, so all of it goes.</summary>
-    public void ShowScan(Scan data)
+    /// a rescan. Everything cached by file index goes, since the indices have
+    /// just changed.
+    ///
+    /// With <paramref name="changed"/> - the paths a file watcher saw change -
+    /// only those files' text is dropped. Dropping all of it on every save
+    /// made every card on screen fall back to bars for a frame while its text
+    /// was read again, which flickers the map for an edit to one file.</summary>
+    public void ShowScan(Scan data, IReadOnlyCollection<string>? changed = null)
     {
         if (OnSnapshot) return;     // a commit's tree is not ours to replace
         Data = data;
@@ -316,7 +322,18 @@ public sealed class Scene : IDisposable
         HoverLine = null;
         Highlight = null;
         PickedFiles.Clear();
-        DropCaches();
+        if (changed is null) DropCaches();
+        else
+        {
+            foreach (var p in changed)
+            {
+                _text.TryRemove(p, out _);
+                _runs.TryRemove(p, out _);
+                _counted.TryRemove(p, out _);
+                lock (_loading) _loading.Remove(p);
+            }
+            _anchored.Clear();
+        }
         Rebuild();
         EnsureAllAnchored();
     }

@@ -405,10 +405,14 @@ covered by `AnchorTests` and works.
       windows, or hangs off the bottom of one, follows only the line under
       that corner. Good enough for a mark on a method; wrong for a frame
       drawn round two of them.
-- [ ] The scan is never refreshed while Atlas is open, so a file that
-      grows has a stale card height on the map and a stale `N` everywhere
-      that has not read it. `LinesIn` papers over the case that mattered;
-      a rescan when a file changes is the real answer.
+- [x] The scan refreshes while Atlas is open (`SceneView.WatchRepo`): a
+      change to a path the scanner would include rescans a second after the
+      last one, off the UI thread, keeps the camera, drops only the changed
+      files' text, and moves the open board's windows onto their code. It
+      waits out a drag and a commit under review.
+- [ ] A rescan reads every file again. Fine for the repos it has met; if a
+      save starts to lag on a big one, reuse unchanged files' `FileRec`s
+      by size and write time.
 - [ ] Only shapes grow. A note over a method keeps its height, because a
       note's height is its words - which is right, but it means a note
       cannot be used to bracket something the way a rectangle can.
@@ -680,9 +684,10 @@ record from when the item was drawn, so reopening put the old size or the
 old end back. A new gesture that reshapes an item re-pins it when it is let
 go, or it has the same bug. Covered by `ResizeRepinTests`.
 
-**`FileRec.N` is the line count from the scan, and a scan is taken once.**
-Edit a file while Atlas is open - or open it on a repo another session is
-pushing to - and the scan is short. Clamping a window to that number showed
+**`FileRec.N` is the line count from the scan, and the scan can be a second
+behind.** It is retaken when files change (`WatchRepo`), but not instantly,
+and not at all while a commit is being reviewed. In that gap the scan is
+short. Clamping a window to that number showed
 part of the file and refused to be dragged further, which reads as a limit
 rather than as staleness. `Scene.LinesIn` prefers the loaded text, then the
 length last read, then the scan; `Scene.NoteLength` refreshes it once when a

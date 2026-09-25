@@ -471,6 +471,9 @@ public sealed class SceneView : Control
             _lastFrame = -1;   // next frame starts a new gesture, not a huge dt
     }
 
+    /// <summary>how tall the hint bar along the bottom is, near enough.</summary>
+    const double HintBarH = 30;
+
     void DrawHud(DrawingContext ctx)
     {
         var sorted = _ring.Where(v => v > 0).OrderBy(v => v).ToArray();
@@ -480,12 +483,23 @@ public sealed class SceneView : Control
         var line2 = $"{_scene.Data.Files.Count} files  {_scene.Data.Folders.Count} folders  " +
                     $"{_scene.VisibleCards} visible  {_scene.ChunksBuilt} built" +
                     (_scene.BuiltThisFrame > 0 ? $"  +{_scene.BuiltThisFrame}" : "");
-        // below the "map" button while it is up: both sat in the top left
-        // corner, one over the other, and neither could be read
-        int top = Reveal.Showing(_back) ? (int)_back!.Bounds.Bottom + 8 : 10;
-        Text(ctx, line1, 12, top, Color.FromRgb(0xff, 0xd1, 0x66));
-        Text(ctx, line2, 12, top + 16, Color.FromRgb(0x35, 0x70, 0x8f));
-        if (_benchText.Length > 0) Text(ctx, _benchText, 12, top + 36, Color.FromRgb(0x5f, 0xd3, 0xf3));
+        // bottom right, just above the hint bar, and under every panel since
+        // it is drawn by the canvas. It sat in the top left, where the "map"
+        // button and the boards panel both want to be
+        var lines = new List<(string Text, Color Colour)>
+        {
+            (line1, Color.FromRgb(0xff, 0xd1, 0x66)),
+            (line2, Color.FromRgb(0x35, 0x70, 0x8f)),
+        };
+        if (_benchText.Length > 0) lines.Add((_benchText, Color.FromRgb(0x5f, 0xd3, 0xf3)));
+        double y = Bounds.Height - HintBarH - 8 - lines.Count * 16;
+        foreach (var (text, colour) in lines)
+        {
+            var ft = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(Ui.Mono), 12, new SolidColorBrush(colour));
+            ctx.DrawText(ft, new Point(Bounds.Width - 12 - ft.Width, y));
+            y += 16;
+        }
         DrawCaption(ctx);
     }
 
@@ -1334,13 +1348,6 @@ public sealed class SceneView : Control
         double y = Bounds.Height - 78;
         var pad = 14.0;
         ctx.FillRectangle(Ui.PanelBg, new Rect(x - pad, y - 8, ft.Width + pad * 2, ft.Height + 16));
-        ctx.DrawText(ft, new Point(x, y));
-    }
-
-    void Text(DrawingContext ctx, string s, int x, int y, Color c)
-    {
-        var ft = new FormattedText(s, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface(Ui.Mono), 12, new SolidColorBrush(c));
         ctx.DrawText(ft, new Point(x, y));
     }
 

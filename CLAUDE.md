@@ -394,8 +394,8 @@ covered by `AnchorTests` and works.
       file does not, and anything that records a line number there is
       counting rows. Annotating is not offered in review mode today; if it
       is, it wants the unspliced line.
-- [x] The debug readout sat under the "map" button on a board; it moves
-      below the button while the button is up.
+- [x] The debug readout sits bottom right, above the hint bar and under
+      every panel; top left it fought the "map" button and the workspace.
 - [x] The gathered view rebuilds whenever the change set does. Picking a
       commit in the panel used to leave the previous commit's windows up,
       so only the files both commits happened to touch appeared to change.

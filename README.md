@@ -193,7 +193,8 @@ your team gets everything you wrote.
 | drag / wheel | pan and zoom |
 | shift+wheel | pan sideways |
 | click a file | fly to it |
-| `/` or `Ctrl+F` | search; arrows pick, Enter flies |
+| `/` | search file names; arrows pick, Enter flies |
+| `Ctrl+F` | search what the files say; `Alt+R` regex, `Alt+W` whole word, `Enter`/`F3` next, `Shift` back |
 | `P` | pull requests |
 | `G` | branches ahead of the base |
 | `E` | edit on or off |

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Atlas;
 
 /// <summary>one line of one file that contains what was searched for.</summary>
@@ -32,16 +34,50 @@ public static class Grep
     /// are one line of forty thousand characters.</summary>
     const int MaxPreview = 400;
 
+    /// <summary>what a query matches: the text as typed, or a regular
+    /// expression, either of them optionally as a whole word, and always
+    /// ignoring case. Null for nothing to search for - an empty query, or a
+    /// pattern that is half typed or not one this engine takes.
+    ///
+    /// The same pattern marks what is on screen on every keystroke, so it is
+    /// the non-backtracking engine: a pattern that backtracks without end
+    /// would otherwise hang the canvas mid-word. That engine refuses
+    /// lookarounds and backreferences, which a search box can live without.</summary>
+    public static Regex? Pattern(string? query, bool regex = false, bool word = false)
+    {
+        if (string.IsNullOrEmpty(query)) return null;
+        var body = regex ? query : Regex.Escape(query);
+        if (word) body = $@"\b(?:{body})\b";
+        try
+        {
+            return new Regex(body, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+        }
+        catch (ArgumentException) { return null; }
+        catch (NotSupportedException) { return null; }
+    }
+
+    /// <summary>the first match on a line that is not empty. A pattern that
+    /// can match nothing - `x*` - matches nothing at the start of every
+    /// line, and that is not a line containing what was searched for.</summary>
+    public static Match? FirstIn(Regex pattern, string line, int length = int.MaxValue)
+    {
+        for (var m = pattern.Match(line, 0, Math.Min(line.Length, length)); m.Success; m = m.NextMatch())
+            if (m.Length > 0) return m;
+        return null;
+    }
+
     public static List<Found> Run(
         Scan scan,
         string query,
         Func<string, string[]> lines,
         ISet<string>? only = null,
         int limit = Limit,
-        CancellationToken cancel = default)
+        CancellationToken cancel = default,
+        bool regex = false,
+        bool word = false)
     {
         var found = new List<Found>();
-        if (string.IsNullOrEmpty(query)) return found;
+        if (Pattern(query, regex, word) is not { } pattern) return found;
 
         for (int i = 0; i < scan.Files.Count && found.Count < limit; i++)
         {
@@ -53,9 +89,8 @@ public static class Grep
             var src = lines(f.P);
             for (int n = 0; n < src.Length && found.Count < limit; n++)
             {
-                int at = src[n].IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                if (at < 0) continue;
-                found.Add(new Found(i, f.P, n, at, Preview(src[n])));
+                if (FirstIn(pattern, src[n]) is not { } m) continue;
+                found.Add(new Found(i, f.P, n, m.Index, Preview(src[n])));
             }
         }
         return found;

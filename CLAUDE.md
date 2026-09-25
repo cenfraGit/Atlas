@@ -456,8 +456,12 @@ covered by `AnchorTests` and works.
       the list, F3 and shift+F3 anywhere. The matches belong to the view
       rather than the panel, so F3 still steps them once it is closed, and
       Escape clears the marks along with the selection the last jump left.
-- [ ] Regular expressions, and whole-word. Plain case-insensitive substring
-      for now.
+- [x] Regular expressions and whole word, `alt+R` and `alt+W` in the box.
+      One pattern (`Grep.Pattern`) drives the list and the marks, so they
+      cannot disagree, and it is the non-backtracking engine because the
+      marks run it on every keystroke - a runaway pattern would hang the
+      canvas. It refuses lookarounds and backreferences, and the hint says
+      so. A pattern that matches nothing (`x*`) matches no line.
 
 ### What counts as a file
 

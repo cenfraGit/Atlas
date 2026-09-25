@@ -651,7 +651,7 @@ public sealed class SceneView : Control
         // before the selection, and it clears that too. A search leaves a
         // selection behind on the line it landed on, so with the selection
         // first you had to press Escape twice to be rid of one search
-        Layers.Add("matches", () => !string.IsNullOrEmpty(_scene.Find), ClearFind);
+        Layers.Add("matches", () => _scene.Find is not null, ClearFind);
         Layers.Add("selection", HasSelection, ClearSelection);
         // deliberately no "board" layer. Escape closes what is open - a
         // dialog, a menu, an armed tool, a selection - and leaving the board
@@ -2015,7 +2015,7 @@ public sealed class SceneView : Control
     /// run at typing speed - unlike the list, which has to read files.</summary>
     void HighlightAs(string query)
     {
-        _scene.Find = query;
+        _scene.Find = Grep.Pattern(query, _grep?.Regex ?? false, _grep?.Word ?? false);
         _scene.FindAt = null;
         InvalidateVisual();
     }
@@ -2103,7 +2103,8 @@ public sealed class SceneView : Control
         _grepping = cts;
 
         var (only, where) = GrepScope();
-        if (query.Length == 0)
+        bool regex = _grep.Regex, word = _grep.Word;
+        if (query.Length == 0 || Grep.Pattern(query, regex, word) is null)
         {
             _found = [];
             _foundAt = -1;
@@ -2119,7 +2120,7 @@ public sealed class SceneView : Control
             // ReadLines is safe here: it reads a concurrent dictionary, or a
             // file, or the commit snapshot - which is a plain dictionary
             // built before the search. No Skia, and no libgit2
-            var found = Grep.Run(scan, query, scene.ReadLines, only, cancel: cts.Token);
+            var found = Grep.Run(scan, query, scene.ReadLines, only, cancel: cts.Token, regex: regex, word: word);
             if (cts.IsCancellationRequested) return;
             Dispatcher.UIThread.Post(() =>
             {

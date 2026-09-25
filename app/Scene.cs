@@ -1077,23 +1077,24 @@ public sealed class Scene : IDisposable
     /// substring of a line that is already in hand, the lines on screen are
     /// few, and anything stored would have to be invalidated every time the
     /// query changed by a keystroke - which is the whole point of it.</summary>
-    void MarkFinds(SKCanvas canvas, string line, int li, int fileIndex, string needle, float x0, float baseline)
+    void MarkFinds(SKCanvas canvas, string line, int li, int fileIndex, System.Text.RegularExpressions.Regex needle, float x0, float baseline)
     {
         using var paint = new SKPaint { IsAntialias = false };
         float top = baseline - Data.LineH * 0.78f, bottom = baseline + Data.LineH * 0.22f;
 
-        int at = 0;
-        while ((at = line.IndexOf(needle, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+        // the text itself stops at 160 characters, so a mark past there
+        // would point at nothing - and a minified line is forty thousand,
+        // which is no line to run a pattern over on every frame
+        for (var m = needle.Match(line, 0, Math.Min(line.Length, 400)); m.Success; m = m.NextMatch())
         {
-            // the text itself stops at 160 characters, so a mark past there
-            // would point at nothing
+            if (m.Length == 0) continue;
+            int at = m.Index;
             if (at >= 160) break;
-            int end = Math.Min(at + needle.Length, 160);
+            int end = Math.Min(at + m.Length, 160);
 
             bool now = FindAt is { } c && c.File == fileIndex && c.Line == li && c.Col == at;
             paint.Color = now ? FindNowCol : FindCol;
             canvas.DrawRect(x0 + at * _charW, top, (end - at) * _charW, bottom - top, paint);
-            at += Math.Max(1, needle.Length);
         }
     }
 
@@ -1149,7 +1150,7 @@ public sealed class Scene : IDisposable
             if (s.Length == 0) continue;
 
             // behind the text, so the words stay readable through it
-            if (Find is { Length: > 0 } needle) MarkFinds(canvas, s, li, i, needle, x0, baseline);
+            if (Find is { } needle) MarkFinds(canvas, s, li, i, needle, x0, baseline);
 
             var lineRuns = runs?[li];
             if (lineRuns is null || lineRuns.Length == 0)
@@ -2623,7 +2624,7 @@ public sealed class Scene : IDisposable
     /// Only where the code is actually drawn: at the bars tier there is no
     /// text to mark and a highlight would be a lie about a line you cannot
     /// read anyway.</summary>
-    public string? Find;
+    public System.Text.RegularExpressions.Regex? Find;
 
     /// <summary>which occurrence is the one being looked at, so it can be
     /// picked out from the others. The rest are context - "and here are the

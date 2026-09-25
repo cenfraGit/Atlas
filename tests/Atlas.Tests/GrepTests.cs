@@ -315,7 +315,7 @@ public class FindHighlightTests
         using (scene)
         {
             var plain = Frame(scene, f.P);
-            scene.Find = "Step";
+            scene.Find = Grep.Pattern("Step");
             var marked = Frame(scene, f.P);
 
             Assert.True(Changed(plain, marked) > 200,
@@ -331,7 +331,7 @@ public class FindHighlightTests
         using (scene)
         {
             var plain = Frame(scene, f.P);
-            scene.Find = "zzzzzznotpresent";
+            scene.Find = Grep.Pattern("zzzzzznotpresent");
 
             Assert.Equal(0, Changed(plain, Frame(scene, f.P)));
         }
@@ -345,7 +345,7 @@ public class FindHighlightTests
         using (scene)
         {
             var plain = Frame(scene, f.P);
-            scene.Find = "Step";
+            scene.Find = Grep.Pattern("Step");
             Frame(scene, f.P);
             scene.Find = null;
 
@@ -362,7 +362,7 @@ public class FindHighlightTests
         using (repo)
         using (scene)
         {
-            scene.Find = "Step";
+            scene.Find = Grep.Pattern("Step");
             var all = Frame(scene, f.P);
 
             int file = scene.IndexOfPath(f.P);
@@ -395,7 +395,7 @@ public class FindHighlightTests
             scene.CamY = f.Y + f.H / 2;
 
             var plain = Frame(scene, f.P);
-            scene.Find = "Step";
+            scene.Find = Grep.Pattern("Step");
 
             Assert.Equal(0, Changed(plain, Frame(scene, f.P)));
         }

@@ -36,6 +36,14 @@ public sealed class GrepOverlay : Border
     /// <summary>move to another match, by one, in that direction.</summary>
     public event Action<int>? Stepped;
 
+    /// <summary>how the query is read: as a regular expression, and as a
+    /// whole word. Toggled with alt+R and alt+W, the keys an editor's find
+    /// uses, and shown in the hint line.</summary>
+    public bool Regex { get; private set; }
+    public bool Word { get; private set; }
+
+    string _where = "";
+
     public GrepOverlay()
     {
         Reveal.Attach(this);
@@ -61,6 +69,10 @@ public sealed class GrepOverlay : Border
         {
             switch (e.Key)
             {
+                case Key.R when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                    e.Handled = true; Toggle(regex: true); break;
+                case Key.W when e.KeyModifiers.HasFlag(KeyModifiers.Alt):
+                    e.Handled = true; Toggle(word: true); break;
                 // shift+Enter goes back, the way it does in an editor's find
                 case Key.Enter when e.KeyModifiers.HasFlag(KeyModifiers.Shift):
                     e.Handled = true; Stepped?.Invoke(-1); break;
@@ -90,11 +102,27 @@ public sealed class GrepOverlay : Border
         Child = new StackPanel { Children = { _box, _hint, _list } };
     }
 
+    /// <summary>flip regex or whole word and search again with the same
+    /// text, since what it matches has changed.</summary>
+    public void Toggle(bool regex = false, bool word = false)
+    {
+        if (regex) Regex = !Regex;
+        if (word) Word = !Word;
+        var q = _box.Text ?? "";
+        _hint.Text = $"{Modes()}searching {_where}";
+        Typed?.Invoke(q);
+        Requested?.Invoke(q);
+    }
+
+    string Modes() => (Regex ? "[regex] " : "") + (Word ? "[word] " : "");
+
     public void Open(string where)
     {
         _found = [];
+        _where = where;
         _list.ItemsSource = new List<string>();
-        _hint.Text = $"searching {where}   -   enter: search   up/down: walk the matches   esc: close";
+        _hint.Text = $"{Modes()}searching {where}   -   enter: search   up/down: walk the matches   " +
+                     "alt+R: regex   alt+W: whole word   esc: close";
         Reveal.Show(this);
 
         // the ctrl+F is still in flight as text input; take focus after it
@@ -124,10 +152,13 @@ public sealed class GrepOverlay : Border
         int width = found.Count == 0 ? 0 : Math.Min(52, found.Max(f => Label(f).Length));
         _list.ItemsSource = found.Select(f => $"{Pad(Label(f), width)}  {f.Text}").ToList();
 
-        _hint.Text = found.Count == 0
-            ? $"no match for \"{query}\" in {where}"
+        _hint.Text = Modes() + (
+            found.Count == 0 && query.Length > 0 && Grep.Pattern(query, Regex, Word) is null
+                ? $"\"{query}\" is not a pattern this search takes (no lookarounds or backreferences)"
+            : found.Count == 0
+                ? $"no match for \"{query}\" in {where}"
             : $"{found.Count}{(capped ? "+" : "")} in {Grep.FilesIn(found)} file" +
-              $"{(Grep.FilesIn(found) == 1 ? "" : "s")}   -   up/down: walk them   esc: close";
+              $"{(Grep.FilesIn(found) == 1 ? "" : "s")}   -   up/down: walk them   esc: close");
 
     }
 

@@ -1971,7 +1971,7 @@ public sealed class SceneView : Control
 
     /// <summary>pick something from the review panel. An open pull request
     /// may need its commits fetched first, which is network and so off the
-    /// UI thread; everything after it is libgit2 and so back on it.</summary>
+    /// UI thread, and so is reading it once it is here (OpenTarget).</summary>
     void ChooseTarget(ReviewTarget chosen)
     {
         if (chosen.Open is not { } pr || _git is null) { OpenTarget(chosen); return; }
@@ -1999,8 +1999,9 @@ public sealed class SceneView : Control
     /// is stop while showing nothing, which is what it did: the caption was
     /// set and then the work ran before any frame could be painted. The
     /// panel goes up first and a frame is allowed through, then the work.</summary>
-    void OpenTarget(ReviewTarget target)
+    public void OpenTarget(ReviewTarget target)
     {
+        _git ??= GitReview.Open(_scene.Data.Root);
         if (_git is null) return;
 
         int turn = ++_opening;
@@ -2008,25 +2009,58 @@ public sealed class SceneView : Control
         _caption = $"{target.Label}   -   reading the tree at this commit...";
         InvalidateVisual();
 
-        // after a frame, so the panel and the caption are actually on screen
-        Dispatcher.UIThread.Post(() =>
+        // the commits, the diff and every file of the tree at that commit,
+        // read off the UI thread: on a big repo that is seconds, and the
+        // window used to freeze for all of them. GitReview serialises its
+        // handle, so a key that reaches for git meanwhile waits its turn
+        var git = _git;
+        var opts = _scanOptions;
+        bool removed = _showRemoved;
+        var root = _scene.Data.Root;
+        Task.Run(() =>
         {
-            if (turn != _opening || _git is null) return;   // superseded
-            LoadTarget(target);
-        }, DispatcherPriority.Background);
+            try
+            {
+                var commits = git.CommitsOf(target);
+                var whole = git.Whole(target);
+                var tree = BuildTree(git, target, whole, opts, removed, root);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (turn != _opening || _git is null) return;   // superseded
+                    _target = target;
+                    _prCommits = commits;
+                    _commitAt = -1;
+                    if (tree is { } t) _scene.ShowSnapshot(t.Data, path => t.Text.GetValueOrDefault(path), t.Splices);
+                    _commitsPanel?.Show(target.Label, _prCommits);
+                    ShowChanges(whole);
+                });
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (turn != _opening) return;
+                    _caption = "";
+                    Toast($"could not read {target.Label}: {ex.Message}");
+                });
+            }
+        });
     }
 
-    void LoadTarget(ReviewTarget target)
+    /// <summary>the repo laid out as it was at the target's head, with the
+    /// whole change's removed lines spliced back in when they are shown.
+    /// Nothing here touches Skia or the scene, so it runs on any thread.</summary>
+    static (Scan Data, Dictionary<string, string[]> Text, Dictionary<string, Splice> Splices)? BuildTree(
+        GitReview git, ReviewTarget target, ChangeSet? whole, ScanOptions opts, bool removed, string root)
     {
-        if (_git is null) return;
-        _target = target;
-        _prCommits = _git.CommitsOf(target);
-        _commitAt = -1;
+        // the same rule the working tree is filtered by, toggle included
+        var snapshot = git.Snapshot(target.HeadSha, path => Scanner.Wanted(path, opts));
+        if (snapshot is null || snapshot.Count == 0) return null;
 
-        var whole = _git.Whole(target);
-        ShowTree(target, whole);
-        _commitsPanel?.Show(target.Label, _prCommits);
-        ShowChanges(whole);
+        var (text, splices) = removed && whole is not null
+            ? Splice.All(snapshot, whole)
+            : (snapshot, new Dictionary<string, Splice>());
+        return (Scanner.BuildFrom(root, text), text, splices);
     }
 
     /// <summary>draw the repo as it was at the target's head. Without this a
@@ -2041,15 +2075,8 @@ public sealed class SceneView : Control
     void ShowTree(ReviewTarget target, ChangeSet? whole)
     {
         if (_git is null) return;
-        // the same rule the working tree is filtered by, toggle included
-        var snapshot = _git.Snapshot(target.HeadSha, path => Scanner.Wanted(path, _scanOptions));
-        if (snapshot is null || snapshot.Count == 0) return;
-
-        var (text, splices) = _showRemoved && whole is not null
-            ? Splice.All(snapshot, whole)
-            : (snapshot, new Dictionary<string, Splice>());
-        var data = Scanner.BuildFrom(_scene.Data.Root, text);
-        _scene.ShowSnapshot(data, path => text.GetValueOrDefault(path), splices);
+        if (BuildTree(_git, target, whole, _scanOptions, _showRemoved, _scene.Data.Root) is { } t)
+            _scene.ShowSnapshot(t.Data, path => t.Text.GetValueOrDefault(path), t.Splices);
     }
 
     /// <summary>show or hide the commit list. It is a full height strip down

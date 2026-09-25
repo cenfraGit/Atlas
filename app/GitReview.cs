@@ -63,6 +63,12 @@ public sealed class GitReview : IDisposable
 
     readonly Repository _repo;
 
+    /// <summary>libgit2's handle is not thread safe, and a review now reads a
+    /// commit's tree off the UI thread while the keys can still step the
+    /// commits. Every public way in takes this, so the two never overlap -
+    /// one waits for the other instead.</summary>
+    readonly object _gate = new();
+
     GitReview(Repository repo) => _repo = repo;
 
     public static GitReview? Open(string root)
@@ -79,7 +85,7 @@ public sealed class GitReview : IDisposable
         }
     }
 
-    public string HeadName => _repo.Head.FriendlyName;
+    public string HeadName { get { lock (_gate) return _repo.Head.FriendlyName; } }
 
     /// <summary>the branch everything else is measured against: whatever
     /// origin/HEAD points at, else the usual names.</summary>
@@ -114,54 +120,57 @@ public sealed class GitReview : IDisposable
     /// matters more than one that landed months ago.</summary>
     public List<ReviewTarget> Branches(int maxBranches = 40)
     {
-        var targets = new List<ReviewTarget>();
-        var baseName = BaseBranch();
-        var baseTip = baseName is null ? null : _repo.Branches[baseName]?.Tip;
-        if (baseTip is null) return targets;
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var ahead = new List<(Branch B, int By, DateTimeOffset When)>();
-        var level = new List<(Branch B, DateTimeOffset When)>();
-
-        foreach (var b in _repo.Branches)
+        lock (_gate)
         {
-            if (b.Tip is null || b.FriendlyName.EndsWith("/HEAD")) continue;
-            // a local branch and its remote twin are the same review
-            var key = b.FriendlyName.StartsWith("origin/") ? b.FriendlyName[7..] : b.FriendlyName;
-            if (!seen.Add(key)) continue;
+            var targets = new List<ReviewTarget>();
+            var baseName = BaseBranch();
+            var baseTip = baseName is null ? null : _repo.Branches[baseName]?.Tip;
+            if (baseTip is null) return targets;
 
-            if (b.FriendlyName == baseName) { level.Add((b, b.Tip.Author.When)); continue; }
-            try
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var ahead = new List<(Branch B, int By, DateTimeOffset When)>();
+            var level = new List<(Branch B, DateTimeOffset When)>();
+
+            foreach (var b in _repo.Branches)
             {
-                var div = _repo.ObjectDatabase.CalculateHistoryDivergence(b.Tip, baseTip);
-                if (div.AheadBy is null or 0) level.Add((b, b.Tip.Author.When));
-                else ahead.Add((b, div.AheadBy.Value, b.Tip.Author.When));
+                if (b.Tip is null || b.FriendlyName.EndsWith("/HEAD")) continue;
+                // a local branch and its remote twin are the same review
+                var key = b.FriendlyName.StartsWith("origin/") ? b.FriendlyName[7..] : b.FriendlyName;
+                if (!seen.Add(key)) continue;
+
+                if (b.FriendlyName == baseName) { level.Add((b, b.Tip.Author.When)); continue; }
+                try
+                {
+                    var div = _repo.ObjectDatabase.CalculateHistoryDivergence(b.Tip, baseTip);
+                    if (div.AheadBy is null or 0) level.Add((b, b.Tip.Author.When));
+                    else ahead.Add((b, div.AheadBy.Value, b.Tip.Author.When));
+                }
+                catch { }
             }
-            catch { }
+
+            foreach (var (b, by, _) in ahead.OrderByDescending(x => x.When).Take(maxBranches))
+            {
+                var mergeBase = _repo.ObjectDatabase.FindMergeBase(b.Tip, baseTip);
+                targets.Add(new ReviewTarget(
+                    b.FriendlyName,
+                    $"{by} commit{(by == 1 ? "" : "s")} ahead of {baseName}",
+                    (mergeBase ?? baseTip).Sha,
+                    b.Tip.Sha));
+            }
+
+            // the base branch heads the rest: it is the one everything else is
+            // measured against, so it is the one worth finding first
+            var rest = level
+                .OrderByDescending(x => x.B.FriendlyName == baseName)
+                .ThenByDescending(x => x.When);
+
+            foreach (var (b, _) in rest.Take(Math.Max(0, maxBranches - targets.Count)))
+                targets.Add(RecentOf(b, b.FriendlyName == baseName
+                    ? "the base branch"
+                    : $"nothing ahead of {baseName}"));
+
+            return targets;
         }
-
-        foreach (var (b, by, _) in ahead.OrderByDescending(x => x.When).Take(maxBranches))
-        {
-            var mergeBase = _repo.ObjectDatabase.FindMergeBase(b.Tip, baseTip);
-            targets.Add(new ReviewTarget(
-                b.FriendlyName,
-                $"{by} commit{(by == 1 ? "" : "s")} ahead of {baseName}",
-                (mergeBase ?? baseTip).Sha,
-                b.Tip.Sha));
-        }
-
-        // the base branch heads the rest: it is the one everything else is
-        // measured against, so it is the one worth finding first
-        var rest = level
-            .OrderByDescending(x => x.B.FriendlyName == baseName)
-            .ThenByDescending(x => x.When);
-
-        foreach (var (b, _) in rest.Take(Math.Max(0, maxBranches - targets.Count)))
-            targets.Add(RecentOf(b, b.FriendlyName == baseName
-                ? "the base branch"
-                : $"nothing ahead of {baseName}"));
-
-        return targets;
     }
 
     /// <summary>a branch shown as its own last few commits rather than as a
@@ -190,23 +199,26 @@ public sealed class GitReview : IDisposable
     /// <summary>merge commits that name a pull request, newest first.</summary>
     public List<ReviewTarget> MergedPrs(int max = 30, int scan = 600)
     {
-        var prs = new List<ReviewTarget>();
-        foreach (var c in _repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = _repo.Head }).Take(scan))
+        lock (_gate)
         {
-            if (c.Parents.Count() < 2) continue;
-            var m = PrSubject.Match(c.MessageShort);
-            if (!m.Success) continue;
+            var prs = new List<ReviewTarget>();
+            foreach (var c in _repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = _repo.Head }).Take(scan))
+            {
+                if (c.Parents.Count() < 2) continue;
+                var m = PrSubject.Match(c.MessageShort);
+                if (!m.Success) continue;
 
-            var parents = c.Parents.ToList();
-            // github puts the branch name on the subject line and the real
-            // title on the first body line
-            var title = c.Message.Split(Lf).Skip(1).FirstOrDefault(l => l.Trim().Length > 0)?.Trim()
-                        ?? m.Groups[2].Value.Trim();
-            prs.Add(new ReviewTarget($"#{m.Groups[1].Value}  {title}", "merged",
-                parents[0].Sha, parents[1].Sha));
-            if (prs.Count >= max) break;
+                var parents = c.Parents.ToList();
+                // github puts the branch name on the subject line and the real
+                // title on the first body line
+                var title = c.Message.Split(Lf).Skip(1).FirstOrDefault(l => l.Trim().Length > 0)?.Trim()
+                            ?? m.Groups[2].Value.Trim();
+                prs.Add(new ReviewTarget($"#{m.Groups[1].Value}  {title}", "merged",
+                    parents[0].Sha, parents[1].Sha));
+                if (prs.Count >= max) break;
+            }
+            return prs;
         }
-        return prs;
     }
 
     /// <summary>open pull requests, asked of GitHub through the gh command
@@ -282,16 +294,19 @@ public sealed class GitReview : IDisposable
     /// here, which means it needs fetching first.</summary>
     public ReviewTarget? TargetFor(OpenPr pr)
     {
-        if (_repo.Lookup<Commit>(pr.HeadSha) is not { } head) return null;
-        var baseTip = _repo.Branches["origin/" + pr.Base]?.Tip
-                      ?? _repo.Branches[pr.Base]?.Tip
-                      ?? (BaseBranch() is { } name ? _repo.Branches[name]?.Tip : null);
-        if (baseTip is null) return null;
-        var from = _repo.ObjectDatabase.FindMergeBase(head, baseTip) ?? baseTip;
-        return new ReviewTarget($"#{pr.Number}  {pr.Title}", $"open, {pr.Head} into {pr.Base}", from.Sha, head.Sha)
+        lock (_gate)
         {
-            Open = pr,
-        };
+            if (_repo.Lookup<Commit>(pr.HeadSha) is not { } head) return null;
+            var baseTip = _repo.Branches["origin/" + pr.Base]?.Tip
+                          ?? _repo.Branches[pr.Base]?.Tip
+                          ?? (BaseBranch() is { } name ? _repo.Branches[name]?.Tip : null);
+            if (baseTip is null) return null;
+            var from = _repo.ObjectDatabase.FindMergeBase(head, baseTip) ?? baseTip;
+            return new ReviewTarget($"#{pr.Number}  {pr.Title}", $"open, {pr.Head} into {pr.Base}", from.Sha, head.Sha)
+            {
+                Open = pr,
+            };
+        }
     }
 
     /// <summary>the list row for one, before it is known whether its
@@ -303,23 +318,26 @@ public sealed class GitReview : IDisposable
     /// the order a reviewer wants to walk them in.</summary>
     public List<CommitInfo> CommitsOf(ReviewTarget target)
     {
-        var list = new List<CommitInfo>();
-        try
+        lock (_gate)
         {
-            var filter = new CommitFilter
+            var list = new List<CommitInfo>();
+            try
             {
-                IncludeReachableFrom = target.HeadSha,
-                ExcludeReachableFrom = target.BaseSha,
-                SortBy = CommitSortStrategies.Topological | CommitSortStrategies.Reverse,
-            };
-            foreach (var c in _repo.Commits.QueryBy(filter))
-                list.Add(Info(c));
+                var filter = new CommitFilter
+                {
+                    IncludeReachableFrom = target.HeadSha,
+                    ExcludeReachableFrom = target.BaseSha,
+                    SortBy = CommitSortStrategies.Topological | CommitSortStrategies.Reverse,
+                };
+                foreach (var c in _repo.Commits.QueryBy(filter))
+                    list.Add(Info(c));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"could not list commits for {target.Label}: {ex.Message}");
+            }
+            return list;
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"could not list commits for {target.Label}: {ex.Message}");
-        }
-        return list;
     }
 
     public List<CommitInfo> RecentCommits(int count) =>
@@ -336,18 +354,24 @@ public sealed class GitReview : IDisposable
     /// <summary>what a single commit changed, against its first parent.</summary>
     public ChangeSet? OfCommit(CommitInfo info)
     {
-        var c = _repo.Lookup<Commit>(info.Sha);
-        var parent = c?.Parents.FirstOrDefault();
-        if (c is null) return null;
-        return Compare(parent?.Tree, c.Tree, info.Subject);
+        lock (_gate)
+        {
+            var c = _repo.Lookup<Commit>(info.Sha);
+            var parent = c?.Parents.FirstOrDefault();
+            if (c is null) return null;
+            return Compare(parent?.Tree, c.Tree, info.Subject);
+        }
     }
 
     public ChangeSet? Diff(string fromSha, string toSha, string label)
     {
-        var from = _repo.Lookup<Commit>(fromSha);
-        var to = _repo.Lookup<Commit>(toSha);
-        if (to is null) return null;
-        return Compare(from?.Tree, to.Tree, label);
+        lock (_gate)
+        {
+            var from = _repo.Lookup<Commit>(fromSha);
+            var to = _repo.Lookup<Commit>(toSha);
+            if (to is null) return null;
+            return Compare(from?.Tree, to.Tree, label);
+        }
     }
 
     ChangeSet? Compare(Tree? from, Tree to, string label)
@@ -431,12 +455,15 @@ public sealed class GitReview : IDisposable
     /// working tree whose paths may have moved on entirely.</summary>
     public Dictionary<string, string[]>? Snapshot(string sha, Func<string, bool> wanted)
     {
-        var commit = _repo.Lookup<Commit>(sha);
-        if (commit is null) return null;
+        lock (_gate)
+        {
+            var commit = _repo.Lookup<Commit>(sha);
+            if (commit is null) return null;
 
-        var files = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        Walk(commit.Tree, "", files, wanted);
-        return files;
+            var files = new Dictionary<string, string[]>(StringComparer.Ordinal);
+            Walk(commit.Tree, "", files, wanted);
+            return files;
+        }
     }
 
     static void Walk(Tree tree, string prefix, Dictionary<string, string[]> into, Func<string, bool> wanted)

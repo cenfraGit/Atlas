@@ -421,9 +421,13 @@ covered by `AnchorTests` and works.
       snapshot already exists (`ShowSnapshot`); what is missing is doing it
       per commit as you step, and the marks would then want to be
       see-through so the lines under them still read.
-- [ ] Reading a commit's tree blocks the window. It is synchronous because
-      libgit2's handle is not thread safe and the bracket keys reach for
-      the same one; a background read needs that handle owned by one place.
+- [x] Opening a review target reads the commits, the diff and the tree off
+      the UI thread (`OpenTarget`, `BuildTree`). `GitReview` locks every
+      public method, so a key that reaches for git meanwhile waits rather
+      than sharing libgit2's handle; a result that arrives after another
+      target was picked is dropped.
+- [ ] Toggling removed lines (`R`) and the review panel's own lists
+      (`MergedPrs`, `Branches`) still read git on the UI thread.
 - [ ] A file the commit **deleted** has no card on the map, because the scan
       is of what is there now. The change view shows it now, as its old
       text; the map still has nowhere to put it - probably at the folder

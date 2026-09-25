@@ -185,4 +185,49 @@ public class SpliceTests
         Assert.True(spot!.Value.Y > window.Y + scene.ItemHeight(window) / 2,
             "the view opened near the top rather than at the removal three quarters down");
     }
+
+    /// <summary>no removal mark straight under a removed row that is shown:
+    /// the text put back above it says the same thing, and the mark was an
+    /// opaque red line under every edited line. A removal with no text shown
+    /// beside it keeps its mark.</summary>
+    [Theory]
+    [InlineData(new[] { 10 }, new[] { 9 }, new int[0])]          // under its own text
+    [InlineData(new[] { 10 }, new[] { 3 }, new[] { 10 })]        // nothing shown beside it
+    [InlineData(new[] { 10, 20 }, new[] { 19 }, new[] { 10 })]
+    [InlineData(new[] { 10 }, new int[0], new[] { 10 })]         // nothing spliced at all
+    public void AMarkUnderShownTextIsNotDrawn(int[] removedAt, int[] removedRows, int[] drawn) =>
+        Assert.Equal(drawn, Scene.RemovalMarks(removedAt, removedRows));
+
+    /// <summary>and through a real review: stepping to a commit that edited a
+    /// line draws no mark under the edited line's removed text.</summary>
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void SteppingToACommitThatEditedALineMarksNothingUnderIt()
+    {
+        using var git = new GitFixture();
+        var scene = new Scene(Scanner.Build(git.Path));
+        var store = BoardStore.Load(git.Path);
+        var view = new SceneView(scene);
+        view.AttachBoards(store, new BoardOverlay(store));
+        view.AttachReview(new ReviewOverlay(), new CommitsPanel());
+        view.BuildLayers();
+        new Avalonia.Controls.Window { Width = 800, Height = 600, Content = view }.Show();
+        using var review = GitReview.Open(git.Path)!;
+        view.OpenTarget(review.MergedPrs().Single());
+        bool Until(Func<bool> done)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (!done() && DateTime.UtcNow < deadline) { Avalonia.Threading.Dispatcher.UIThread.RunJobs(); Thread.Sleep(20); }
+            return done();
+        }
+        Assert.True(Until(() => scene.Review is not null));
+
+        // the second commit edits Program.cs's Main: one line out, one in
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        view.HandleKey(Avalonia.Input.Key.OemCloseBrackets);
+        Assert.True(Until(() => scene.Review!.ByPath.TryGetValue("app/Program.cs", out var c) && c.RemovedAt.Count > 0));
+
+        var change = scene.Review!.ByPath["app/Program.cs"];
+        var rows = scene.Splices["app/Program.cs"].RemovedRows;
+        Assert.Empty(Scene.RemovalMarks(change.RemovedAt, rows));
+    }
 }

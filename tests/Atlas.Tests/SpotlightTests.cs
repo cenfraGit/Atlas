@@ -49,6 +49,29 @@ public class SpotlightTests
         scene.ActiveBoard = null;
     }
 
+    /// <summary>the soft edge only darkens. It blended from clear white to
+    /// the dim, so the band between came out paler than the scene under it -
+    /// a white ring round the circle.</summary>
+    [Fact]
+    public void TheEdgeIsNeverPalerThanTheSceneUnderIt()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+        (scene.CamX, scene.CamY, scene.CamS) = (-100000, -100000, 1);   // bare background
+
+        using var plain = Frame(scene);
+        scene.Spotlight = new SKPoint(400, 300);
+        using var lit = Frame(scene);
+
+        float r = scene.SpotlightRadius;
+        for (float d = r - 5; d < r * 1.35f; d += 2)
+        {
+            int x = (int)(400 + d);
+            Assert.True(Brightness(lit.GetPixel(x, 300)) <= Brightness(plain.GetPixel(x, 300)) + 1,
+                $"{d:0} from the centre it was paler than the scene: {lit.GetPixel(x, 300)} over {plain.GetPixel(x, 300)}");
+        }
+    }
+
     [AvaloniaFact]
     public void TabTurnsItOnItFollowsThePointerAndEscapeTurnsItOff()
     {

@@ -962,8 +962,12 @@ public sealed class Scene : IDisposable
         if (Spotlight is not { } at || SpotlightAmount <= 0) return;
         float r = SpotlightRadius * (1 + (1 - SpotlightAmount) * 1.5f), soft = r * 0.3f;
         var dark = new SKColor(0, 0, 0, (byte)(190 * SpotlightAmount));
+        // clear black, not SKColors.Transparent: that is clear *white*, and
+        // the soft edge, blending from it to the dark, came out as a pale
+        // ring round the circle
+        var clear = new SKColor(0, 0, 0, 0);
         using var shader = SKShader.CreateRadialGradient(at, r + soft,
-            [SKColors.Transparent, SKColors.Transparent, dark], [0f, r / (r + soft), 1f], SKShaderTileMode.Clamp);
+            [clear, clear, dark], [0f, r / (r + soft), 1f], SKShaderTileMode.Clamp);
         using var shade = new SKPaint { Shader = shader };
         canvas.DrawRect(0, 0, vw, vh, shade);
     }
@@ -1330,6 +1334,18 @@ public sealed class Scene : IDisposable
     public static List<int> Marks(IEnumerable<int> lines) =>
         lines.Distinct().Order().ToList();
 
+    /// <summary>the removal marks worth drawing: not one straight under a
+    /// removed row whose text is already there. The mark says "something was
+    /// taken out here", and with the text put back just above it that is said
+    /// already - the mark was an opaque red line under every edited line.</summary>
+    public static List<int> RemovalMarks(IEnumerable<int> removedAt, IReadOnlyList<int>? removedRows)
+    {
+        var marks = Marks(removedAt);
+        if (removedRows is not { Count: > 0 }) return marks;
+        var shown = removedRows.ToHashSet();
+        return marks.Where(at => !shown.Contains(at - 1)).ToList();
+    }
+
     /// <summary>everything of a file's content went, so the whole card is
     /// the change. A file git actually deleted has no card to draw on - the
     /// scan is of what is there now - so this is the emptied case.</summary>
@@ -1422,7 +1438,7 @@ public sealed class Scene : IDisposable
         // deletion inside a block of additions has to stay visible
         Bands(change.AddedLines, AddCol, thin: false);
         if (removedRows is not null) Bands(removedRows, DelCol, thin: false);
-        foreach (var at in Marks(change.RemovedAt)) Bands([at], DelCol, thin: true);
+        foreach (var at in RemovalMarks(change.RemovedAt, removedRows)) Bands([at], DelCol, thin: true);
     }
 
     /// <summary>close in the code is readable, so a changed file gets an outline
@@ -1504,7 +1520,7 @@ public sealed class Scene : IDisposable
         // seen, and never a block: the code between two removals is code
         // that is still there and must stay readable
         float thin = Math.Max(1f, Data.LineH * 0.35f);
-        foreach (var at in Marks(change.RemovedAt))
+        foreach (var at in RemovalMarks(change.RemovedAt, spliced?.RemovedRows))
         {
             if (at < lo || at - 1 > hi) continue;
             float y = Data.HeaderH + at * Data.LineH;

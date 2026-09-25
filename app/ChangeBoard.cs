@@ -100,7 +100,8 @@ public static class ChangeBoard
                 windows.Add((item, scene.ItemHeight(item)));
             }
             // not in the scan because the change deleted it: the whole old
-            // file, as one block. Anything else the caption reports
+            // file, as one block. One off the map because it is hidden is
+            // left out, as it is on the map
             else if (removed && Deleted(change, scene) is { } block) windows.Add(block);
             if (windows.Count >= MaxWindows) break;
         }
@@ -114,7 +115,7 @@ public static class ChangeBoard
     static (BoardItem Item, float H)? Deleted(FileChange change, Scene scene)
     {
         var lines = change.RemovedText.SelectMany(b => b.Lines).ToList();
-        if (change.Added > 0 || lines.Count == 0) return null;
+        if (!change.Deleted || lines.Count == 0) return null;
         float cardW = scene.Data.Files.Count > 0 ? scene.Data.Files[0].W : 240;
         float h = Scene.WinHeadH + lines.Count * scene.Data.LineH * (WindowW / cardW);
         return (new BoardItem

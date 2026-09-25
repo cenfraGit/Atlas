@@ -30,6 +30,12 @@ public sealed record FileChange(string Path, int Added, int Removed)
     /// <summary>the deleted lines themselves, a block per run of them. The
     /// map only has room for where they were; the change view shows them.</summary>
     public List<RemovedBlock> RemovedText { get; } = [];
+
+    /// <summary>the change deleted the file. Asked of git rather than guessed
+    /// from the file not being on the map: a file can be off the map because
+    /// it is hidden - a dotfile folder, build output - and one of those with
+    /// lines taken out was shown as a deleted file holding only those lines.</summary>
+    public bool Deleted { get; init; }
 }
 
 /// <summary>a run of consecutive deleted lines.</summary>
@@ -383,7 +389,10 @@ public sealed class GitReview : IDisposable
             foreach (var entry in patch)
             {
                 if (entry.IsBinaryComparison) continue;
-                var change = new FileChange(entry.Path.Replace('\\', '/'), entry.LinesAdded, entry.LinesDeleted);
+                var change = new FileChange(entry.Path.Replace('\\', '/'), entry.LinesAdded, entry.LinesDeleted)
+                {
+                    Deleted = entry.Status == ChangeKind.Deleted,
+                };
                 ReadHunks(entry.Patch, change);
                 set.Files.Add(change);
             }

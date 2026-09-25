@@ -67,13 +67,52 @@ public class RemovedInChangeViewTests
 
     /// <summary>a file the change deleted is not in the scan, so it used to
     /// have nowhere to appear. It is its old text, as one block.</summary>
+    /// <summary>a file off the map because it is hidden - a dotfile folder,
+    /// build output - is not a deleted file. With only lines taken out it
+    /// used to be drawn as one, holding just those lines: a solid red block
+    /// zoomed out, labelled "(deleted)" close in.</summary>
+    [Fact]
+    public void AHiddenFileWithRemovalsIsNotShownAsDeleted()
+    {
+        var (scene, repo) = Repo();
+        using (repo) using (scene)
+        {
+            var hidden = Removing(".config/settings.json", (3, 3, ["\"a\": 1,"]));
+            Assert.Empty(ChangeBoard.Build(Set(hidden), scene, "c").Items);
+        }
+    }
+
+    /// <summary>git says which files were deleted, and the change keeps it.</summary>
+    [Fact]
+    public void GitMarksADeletedFile()
+    {
+        using var repo = new TempDir("deleting");
+        repo.File("keep.cs", "class Keep { }\n");
+        repo.File("gone.cs", "class Gone\n{\n}\n");
+        using (var r = new LibGit2Sharp.Repository(LibGit2Sharp.Repository.Init(repo.Path)))
+        {
+            var who = new LibGit2Sharp.Signature("a", "a@b", DateTimeOffset.Now);
+            LibGit2Sharp.Commands.Stage(r, "*");
+            var first = r.Commit("first", who, who, new LibGit2Sharp.CommitOptions());
+            File.Delete(System.IO.Path.Combine(repo.Path, "gone.cs"));
+            File.AppendAllText(System.IO.Path.Combine(repo.Path, "keep.cs"), "// more\n");
+            LibGit2Sharp.Commands.Stage(r, "*");
+            var second = r.Commit("second", who, who, new LibGit2Sharp.CommitOptions());
+
+            using var git = GitReview.Open(repo.Path)!;
+            var set = git.Diff(first.Sha, second.Sha, "c")!;
+            Assert.True(set.ByPath["gone.cs"].Deleted);
+            Assert.False(set.ByPath["keep.cs"].Deleted);
+        }
+    }
+
     [Fact]
     public void ADeletedFileIsShownAsItsOldText()
     {
         var (scene, repo) = Repo();
         using (repo) using (scene)
         {
-            var gone = Removing("src/Gone.cs", (0, 0, ["class Gone", "{", "}"]));
+            var gone = Removing("src/Gone.cs", (0, 0, ["class Gone", "{", "}"])) with { Deleted = true };
 
             var board = ChangeBoard.Build(Set(gone), scene, "c");
             var block = Assert.Single(board.Items);

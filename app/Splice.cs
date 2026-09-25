@@ -88,7 +88,7 @@ public sealed class Splice
         foreach (var f in set.Files)
         {
             if (!maps.TryGetValue(f.Path, out var map)) { mapped.Files.Add(f); continue; }
-            var c = new FileChange(f.Path, f.Added, f.Removed);
+            var c = new FileChange(f.Path, f.Added, f.Removed) { Deleted = f.Deleted };
             int last = map.RowOf.Length - 1;
             c.AddedLines.AddRange(f.AddedLines.Select(n => map.RowOf[Math.Clamp(n, 0, last)]));
             if (!whole) c.RemovedAt.AddRange(f.RemovedAt.Select(n => map.RowOf[Math.Clamp(n, 0, last)]));

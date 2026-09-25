@@ -491,8 +491,8 @@ covered by `AnchorTests` and works.
       draws neither, so it is an app feature before it is a command.
 - [ ] In the trial render one tall amber frame came out pale grey. Not
       looked into yet.
-- [ ] The open app does not notice a board changed on disk. Watching
-      `.atlas/boards` would let you watch an agent build one.
+- [x] The open app takes in boards changed on disk (`SceneView.WatchBoards`,
+      `BoardStore.Refresh`), so an agent's board appears as it is built.
 - [ ] An MCP server over the same commands, if a client wants one; the CLI
       covers every agent with a shell.
 
@@ -760,6 +760,16 @@ There is no save step: stores write on every change and the canvas shows
 `saved: ...`. If you add state a user authors, it saves itself the same way -
 and immediately, in the handler that made it, rather than leaving a dirty flag
 for some later gesture to notice.
+
+**Something else writes here too, and the disk wins.** `atlas board`, a
+pull, a teammate's editor. `BoardStore` remembers the text it last read or
+wrote for each file: a refresh takes in only files whose text differs from
+that - the app's own saves come back as change events and must not be
+mistaken for someone else's - and `Save` refuses to write over a file that
+changed since, returning false. Letting go of a drag just after the command
+line wrote the board used to save the app's copy over its work. A changed
+board is updated in place, never replaced, because the open board, the
+panel and `_lastBoard` all hold the object. Covered by `BoardReloadTests`.
 
 **What the app writes is what git stores.** `.gitattributes` pins the
 repository to LF (`*.cmd` and `*.bat` excepted - cmd.exe is the one thing

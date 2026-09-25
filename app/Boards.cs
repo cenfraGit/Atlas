@@ -234,6 +234,12 @@ public sealed class BoardStore
 
     string GroupsPath => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Dir)!, "groups.json");
 
+    /// <summary>the text last written to or read from each file, so a
+    /// refresh can tell a change made elsewhere from the echo of the app's
+    /// own save - the save that was just made is exactly this text, and a
+    /// board edited since then in memory must not be put back to it.</summary>
+    readonly Dictionary<string, string> _known = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>every group that has a board in it, in display order.</summary>
     public List<string> Groups() => Boards.Select(b => b.Group).Distinct()
         .OrderBy(g => GroupOrder.IndexOf(g) is var i && i >= 0 ? i : int.MaxValue)
@@ -245,7 +251,9 @@ public sealed class BoardStore
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(GroupsPath)!);
-            File.WriteAllText(GroupsPath, JsonSerializer.Serialize(GroupOrder, Options));
+            var text = JsonSerializer.Serialize(GroupOrder, Options);
+            File.WriteAllText(GroupsPath, text);
+            _known[GroupsPath] = text;
         }
         catch (Exception ex)
         {
@@ -261,9 +269,8 @@ public sealed class BoardStore
         var store = new BoardStore { Dir = DirFor(repoRoot) };
         try
         {
-            if (File.Exists(store.GroupsPath) &&
-                JsonSerializer.Deserialize<List<string>>(File.ReadAllText(store.GroupsPath), Options) is { } order)
-                store.GroupOrder.AddRange(order);
+            if (File.Exists(store.GroupsPath))
+                store.ReadGroups(File.ReadAllText(store.GroupsPath));
         }
         catch (Exception ex)
         {
@@ -275,10 +282,12 @@ public sealed class BoardStore
         {
             try
             {
-                var b = JsonSerializer.Deserialize<Board>(File.ReadAllText(path), Options);
+                var text = File.ReadAllText(path);
+                var b = JsonSerializer.Deserialize<Board>(text, Options);
                 if (b is null) continue;
                 b.Path = path;
                 store.Boards.Add(b);
+                store._known[path] = text;
             }
             catch (Exception ex)
             {
@@ -286,6 +295,76 @@ public sealed class BoardStore
             }
         }
         return store;
+    }
+
+    void ReadGroups(string text)
+    {
+        _known[GroupsPath] = text;
+        if (JsonSerializer.Deserialize<List<string>>(text, Options) is not { } order) return;
+        GroupOrder.Clear();
+        GroupOrder.AddRange(order);
+    }
+
+    /// <summary>read again whatever changed on disk since it was last read
+    /// or written here - a board made or edited by `atlas board`, a pull, a
+    /// teammate's file. Null when nothing did; otherwise the boards that
+    /// changed or went, which is empty when only the group order moved.
+    ///
+    /// A changed board is updated in place rather than replaced, so the
+    /// open board, the panel's rows and "the last board" still point at it.
+    /// A file that does not parse is skipped: it is most likely half
+    /// written, and the write finishing is another change.</summary>
+    public List<Board>? Refresh()
+    {
+        var changed = new List<Board>();
+        bool any = false;
+        try
+        {
+            if (File.Exists(GroupsPath) && File.ReadAllText(GroupsPath) is var groups &&
+                _known.GetValueOrDefault(GroupsPath) != groups)
+            {
+                ReadGroups(groups);
+                any = true;
+            }
+        }
+        catch (Exception) { }
+        if (!Directory.Exists(Dir)) return any ? changed : null;
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFiles(Dir, "*.json"))
+        {
+            seen.Add(path);
+            Board? fresh;
+            string text;
+            try
+            {
+                text = File.ReadAllText(path);
+                if (_known.GetValueOrDefault(path) == text) continue;
+                fresh = JsonSerializer.Deserialize<Board>(text, Options);
+            }
+            catch (Exception) { continue; }
+            if (fresh is null) continue;
+            _known[path] = text;
+
+            var b = Boards.FirstOrDefault(x => string.Equals(x.Path, path, StringComparison.OrdinalIgnoreCase));
+            if (b is null)
+            {
+                fresh.Path = path;
+                Boards.Add(fresh);
+                changed.Add(fresh);
+                continue;
+            }
+            (b.Id, b.Name, b.Group, b.Order, b.Items, b.Stops) =
+                (fresh.Id, fresh.Name, fresh.Group, fresh.Order, fresh.Items, fresh.Stops);
+            changed.Add(b);
+        }
+        foreach (var gone in Boards.Where(b => !seen.Contains(b.Path)).ToList())
+        {
+            Boards.Remove(gone);
+            _known.Remove(gone.Path);
+            changed.Add(gone);
+        }
+        return any || changed.Count > 0 ? changed : null;
     }
 
     public Board Create(string name) => Create(name, NewId());
@@ -308,16 +387,27 @@ public sealed class BoardStore
         return b;
     }
 
-    public void Save(Board b)
+    /// <summary>write a board; false when it was not written.</summary>
+    public bool Save(Board b)
     {
         try
         {
+            // changed on disk since it was read here: whatever changed it
+            // wins, and the refresh that follows brings it in. Saving over
+            // it is how a drag let go of just after the command line wrote
+            // the board threw the command line's work away
+            if (_known.TryGetValue(b.Path, out var known) && File.Exists(b.Path) && File.ReadAllText(b.Path) != known)
+                return false;
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(b.Path, JsonSerializer.Serialize(b, Options));
+            var text = JsonSerializer.Serialize(b, Options);
+            File.WriteAllText(b.Path, text);
+            _known[b.Path] = text;
+            return true;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"could not write {b.Path}: {ex.Message}");
+            return false;
         }
     }
 

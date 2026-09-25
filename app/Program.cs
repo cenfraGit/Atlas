@@ -79,6 +79,7 @@ public sealed class App : Application
             var boardStore = BoardStore.Load(scene.Data.Root);
             var boards = new BoardOverlay(boardStore);
             view.AttachBoards(boardStore, boards);
+            view.WatchBoards();
 
             var hints = new HintBar();
             view.AttachHints(hints);
@@ -2292,6 +2293,87 @@ public sealed class SceneView : Control
             Focus();
             InvalidateVisual();
         });
+    }
+
+    FileSystemWatcher? _boardWatch;
+    int _reloadAsk;
+
+    /// <summary>reload boards when their files change on disk, so a board
+    /// built by `atlas board` - or brought in by a pull - shows up without
+    /// restarting. The watcher's events arrive on a pool thread and in
+    /// bursts (one save is several), so each one asks for a reload a moment
+    /// later and only the last ask of a burst is acted on.</summary>
+    public void WatchBoards()
+    {
+        if (_boardStore is null) return;
+        try
+        {
+            // a repo with no boards yet has no folder to watch, and the
+            // first board may well come from outside
+            Directory.CreateDirectory(_boardStore.Dir);
+            _boardWatch = new FileSystemWatcher(Path.GetDirectoryName(_boardStore.Dir)!)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+            };
+            FileSystemEventHandler poke = (_, _) => ScheduleReload();
+            _boardWatch.Changed += poke;
+            _boardWatch.Created += poke;
+            _boardWatch.Deleted += poke;
+            _boardWatch.Renamed += (s, e) => poke(s, e);
+            _boardWatch.EnableRaisingEvents = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"not watching boards: {ex.Message}");
+        }
+    }
+
+    void ScheduleReload()
+    {
+        int ask = Interlocked.Increment(ref _reloadAsk);
+        Task.Delay(250).ContinueWith(_ => Dispatcher.UIThread.Post(() =>
+        {
+            if (ask == _reloadAsk) ReloadBoards();
+        }));
+    }
+
+    /// <summary>take in whatever changed on disk. Not in the middle of a
+    /// drag: the board would change under the hand holding it, so it waits
+    /// for the gesture to end. What changed on disk wins over what is open -
+    /// the app saves as it goes, so all it can lose is the gesture that was
+    /// in flight, and undo is cleared because its snapshots are of a board
+    /// that is no longer there.</summary>
+    public void ReloadBoards()
+    {
+        if (_boardStore is null) return;
+        if (_drag) { ScheduleReload(); return; }
+
+        var changed = _boardStore.Refresh();
+        if (changed is null) return;
+        _boards?.Rebuild();
+
+        var open = _scene.ActiveBoard;
+        if (open is not null && !_scene.BoardReadOnly && changed.Contains(open))
+        {
+            if (!_boardStore.Boards.Contains(open))
+            {
+                LeaveBoard();
+                Toast($"\"{open.Name}\" was deleted on disk");
+                return;
+            }
+            // a tour walks a list of stops that has just been replaced
+            if (_tour is not null) EndTour();
+            if (Reveal.Showing(_stops)) _stops!.Rebuild(0);
+            _boardDirty = false;
+            _history.Clear();
+            var ids = open.Items.Select(i => i.Id).ToHashSet();
+            _scene.Picked.RemoveWhere(id => !ids.Contains(id));
+            _caption = open.Name;
+            RefreshBoardBar();
+            Toast("board changed on disk - reloaded");
+        }
+        InvalidateVisual();
     }
 
     void CreateBoard()

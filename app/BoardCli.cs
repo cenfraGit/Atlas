@@ -231,7 +231,10 @@ public static class BoardCli
         {
             if (_board is null) return;
             foreach (var stop in _board.Stops) Reframe(stop);
-            _store.Save(_board);
+            // refused when the board changed on disk while this ran - the
+            // app saving it, most likely - rather than saved over
+            if (!_store.Save(_board))
+                throw new CliError($"\"{_board.Name}\" changed on disk while this ran, or could not be written - run it again");
         }
 
         /// <summary>a stop made by framing items is put round them again,

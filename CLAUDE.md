@@ -534,6 +534,14 @@ covered by `AnchorTests` and works.
       "How solid a colour is lives in the colour". Not a bug.
 - [x] The open app takes in boards changed on disk (`SceneView.WatchBoards`,
       `BoardStore.Refresh`), so an agent's board appears as it is built.
+- [x] `atlas boards check`: every board's problems, one line each, exit 1
+      if any - the stale kind (a file gone, code moved or vanished from under
+      a window, a window never anchored, a pin to nothing, a stop framing
+      nothing, a board file that will not load) and the drawn kind (overlaps,
+      arrows crossing, edges nearly lined up). `show` says what code each
+      window shows and each drawing covers or sits beside, `--code` prints
+      it, and show, render and check all re-anchor in memory first - as Atlas
+      does on opening - so they describe the board a person would see.
 - [ ] An MCP server over the same commands, if a client wants one; the CLI
       covers every agent with a shell.
 

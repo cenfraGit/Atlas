@@ -254,6 +254,11 @@ public sealed class BoardStore
     }
 
     public List<Board> Boards { get; } = [];
+
+    /// <summary>board files that would not load, and why. They used to be
+    /// skipped with a line on a console nobody sees, so a broken board just
+    /// was not there; `atlas boards check` reports them.</summary>
+    public List<(string Path, string Why)> Unreadable { get; } = [];
     public string Dir { get; private set; } = "";
 
     /// <summary>the order groups are listed in, by name. A group is only a
@@ -316,7 +321,7 @@ public sealed class BoardStore
             {
                 var text = File.ReadAllText(path);
                 var b = JsonSerializer.Deserialize<Board>(text, Options);
-                if (b is null) continue;
+                if (b is null) { store.Unreadable.Add((path, "empty")); continue; }
                 b.Path = path;
                 store.Boards.Add(b);
                 store._known[path] = text;
@@ -324,6 +329,7 @@ public sealed class BoardStore
             catch (Exception ex)
             {
                 Console.WriteLine($"could not read {path}: {ex.Message}");
+                store.Unreadable.Add((path, ex.Message));
             }
         }
         return store;

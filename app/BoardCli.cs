@@ -22,6 +22,7 @@ public static class BoardCli
 
         usage
           atlas boards [--repo DIR]                       list the boards
+          atlas boards check [--repo DIR]                 every board's problems, one per line
           atlas board "<board>" <command> [args]          one command
           atlas board "<board>" < script.txt              one command per line, all or nothing
           atlas board help
@@ -32,7 +33,10 @@ public static class BoardCli
 
         board
           new [--group G] [--replace]        make the board (--replace empties an existing one)
-          show                               outline: every item, where it is, warnings
+          show [--code]                      outline: every item, where it is, what code
+                                             each window shows and each drawing covers,
+                                             annotations in range; --code prints those lines
+          check                              this board's problems (see boards check)
           render out.png [--stop N | --frame a,b] [--px 1600] [--stops]
                                              draw the board (or one stop) to an image - look at it.
                                              --stops outlines every tour stop, numbered
@@ -83,6 +87,13 @@ public static class BoardCli
 
         colours: amber cyan green red violet slate, or #rrggbb.
 
+        Reviewing boards: `atlas boards check` lists what has gone wrong -
+        files that are gone, code that moved or vanished from under a window,
+        drawings pinned to nothing, tour stops framing nothing, overlaps, edges
+        that nearly line up - and exits 1 if anything did. Then `show --code`
+        on a board says what each note and frame is sitting on, to judge
+        whether it still says something true about that code.
+
         A good board: a label as a title, windows onto the few methods that
         matter (a symbol, not a whole file), a box --around the lines a note
         talks about with the note --on the same code, arrows for what calls
@@ -111,6 +122,7 @@ public static class BoardCli
             rest.RemoveRange(r, 2);
         }
 
+        if (args[0] == "boards" && rest is ["check", ..]) return CheckAll(repo);
         if (args[0] == "boards")
         {
             var store = BoardStore.Load(repo);
@@ -154,6 +166,37 @@ public static class BoardCli
         {
             session.Dispose();
         }
+    }
+
+    /// <summary>every board's problems, one line each, and 1 if there were
+    /// any - the whole repo's boards reviewed in one command.</summary>
+    static int CheckAll(string repo)
+    {
+        var store = BoardStore.Load(repo);
+        int problems = 0;
+        foreach (var (path, why) in store.Unreadable)
+        {
+            Console.WriteLine($"{Path.GetFileName(path)}: cannot be read - {why}");
+            problems++;
+        }
+        if (store.Boards.Count == 0 && problems == 0) { Console.WriteLine($"no boards in {repo}"); return 0; }
+
+        Scene? scene = null;
+        foreach (var b in store.Boards.OrderBy(b => b.Group).ThenBy(b => b.Order))
+        {
+            using var session = new Session(repo, store, b, scene);
+            foreach (var line in session.Problems())
+            {
+                Console.WriteLine($"\"{b.Name}\": {line}");
+                problems++;
+            }
+            scene = session.SharedScene;
+        }
+        scene?.Dispose();
+        Console.WriteLine(problems == 0
+            ? $"all {store.Boards.Count} boards look right"
+            : $"{problems} problem{(problems == 1 ? "" : "s")} across {store.Boards.Count + store.Unreadable.Count} board files");
+        return problems == 0 ? 0 : 1;
     }
 
     static int Fail(string message)
@@ -207,6 +250,25 @@ public static class BoardCli
         // file in today's format, and looking at an older board with show
         // should not leave a diff behind
         bool _changed;
+
+        /// <summary>a board already loaded, and the scan if one was taken, so
+        /// checking every board scans the repo once rather than per board.</summary>
+        public Session(string repo, BoardStore store, Board board, Scene? scene)
+        {
+            _repo = repo;
+            _name = board.Name;
+            _store = store;
+            _board = board;
+            _scene = scene;
+            _shared = scene is not null;
+            if (_scene is not null) _scene.ActiveBoard = board;
+        }
+
+        bool _shared;
+
+        /// <summary>the scan, for the next board to reuse; it is not disposed
+        /// with this session once handed on.</summary>
+        public Scene? SharedScene { get { _shared = _scene is not null; return _scene; } }
 
         public Session(string repo, string name)
         {
@@ -264,16 +326,21 @@ public static class BoardCli
             if (_made && _board is not null) _store.Delete(_board);
         }
 
-        public void Dispose() => _scene?.Dispose();
+        public void Dispose() { if (!_shared) _scene?.Dispose(); }
 
         public void Do(List<string> words)
         {
             var (pos, opt) = Parse(words.Skip(1));
-            _changed |= words[0] is not ("show" or "render" or "help");
+            _changed |= words[0] is not ("show" or "render" or "help" or "check");
             switch (words[0])
             {
                 case "new": New(opt); break;
-                case "show": Show(); break;
+                case "show": Show(opt.ContainsKey("code")); break;
+                case "check":
+                    var found = Problems().ToList();
+                    foreach (var line in found) Console.WriteLine(line);
+                    Console.WriteLine(found.Count == 0 ? "looks right" : $"{found.Count} problem{(found.Count == 1 ? "" : "s")}");
+                    break;
                 case "render": Render(pos, opt); break;
                 case "window": Window(pos, opt); break;
                 case "note": Words("note", pos, opt, 360); break;
@@ -299,7 +366,7 @@ public static class BoardCli
             {
                 if (!list[i].StartsWith("--") || list[i].Length == 2) { pos.Add(list[i]); continue; }
                 var key = list[i][2..];
-                if (key is "replace" or "stops") { opt[key] = ""; continue; }
+                if (key is "replace" or "stops" or "code") { opt[key] = ""; continue; }
                 if (i + 1 >= list.Count) throw new CliError($"--{key} needs a value");
                 opt[key] = list[++i];
             }
@@ -328,11 +395,30 @@ public static class BoardCli
             Console.WriteLine($"board \"{_board.Name}\" [{_board.Id}]");
         }
 
-        void Show()
+        bool _settled;
+
+        /// <summary>put the board on its code, as Atlas does when it opens
+        /// one, so what is described or drawn is what a person would see -
+        /// not the stored line numbers, which after an edit point at other
+        /// code. In memory only: show, render and check do not save.</summary>
+        void Settle()
         {
+            if (_settled) return;
+            _settled = true;
+            Scene.EnsureKeys(Board);
+            Scene.AnchorBoard(Board);
+        }
+
+        void Show(bool code)
+        {
+            Settle();
             var b = Board;
             Console.WriteLine($"board \"{b.Name}\" [{b.Id}]{(b.Group.Length > 0 ? " in " + b.Group : "")}");
-            foreach (var it in b.Items) Console.WriteLine("  " + Describe(it));
+            foreach (var it in b.Items)
+            {
+                Console.WriteLine("  " + Describe(it));
+                foreach (var line in Relations(it, code)) Console.WriteLine("      " + line);
+            }
             if (b.Stops.Count > 0) Console.WriteLine("tour");
             for (int i = 0; i < b.Stops.Count; i++)
             {
@@ -369,6 +455,166 @@ public static class BoardCli
                     var text = string.IsNullOrEmpty(it.Text) ? "" : $" \"{Short(it.Text)}\"";
                     return $"{(it.Kind == "shape" ? "box" : it.Kind)} {it.Id}{text}  {where}{Pinned(it)}{colour}";
             }
+        }
+
+        /// <summary>what code an item is about, so a reader can check a board
+        /// still says something true: for a window, the declarations it shows
+        /// and the annotations in its range; for anything on or beside a
+        /// window, the lines it covers or sits next to and the declaration
+        /// they are in. With code, those lines themselves.</summary>
+        IEnumerable<string> Relations(BoardItem it, bool code)
+        {
+            if (it.Kind == "file")
+            {
+                if (it.File is null || Scene.ResolveFile(it.File, it.Key) is var i && i < 0) yield break;
+                var f = Scene.Data.Files[i];
+                var (from, to) = Scene.RangeOf(it, f);
+                var full = FullPath(f);
+                // the innermost declarations starting inside it: a window onto
+                // a class lists its members, one onto a method that method
+                var inside = Symbols.ForFile(full).Where(d => d.StartLine >= from && d.StartLine <= to).ToList();
+                var leaves = inside.Where(d => !inside.Any(o => o != d && o.StartLine > d.StartLine && d.Contains(o.StartLine)))
+                    .Select(d => ShortName(d.Name)).ToList();
+                if (leaves.Count > 0)
+                    yield return "shows " + string.Join(", ", leaves.Take(10)) + (leaves.Count > 10 ? $" and {leaves.Count - 10} more" : "");
+                var lines = Scene.ReadLines(f.P);
+                foreach (var a in Annotations().Where(a => a.File == f.P && (a.Global || a.Board == Board.Id)))
+                {
+                    var at = Anchors.Resolve(a, full, lines);
+                    if (at.Resolved && at.Line >= from && at.Line <= to)
+                        yield return $"annotation on line {at.Line + 1}: \"{Short(a.Text)}\"";
+                }
+                yield break;
+            }
+            if (it.Kind == "arrow") yield break;
+
+            if (Covers(it) is { } c)
+            {
+                var full = FullPath(c.File);
+                var decl = Symbols.Innermost(Symbols.ForFile(full), c.From) is { } d ? $" in {ShortName(d.Name)}" : "";
+                string span = c.From == c.To ? $"line {c.From + 1}" : $"lines {c.From + 1}-{c.To + 1}";
+                yield return (c.Beside ? $"beside {c.Window.Id} at " : $"covers {c.Window.Id} ") + span + decl;
+                if (!code) yield break;
+                var text = Scene.ReadLines(c.File.P);
+                for (int n = c.From; n <= c.To && n < text.Length && n <= c.From + 30; n++)
+                    yield return $"  {n + 1,5} | {text[n].TrimEnd()}";
+            }
+        }
+
+        /// <summary>the lines of a window an item is on - by its pin, or where
+        /// its top and bottom fall - or, for one sitting just to the side of a
+        /// window, the line level with its top.</summary>
+        (BoardItem Window, FileRec File, int From, int To, bool Beside)? Covers(BoardItem it)
+        {
+            var box = BoxOf(it);
+            BoardItem? host = it.Host is { } h ? Board.Items.FirstOrDefault(w => w.Id == h && w.Kind == "file") : null;
+            bool beside = false;
+            host ??= Board.Items.FirstOrDefault(w => w.Kind == "file" && BoxOf(w).Contains(box.Left + 1, box.Top + 1));
+            if (host is null)
+            {
+                // beside: level with a window and within a short gap of its side
+                host = Board.Items.Where(w => w.Kind == "file")
+                    .Where(w => { var r = BoxOf(w); return box.Top >= r.Top && box.Top < r.Bottom &&
+                                  (Math.Abs(box.Left - r.Right) < 200 || Math.Abs(r.Left - box.Right) < 200); })
+                    .MinBy(w => Math.Min(Math.Abs(box.Left - BoxOf(w).Right), Math.Abs(BoxOf(w).Left - box.Right)));
+                beside = host is not null;
+            }
+            if (host?.File is null || Scene.ResolveFile(host.File, host.Key) is var i && i < 0) return null;
+            var f = Scene.Data.Files[i];
+            var (from, to) = Scene.RangeOf(host, f);
+            float step = Scene.LineStepIn(host, f);
+            float top = host.Y + Scene.WinHeadH;
+            int first = Math.Clamp(from + (int)MathF.Floor((box.Top - top) / step), from, to);
+            int last = beside || it.Kind is "note" or "text"
+                ? first
+                : Math.Clamp(from + (int)MathF.Floor((box.Bottom - 0.5f - top) / step), first, to);
+            return (host, f, first, last, beside);
+        }
+
+        AnnotationStore? _notes;
+        List<Annotation> Annotations() => (_notes ??= AnnotationStore.Load(_repo)).Annotations;
+
+        /// <summary>what has gone wrong with this board, one line each. The
+        /// things that go stale on their own - code moving out from under a
+        /// window, a file going - as well as what was drawn wrong.</summary>
+        public IEnumerable<string> Problems()
+        {
+            var b = Board;
+            if (b.Items.Count == 0) { yield return "the board is empty"; yield break; }
+            var ids = b.Items.Select(i => i.Id).ToHashSet();
+
+            foreach (var it in b.Items.Where(i => i.Kind == "file"))
+            {
+                int fi = it.File is null ? -1 : Scene.ResolveFile(it.File, it.Key);
+                if (fi < 0) { yield return $"window {it.Id}: {it.File} is not in the repo"; continue; }
+                var f = Scene.Data.Files[fi];
+                var lines = Scene.ReadLines(f.P);
+                var full = FullPath(f);
+                Symbols.Forget(full);
+                if (it.EndLine >= lines.Length)
+                    yield return $"window {it.Id}: ends at line {it.EndLine + 1}, but {f.P} has {lines.Length}";
+                if (it.Context is null)
+                {
+                    yield return $"window {it.Id}: not anchored - it shows lines {it.Line + 1}-{it.EndLine + 1} by number and will not follow its code until Atlas saves the board";
+                    continue;
+                }
+                var at = Anchors.Resolve(it.Symbol, it.Offset, it.Context, it.Line, full, lines);
+                if (!at.Resolved)
+                    yield return $"window {it.Id}: the code it was opened on is gone from {f.P} - it now shows whatever is at lines {it.Line + 1}-{it.EndLine + 1}";
+                else if (at.Kind == AnchorKind.Drifted)
+                    yield return $"window {it.Id}: its lines changed ({Clean(it.Symbol ?? "")} is still there) - check it still shows what the board says";
+                else if (at.Line != it.Line)
+                    yield return $"window {it.Id}: its code moved from line {it.Line + 1} to {at.Line + 1} - Atlas moves the window when the board is opened";
+            }
+
+            // the windows are judged as stored; everything after, on the
+            // board as Atlas would open it
+            Settle();
+
+            foreach (var it in b.Items.Where(i => i.Host is not null && i.Kind != "file"))
+            {
+                var host = b.Items.FirstOrDefault(w => w.Id == it.Host);
+                if (host is null) { yield return $"{Kind(it)} {it.Id}: pinned to {it.Host}, which is not on the board"; continue; }
+                if (host.File is null || it.Context is null || Scene.ResolveFile(host.File, host.Key) is var hi && hi < 0) continue;
+                var f = Scene.Data.Files[hi];
+                if (!Anchors.Resolve(it.Symbol, it.Offset, it.Context, 0, FullPath(f), Scene.ReadLines(f.P)).Resolved)
+                    yield return $"{Kind(it)} {it.Id}: the line it was pinned to in {host.Id} is gone";
+            }
+
+            for (int n = 0; n < b.Stops.Count; n++)
+            {
+                var s = b.Stops[n];
+                var name = s.Name is null ? $"stop {n + 1}" : $"stop {n + 1} \"{s.Name}\"";
+                var gone = s.Items?.Where(x => !ids.Contains(x)).ToList() ?? [];
+                if (gone.Count > 0) yield return $"{name}: frames {string.Join(", ", gone)}, which {(gone.Count == 1 ? "is" : "are")} not on the board";
+                var region = new SKRect(s.X - s.W / 2, s.Y - s.H / 2, s.X + s.W / 2, s.Y + s.H / 2);
+                if (!b.Items.Any(i => BoxOf(i).IntersectsWith(region)))
+                    yield return $"{name}: frames nothing";
+            }
+
+            foreach (var w in Warnings()) yield return w;
+            foreach (var w in NearlyAligned()) yield return w;
+        }
+
+        static string Kind(BoardItem it) => it.Kind switch { "shape" => "box", "text" => "label", var k => k };
+
+        /// <summary>edges a few units apart: almost certainly meant to line up,
+        /// and off by a nudge. Only things placed on the board itself - a
+        /// drawing pinned over a window sits where the code is.</summary>
+        IEnumerable<string> NearlyAligned()
+        {
+            var placed = Board.Items.Where(i => i.Kind != "arrow" && !Strokes.Is(i) && i.Host is null).ToList();
+            for (int a = 0; a < placed.Count; a++)
+                for (int c = a + 1; c < placed.Count; c++)
+                {
+                    var (x, y) = (BoxOf(placed[a]), BoxOf(placed[c]));
+                    foreach (var (edge, d) in new[] { ("left", x.Left - y.Left), ("top", x.Top - y.Top), ("right", x.Right - y.Right) })
+                        if (Math.Abs(d) is > 0.5f and < 8f)
+                        {
+                            yield return $"{placed[a].Id} and {placed[c].Id}: {edge} edges {Math.Abs(d):0.#} apart - meant to line up?";
+                            break;
+                        }
+                }
         }
 
         string Pinned(BoardItem it)
@@ -426,6 +672,7 @@ public static class BoardCli
         void Render(List<string> pos, Dictionary<string, string> opt)
         {
             if (pos.Count == 0) throw new CliError("render needs a file to write: render out.png");
+            Settle();
             var b = Board;
             var scene = Scene;
             scene.ActiveBoard = b;

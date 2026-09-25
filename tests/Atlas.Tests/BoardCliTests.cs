@@ -235,6 +235,121 @@ public class BoardCliTests
         Assert.Contains(Enumerable.Range(0, 800), x => bmp.GetPixel(x, bmp.Height / 2) != bg);
     }
 
+    /// <summary>runs `atlas` with arguments and no script.</summary>
+    static (int Code, string Out) Args(params string[] args)
+    {
+        var (output, error) = (Console.Out, Console.Error);
+        var o = new StringWriter();
+        try
+        {
+            Console.SetOut(o);
+            Console.SetError(o);
+            return (BoardCli.Run(args), o.ToString());
+        }
+        finally
+        {
+            Console.SetOut(output);
+            Console.SetError(error);
+        }
+    }
+
+    [Fact]
+    public void ACleanBoardChecksClean()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow w Loop.cs First\nnote n \"about it\" --on w:6\nstop s --frame w\n").Code);
+
+        var (code, output) = Args("boards", "--repo", repo.Path, "check");
+        Assert.True(code == 0, output);
+        Assert.Contains("look right", output);
+    }
+
+    /// <summary>everything that can go wrong with a board, found in one
+    /// pass over every board - and it exits 1, so a script can tell.</summary>
+    [Fact]
+    public void CheckFindsWhatWentWrong()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow w Loop.cs First\nwindow gone Loop.cs Second(0) --row w\nbox b --around w:First\nstop s --frame w\n").Code);
+        var store = BoardStore.Load(repo.Path);
+        var board = store.Boards.Single();
+        board.Items.Single(i => i.Id == "gone").File = "app/Deleted.cs";
+        board.Items.Single(i => i.Id == "gone").Key = null;
+        board.Items.Add(new BoardItem { Id = "stray", Kind = "note", Text = "x", Host = "nowhere", X = 5000 });
+        board.Stops.Add(new Stop { Name = "empty", X = -9000, Y = -9000, W = 10, H = 10 });
+        store.Save(board);
+        File.WriteAllText(Path.Combine(repo.Path, ".atlas", "boards", "broken.json"), "{ \"items\": [");
+
+        var (code, output) = Args("boards", "--repo", repo.Path, "check");
+
+        Assert.Equal(1, code);
+        Assert.Contains("broken.json: cannot be read", output);
+        Assert.Contains("window gone: app/Deleted.cs is not in the repo", output);
+        Assert.Contains("note stray: pinned to nowhere", output);
+        Assert.Contains("stop 2 \"empty\": frames nothing", output);
+    }
+
+    /// <summary>the thing that goes stale by itself: code moving out from
+    /// under a window, or going altogether.</summary>
+    [Fact]
+    public void CheckSaysWhenCodeMovedOrWent()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow first Loop.cs First\nwindow second Loop.cs Second(0) --row first\n").Code);
+
+        // two lines above First, and Second's body rewritten out of recognition
+        var text = Source().Replace("    public void First()", "    // one\n    // two\n    public void First()");
+        for (int i = 0; i < 6; i++) text = text.Replace($"B({i});", $"Other{i}();");
+        text = text.Replace("public void Second()", "public void Renamed()");
+        File.WriteAllText(Path.Combine(repo.Path, "app", "Loop.cs"), text);
+
+        var (code, output) = Args("board", "--repo", repo.Path, "doc", "check");
+        Assert.Contains("window first: its code moved from line 5 to 7", output);
+        Assert.Contains("window second: the code it was opened on is gone", output);
+    }
+
+    [Fact]
+    public void CheckNoticesEdgesThatNearlyLineUp()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nnote a one --at 0,0\nnote b two --at 500,3\n").Code);
+        var (_, output) = Args("board", "--repo", repo.Path, "doc", "check");
+        Assert.Contains("a and b: top edges 3 apart", output);
+    }
+
+    [Fact]
+    public void CheckWritesNothing()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow w Loop.cs First\n").Code);
+        var path = Stored(repo, "doc").Path;
+        File.WriteAllText(Path.Combine(repo.Path, "app", "Loop.cs"), "// shifted\n" + Source());
+        var before = File.ReadAllText(path);
+
+        Args("boards", "--repo", repo.Path, "check");
+
+        Assert.Equal(before, File.ReadAllText(path));
+    }
+
+    /// <summary>show says what code each drawing is about, so an agent can
+    /// tell whether a note still says something true - and does so on the
+    /// board as Atlas opens it, after the code has moved.</summary>
+    [Fact]
+    public void ShowSaysWhatEachDrawingIsOn()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow w Loop.cs Loop\nbox b --around w:Second(0)\nnote n \"the first\" --on w:First\n").Code);
+        File.WriteAllText(Path.Combine(repo.Path, "app", "Loop.cs"),
+            Source().Replace("namespace Demo;", "namespace Demo;\n// one\n// two"));
+
+        var (_, output, _) = Run(repo, "doc", "show --code\n");
+
+        Assert.Contains("shows Loop.First(0), Loop.Second(0), Loop.Second(1)", output);
+        Assert.Contains("covers w lines 17-25 in Loop.Second(0)", output);     // 15-23, two lines down
+        Assert.Contains("|     public void Second()", output);
+        Assert.Contains("beside w at line 7 in Loop.First(0)", output);
+    }
+
     /// <summary>looking does not write: show and render leave the file as
     /// it was, byte for byte, even on a board saved in another shape.</summary>
     [Fact]

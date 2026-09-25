@@ -678,6 +678,15 @@ What makes it workable for a model:
   what code it shows, with warnings for overlaps and arrows crossing things.
   `render` draws the board, one stop, or chosen items to a PNG - a model that
   can see images looks at it and fixes what reads badly.
+- **Reviewing boards, not only writing them.** `atlas boards check` goes
+  over every board in the repo and prints one line per problem: files that
+  are gone, code that moved or vanished from under a window, windows never
+  anchored, drawings pinned to nothing, tour stops framing nothing, board
+  files that will not load, overlaps, arrows crossing things, edges a few
+  units off lining up. It exits 1 if it found anything. Then `show --code`
+  on a board says what each frame covers and what each note sits beside -
+  the lines, and the method they are in - as Atlas would open it, so an
+  agent can judge whether the board still says something true.
 - **Editing boards people made.** `set`, `move`, `rm`, `stop`, `unstop` work
   on any board, and the open app picks up the change on its own.
 

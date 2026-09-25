@@ -364,17 +364,15 @@ public class BoardGestureTests
         }
     }
 
-    /// <summary>alt+left is the way out, and the bar along the bottom has to
-    /// say so - it said "esc" while Escape did nothing, which is how the
-    /// key came to be added back.</summary>
+    /// <summary>Home is the way out - from the workspace, as H or its row.</summary>
     [AvaloniaFact]
-    public void AltLeftLeavesTheBoard()
+    public void GoingHomeLeavesTheBoard()
     {
         var (view, _, _, _, scene, repo) = Board();
         using (repo)
         using (scene)
         {
-            view.HandleKey(Key.Left, KeyModifiers.Alt);
+            view.GoHome();
             Assert.Null(scene.ActiveBoard);
         }
     }

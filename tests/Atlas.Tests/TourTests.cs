@@ -253,7 +253,7 @@ public class TourTests
         r.View.HandleKey(Key.M, KeyModifiers.Shift);
         r.View.HandleKey(Key.P);
 
-        r.View.HandleKey(Key.Left, KeyModifiers.Alt);
+        r.View.GoHome();
 
         Assert.Null(r.Scene.ActiveBoard);
         Assert.False(Reveal.Showing(r.Panel));
@@ -296,7 +296,7 @@ public class TourTests
     public void TheMapHasNoBookmarks()
     {
         using var r = Open();
-        r.View.HandleKey(Key.Left, KeyModifiers.Alt);
+        r.View.GoHome();
 
         r.View.HandleKey(Key.M);
 

@@ -443,6 +443,8 @@ public sealed class BoardOverlay : Border
         {
             case Key.Escape: Close(); return true;
             case Key.Enter: Commit(); return true;
+            // Home, from wherever: the way back to the map
+            case Key.H: Close(); HomeRequested?.Invoke(); return true;
             case Key.C: CreateRequested?.Invoke(); return true;
             case Key.F2: if (One is { } r) RenameRequested?.Invoke(r); return true;
             case Key.F3: if (One is { } g) GroupRequested?.Invoke(g); return true;

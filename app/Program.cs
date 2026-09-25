@@ -88,8 +88,6 @@ public sealed class App : Application
             var boardBar = new BoardBar();
             view.AttachBoardBar(boardBar);
 
-            var back = new BackButton();
-            view.AttachBack(back);
 
             var penBar = new PenBar(SceneView.Colours);
             view.AttachPenBar(penBar);
@@ -117,7 +115,6 @@ public sealed class App : Application
             root.Children.Add(boards);
             root.Children.Add(notes);
             root.Children.Add(boardBar);
-            root.Children.Add(back);
             root.Children.Add(penBar);
             root.Children.Add(eraserBar);
             root.Children.Add(hints);
@@ -850,8 +847,8 @@ public sealed class SceneView : Control
         Layers.Add("spotlight", () => _spotOn, ToggleSpotlight);
         // deliberately no "board" layer. Escape closes what is open - a
         // dialog, a menu, an armed tool, a selection - and leaving the board
-        // is not closing anything; it is going somewhere. That is alt+left
-        // and the "<" button. Escape did leave a board once, and putting a
+        // is not closing anything; it is going somewhere. That is Home, in
+        // the workspace: tab, then H. Escape did leave a board once, and putting a
         // dialog on top of one then meant Escape both dismissed the dialog
         // and threw you off the board
         Layers.Add("review", () => _scene.Review is not null && _scene.ActiveBoard is null, LeaveReview);
@@ -1737,14 +1734,6 @@ public sealed class SceneView : Control
         bar.Add += AddOfKind;
     }
 
-    BackButton? _back;
-
-    public void AttachBack(BackButton back)
-    {
-        _back = back;
-        back.Clicked += () => { LeaveBoard(); Focus(); };
-    }
-
     PenBar? _penBar;
     EraserBar? _eraserBar;
 
@@ -1789,7 +1778,6 @@ public sealed class SceneView : Control
         bool editing = _scene.ActiveBoard is not null && Editing;
         _boardBar?.Reflect(editing,
             _armShape ?? (_armBrush ? "brush" : _armEraser ? "eraser" : _armArrow ? "arrow" : null));
-        _back?.Reflect(_scene.ActiveBoard is not null, _scene.ActiveBoard?.Name);
         // each tool shows its own settings, and only while it is armed
         _penBar?.Reflect(editing && _armBrush, PenWeight, PenColor);
         _eraserBar?.Reflect(editing && _armEraser, EraserRadius, _splitErase);
@@ -1974,14 +1962,13 @@ public sealed class SceneView : Control
         }
         else if (_scene.ActiveBoard is not null)
         {
+            items.Add(("workspace", "tab", ToggleWorkspace));
+            items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
             items.Add(("undo", "ctrl+Z", Undo));
             items.Add(("redo", "ctrl+Y", Redo));
-            items.Add(("workspace", "tab", ToggleWorkspace));
-            items.Add(("tour stop", "M", CaptureStop));
-            items.Add(("tour", "shift+M", ToggleTourPanel));
+            items.Add(("add tour stop", "M", CaptureStop));
+            items.Add(("see tour stops", "shift+M", ToggleTourPanel));
             items.Add(("play", "P", () => PlayTour(0)));
-            items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
-            items.Add(("back to map", "alt+←", LeaveBoard));
         }
         else if (_scene.Review is not null)
         {
@@ -1994,12 +1981,13 @@ public sealed class SceneView : Control
         }
         else
         {
+            items.Add(("workspace", "tab", ToggleWorkspace));
+            items.Add(("fit", "F", FitAll));
             items.Add(("search", "/", () => OpenSearch?.Invoke()));
             items.Add(("pull requests", "P", () => OpenReviewPanel(branches: false)));
             items.Add(("branches", "G", () => OpenReviewPanel(branches: true)));
-            items.Add(("workspace", "tab", ToggleWorkspace));
-            items.Add(("notes", "L", OpenNotes));
-            items.Add(("fit", "F", FitAll));
+            // hidden for now; L still opens the notes
+            // items.Add(("notes", "L", OpenNotes));
         }
         _hints.Set(items);
     }
@@ -2594,7 +2582,7 @@ public sealed class SceneView : Control
         _boards = panel;
         panel.Open += OpenBoard;
         // Home is the map: leaving whatever board is open, generated or not
-        panel.HomeRequested += () => { if (_scene.ActiveBoard is not null) LeaveBoard(); Focus(); };
+        panel.HomeRequested += GoHome;
         panel.CreateRequested += CreateBoard;
         panel.DeleteRequested += picked => _prompt?.Ask(
             picked.Count == 1
@@ -2725,6 +2713,16 @@ public sealed class SceneView : Control
         if (Where(b) == before) return false;
         _boardStore?.Save(b);
         return true;
+    }
+
+    /// <summary>go to the map - Home - from whatever board is open,
+    /// generated or not. The one way back now: Home in the workspace, or H
+    /// while it is open. There used to be a "map" button, alt+left and a
+    /// button in the bottom bar as well.</summary>
+    public void GoHome()
+    {
+        if (_scene.ActiveBoard is not null) LeaveBoard();
+        Focus();
     }
 
     /// <summary>open or close the workspace panel. Tab, from anywhere - the
@@ -4399,7 +4397,6 @@ public sealed class SceneView : Control
             switch (key)
             {
                 case Key.Back or Key.Delete: DeletePicked(); return;
-                case Key.Left when _alt: LeaveBoard(); return;
                 case Key.N: AddNote(); return;
                 case Key.T or Key.D1: AddShape("shape"); return;
                 case Key.D2: AddShape("ellipse"); return;

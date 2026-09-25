@@ -56,6 +56,22 @@ public class WorkspaceTests
         Assert.False(Reveal.Showing(r.Panel));
     }
 
+    /// <summary>H in the workspace goes Home, whatever is selected - with the
+    /// "map" button and alt+left gone, tab then H is the way back.</summary>
+    [AvaloniaFact]
+    public void HInTheWorkspaceGoesHome()
+    {
+        using var r = Open("one");
+        r.Scene.ActiveBoard = r.Store.Boards.Single();
+        r.View.ToggleWorkspace();
+        Settle(r.Window);
+
+        r.View.HandleKey(Key.H);
+
+        Assert.Null(r.Scene.ActiveBoard);
+        Assert.False(Reveal.Showing(r.Panel));
+    }
+
     /// <summary>Home cannot be dragged, and nothing can be dropped above it.</summary>
     [AvaloniaFact]
     public void HomeStaysAtTheTop()

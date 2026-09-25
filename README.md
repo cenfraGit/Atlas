@@ -111,8 +111,8 @@ height, so a long thin divider is as available as a square.
 
 `N` adds a note, `Y` an arrow, `ctrl+V` pastes an image, and `G` toggles
 snapping. `ctrl+Z` and `ctrl+Y` undo and redo.
-The `<` button top left goes
-back to the map, and the camera returns exactly where you left it.
+Home, in the workspace (`Tab`, then `H`), goes back to the map, and the
+camera returns exactly where you left it.
 
 **`Esc` cancels, it does not leave.** It closes whatever is innermost - a
 dialog, then a panel, then an armed tool, then the selection - and never the
@@ -210,7 +210,7 @@ your team gets everything you wrote.
 | `Esc` | cancel the innermost thing: dialog, panel, tool, selection |
 | `Tab` | the workspace: Home and every board, from anywhere |
 | space | spotlight: dim everything but a circle round the pointer, for explaining on a call; `Alt`+wheel sizes it, space or `Esc` turns it off |
-| `<` or alt+left | back to the map from a board |
+| `Tab`, then `H` | Home: back to the map from a board |
 | Backspace | same as Delete |
 | `B` | freehand brush on a board; stays on until you press it again |
 | `X` | eraser on a board |

@@ -203,6 +203,11 @@ public static class BoardCli
         bool _made;
         BoardItem? _last;
 
+        // only a command that changes the board saves it: a save rewrites the
+        // file in today's format, and looking at an older board with show
+        // should not leave a diff behind
+        bool _changed;
+
         public Session(string repo, string name)
         {
             _repo = repo;
@@ -232,7 +237,7 @@ public static class BoardCli
 
         public void Commit()
         {
-            if (_board is null) return;
+            if (_board is null || !_changed) return;
             foreach (var stop in _board.Stops) Reframe(stop);
             // refused when the board changed on disk while this ran - the
             // app saving it, most likely - rather than saved over
@@ -264,6 +269,7 @@ public static class BoardCli
         public void Do(List<string> words)
         {
             var (pos, opt) = Parse(words.Skip(1));
+            _changed |= words[0] is not ("show" or "render" or "help");
             switch (words[0])
             {
                 case "new": New(opt); break;
@@ -447,11 +453,14 @@ public static class BoardCli
 
             using var bmp = new SKBitmap(px, py);
             using var canvas = new SKCanvas(bmp);
-            // file text loads off this thread; draw until every window has
-            // its code, or the image shows empty windows
+            // file text loads off this thread; draw until every window that
+            // is close enough to show text has it, or the image shows empty
+            // windows. One drawn as bars never asks for its text, and waiting
+            // on it ran the clock out on every zoomed out render
             var files = b.Items.Where(i => i.Kind == "file" && i.File is not null)
-                .Select(i => scene.ResolveFile(i.File!, i.Key)).Where(i => i >= 0)
-                .Select(i => scene.Data.Files[i].P).ToList();
+                .Select(i => (Item: i, At: scene.ResolveFile(i.File!, i.Key))).Where(x => x.At >= 0)
+                .Where(x => scene.CamS * x.Item.W / scene.Data.Files[x.At].W >= Scene.T_TEXT)
+                .Select(x => scene.Data.Files[x.At].P).ToList();
             var deadline = DateTime.UtcNow.AddSeconds(10);
             do
             {

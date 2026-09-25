@@ -235,6 +235,23 @@ public class BoardCliTests
         Assert.Contains(Enumerable.Range(0, 800), x => bmp.GetPixel(x, bmp.Height / 2) != bg);
     }
 
+    /// <summary>looking does not write: show and render leave the file as
+    /// it was, byte for byte, even on a board saved in another shape.</summary>
+    [Fact]
+    public void ShowAndRenderDoNotRewriteTheBoard()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow w Loop.cs First\n").Code);
+        var path = Stored(repo, "doc").Path;
+        File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n"));
+        var before = File.ReadAllText(path);
+
+        var png = Path.Combine(repo.Path, "b.png");
+        Assert.Equal(0, Run(repo, "doc", $"show\nrender \"{png}\" --px 300\n").Code);
+
+        Assert.Equal(before, File.ReadAllText(path));
+    }
+
     /// <summary>a stop made by framing items follows them, so moving a
     /// window does not leave the tour looking at empty canvas.</summary>
     [Fact]

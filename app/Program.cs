@@ -427,6 +427,7 @@ public sealed class SceneView : Control
         // one is playing, when the frames would fly past on every step
         _scene.StopsShown = Reveal.Showing(_stops) && _tour is null && !_scene.BoardReadOnly;
         _scene.StopPicked = _stops?.Selected ?? -1;
+        StepSpotlight(now);
         context.Custom(new SceneOp(new Rect(0, 0, w, h), _scene, w, h));
         if (_scene.Samples.Count > 0)
         {
@@ -442,7 +443,7 @@ public sealed class SceneView : Control
 
         // only the benchmark free-runs; otherwise input and pending work drive redraws
         // a toast has to expire off-frame, so keep drawing while one is up
-        if (_phase >= 0 || _flight is not null || _glide.Running || ToastShowing ||
+        if (_phase >= 0 || _flight is not null || _glide.Running || ToastShowing || SpotFading ||
             (_autoBench && !_benchDone))
             Dispatcher.UIThread.Post(InvalidateVisual, DispatcherPriority.Background);
         else
@@ -743,11 +744,32 @@ public sealed class SceneView : Control
     /// <summary>the spotlight, on or off, at the pointer.</summary>
     public void ToggleSpotlight()
     {
-        _scene.Spotlight = _scene.Spotlight is null
-            ? new SkiaSharp.SKPoint((float)_pointer.X, (float)_pointer.Y)
-            : null;
-        Toast(_scene.Spotlight is null ? "spotlight off" : "spotlight - tab or esc to turn off, alt+wheel to size");
+        _spotOn = !_spotOn;
+        _spotAt = _clock.Elapsed.TotalSeconds;
+        // it stays drawn while it fades out; StepSpotlight lets it go
+        if (_spotOn) _scene.Spotlight = new SkiaSharp.SKPoint((float)_pointer.X, (float)_pointer.Y);
+        Toast(_spotOn ? "spotlight - tab or esc to turn off, alt+wheel to size" : "spotlight off");
         InvalidateVisual();
+    }
+
+    bool _spotOn;
+    double _spotAt = -1;
+    const double SpotFade = 0.18;
+
+    /// <summary>whether the spotlight is on - it can still be fading out
+    /// after this says no.</summary>
+    public bool SpotlightOn => _spotOn;
+
+    bool SpotFading => _spotAt >= 0 && _clock.Elapsed.TotalSeconds - _spotAt < SpotFade;
+
+    /// <summary>ease the spotlight in or out, once a frame.</summary>
+    void StepSpotlight(double now)
+    {
+        if (_scene.Spotlight is null) return;
+        double t = Math.Clamp((now - _spotAt) / SpotFade, 0, 1);
+        float eased = (float)(1 - Math.Pow(1 - t, 3));
+        _scene.SpotlightAmount = _spotOn ? eased : 1 - eased;
+        if (!_spotOn && t >= 1) _scene.Spotlight = null;
     }
 
     static string Describe(Scan scan)
@@ -789,7 +811,7 @@ public sealed class SceneView : Control
         Layers.Add("matches", () => _scene.Find is not null, ClearFind);
         Layers.Add("selection", HasSelection, ClearSelection);
         // outermost: presenting is the last thing Escape should interrupt
-        Layers.Add("spotlight", () => _scene.Spotlight is not null, ToggleSpotlight);
+        Layers.Add("spotlight", () => _spotOn, ToggleSpotlight);
         // deliberately no "board" layer. Escape closes what is open - a
         // dialog, a menu, an armed tool, a selection - and leaving the board
         // is not closing anything; it is going somewhere. That is alt+left
@@ -4101,7 +4123,7 @@ public sealed class SceneView : Control
         var p = e.GetPosition(this);
 
         // alt+wheel sizes the spotlight while it is on
-        if (_scene.Spotlight is not null && e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+        if (_spotOn && e.KeyModifiers.HasFlag(KeyModifiers.Alt))
         {
             _scene.SpotlightRadius = Math.Clamp(_scene.SpotlightRadius * (e.Delta.Y > 0 ? 1.15f : 1 / 1.15f), 40, 600);
             e.Handled = true;

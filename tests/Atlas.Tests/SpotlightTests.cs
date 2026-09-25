@@ -74,6 +74,41 @@ public class SpotlightTests
         Assert.True(scene.SpotlightRadius > r);
 
         Assert.True(view.Escape());
-        Assert.Null(scene.Spotlight);
+        Assert.False(view.SpotlightOn);
+        // it fades out over a few frames, then is gone
+        Thread.Sleep(300);
+        // the next frame is posted, as the app keeps drawing while it fades
+        view.InvalidateVisual();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        using (window.CaptureRenderedFrame()) { }
+        Assert.True(scene.Spotlight is null, $"amount {scene.SpotlightAmount} on {view.SpotlightOn} bounds {view.Bounds}");
+    }
+
+    /// <summary>it eases in: straight after tab the dimming is partway, and
+    /// a moment later it is all the way.</summary>
+    [AvaloniaFact]
+    public void ItComesInRatherThanAppearing()
+    {
+        using var repo = SampleRepo.Build();
+        var scene = new Scene(Scanner.Build(repo.Path));
+        var store = BoardStore.Load(repo.Path);
+        var view = new SceneView(scene);
+        view.AttachBoards(store, new BoardOverlay(store));
+        view.BuildLayers();
+        var window = new Window { Width = 800, Height = 600, Content = view };
+        window.Show();
+
+        view.ToggleSpotlight();
+        using (window.CaptureRenderedFrame()) { }
+        Assert.True(scene.SpotlightAmount < 1, "it arrived all at once");
+
+        Thread.Sleep(300);
+        // the next frame is posted, as the app keeps drawing while it fades
+        view.InvalidateVisual();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        using (window.CaptureRenderedFrame()) { }
+        Assert.Equal(1f, scene.SpotlightAmount);
     }
 }

@@ -949,19 +949,23 @@ public sealed class Scene : IDisposable
     /// units, so it frames the same amount of screen at any zoom.</summary>
     public float SpotlightRadius = 130;
 
-    /// <summary>dim the whole view except a soft-edged circle, with a faint
-    /// ring at its edge. Drawn last and in screen space, over everything.</summary>
+    /// <summary>how far in the spotlight is, 0 to 1, while it comes and
+    /// goes: the dimming deepens and the circle closes in from wider, like
+    /// an iris, rather than the view going dark between two frames.</summary>
+    public float SpotlightAmount = 1;
+
+    /// <summary>dim the whole view except a soft-edged circle. Drawn last and
+    /// in screen space, over everything. Only the dimming: a ring drawn at
+    /// the edge was one more thing on screen competing for the eye.</summary>
     void DrawSpotlight(SKCanvas canvas, float vw, float vh)
     {
-        if (Spotlight is not { } at) return;
-        float r = SpotlightRadius, soft = r * 0.3f;
-        var dark = new SKColor(0, 0, 0, 190);
+        if (Spotlight is not { } at || SpotlightAmount <= 0) return;
+        float r = SpotlightRadius * (1 + (1 - SpotlightAmount) * 1.5f), soft = r * 0.3f;
+        var dark = new SKColor(0, 0, 0, (byte)(190 * SpotlightAmount));
         using var shader = SKShader.CreateRadialGradient(at, r + soft,
             [SKColors.Transparent, SKColors.Transparent, dark], [0f, r / (r + soft), 1f], SKShaderTileMode.Clamp);
         using var shade = new SKPaint { Shader = shader };
         canvas.DrawRect(0, 0, vw, vh, shade);
-        using var ring = new SKPaint { IsStroke = true, StrokeWidth = 1.5f, IsAntialias = true, Color = new SKColor(0xff, 0xd1, 0x66, 120) };
-        canvas.DrawCircle(at, r, ring);
     }
 
     public void Draw(SKCanvas canvas, float vw, float vh)

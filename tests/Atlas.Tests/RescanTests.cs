@@ -24,7 +24,7 @@ public class RescanTests
         return (view, scene, store);
     }
 
-    static bool Until(Func<bool> done, double seconds = 6)
+    static bool Until(Func<bool> done, double seconds = 15)
     {
         var deadline = DateTime.UtcNow.AddSeconds(seconds);
         while (!done() && DateTime.UtcNow < deadline)
@@ -113,7 +113,10 @@ public class RescanTests
         {
             var f = scene.Data.Files[scene.IndexOfPath(p)];
             (scene.CamX, scene.CamY, scene.CamS) = (f.X + f.W / 2, f.Y + 30, 3f);
-            for (int n = 0; n < 300 && scene.LinesOf(p) is null; n++) { scene.Draw(canvas, 800, 600); Thread.Sleep(10); }
+            // a deadline rather than a count: tokenising is behind one lock
+            // for the whole process, and the rest of the suite is using it
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while (scene.LinesOf(p) is null && DateTime.UtcNow < deadline) { scene.Draw(canvas, 800, 600); Thread.Sleep(10); }
             Assert.NotNull(scene.LinesOf(p));
         }
 

@@ -102,6 +102,24 @@ public class WorkspaceTests
         Assert.False(Reveal.Showing(back));
     }
 
+    /// <summary>the "&lt;" at the top left closes the panel, and the canvas
+    /// has the keys again.</summary>
+    [AvaloniaFact]
+    public void TheCollapseButtonClosesIt()
+    {
+        using var r = Open("one");
+        r.View.ToggleWorkspace();
+        Settle(r.Window);
+
+        var collapse = r.Panel.GetVisualDescendants().OfType<Button>().First(b => (string?)b.Content == "<");
+        var at = collapse.TranslatePoint(new Point(collapse.Bounds.Width / 2, collapse.Bounds.Height / 2), r.Window)!.Value;
+        r.Window.MouseDown(at, MouseButton.Left);
+        r.Window.MouseUp(at, MouseButton.Left);
+
+        Assert.False(Reveal.Showing(r.Panel));
+        Assert.True(r.View.IsFocused);
+    }
+
     /// <summary>Home cannot be dragged, and nothing can be dropped above it.</summary>
     [AvaloniaFact]
     public void HomeStaysAtTheTop()

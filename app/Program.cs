@@ -1886,6 +1886,7 @@ public sealed class SceneView : Control
         {
             items.Add(("workspace", "tab", ToggleWorkspace));
             items.Add(("fit", "F", () => { FitBoard(); InvalidateVisual(); }));
+            items.Add(("find", "ctrl+F", OpenGrep));
             items.Add(("undo", "ctrl+Z", Undo));
             items.Add(("redo", "ctrl+Y", Redo));
             items.Add(("add tour stop", "M", CaptureStop));
@@ -2505,6 +2506,7 @@ public sealed class SceneView : Control
         panel.Open += OpenBoard;
         // Home is the map: leaving whatever board is open, generated or not
         panel.HomeRequested += GoHome;
+        panel.CloseRequested += () => { Focus(); InvalidateVisual(); };
         panel.CreateRequested += CreateBoard;
         panel.DeleteRequested += picked => _prompt?.Ask(
             picked.Count == 1
@@ -3518,7 +3520,7 @@ public sealed class SceneView : Control
         FlyTo(stop.X + c / 2 / s, stop.Y, s);
         if (!playing) return;
         _stops?.Select(i);
-        _caption = $"{TourPanel.Label(stop, i)}   {i + 1}/{b.Stops.Count}   -   space, arrows: step   esc: stop";
+        _caption = $"{TourPanel.Label(stop, i)}   {i + 1}/{b.Stops.Count}   -   arrows: step   esc: stop";
     }
 
     /// <summary>play this board's tour from a stop.</summary>

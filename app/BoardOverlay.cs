@@ -58,6 +58,8 @@ public sealed class BoardOverlay : Border
     public event Action<Board>? RenameRequested;
     public event Action<Board>? GroupRequested;
     public event Action<List<Board>>? DeleteRequested;
+    /// <summary>the "&lt;" button closed the panel, so the canvas can take the keys back.</summary>
+    public event Action? CloseRequested;
 
     public BoardOverlay(BoardStore store)
     {
@@ -111,6 +113,10 @@ public sealed class BoardOverlay : Border
         var create = Make("new", () => CreateRequested?.Invoke());
         var folder = Make("open folder...", () => { Close(); OpenFolderRequested?.Invoke(); });
         folder.Foreground = Ui.Fore;
+        var collapse = Make("<", () => { Close(); CloseRequested?.Invoke(); });
+        collapse.Padding = new Thickness(6, 0);
+        collapse.Margin = new Thickness(0, 0, 8, 0);
+        ToolTip.SetTip(collapse, "close (tab)");
 
         var buttons = new WrapPanel
         {
@@ -123,10 +129,19 @@ public sealed class BoardOverlay : Border
         {
             Children =
             {
-                new TextBlock
+                new StackPanel
                 {
-                    Text = "WORKSPACE", FontFamily = Ui.Mono, FontSize = 12,
-                    Foreground = Ui.Accent, Margin = new Thickness(0, 0, 0, 8),
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(0, 0, 0, 8),
+                    Children =
+                    {
+                        collapse,
+                        new TextBlock
+                        {
+                            Text = "WORKSPACE", FontFamily = Ui.Mono, FontSize = 12,
+                            Foreground = Ui.Accent, VerticalAlignment = VerticalAlignment.Center,
+                        },
+                    },
                 },
                 buttons,
                 _list,

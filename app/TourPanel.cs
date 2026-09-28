@@ -153,7 +153,7 @@ public sealed class TourPanel : Border
         _hint.Text = stops.Count == 0
             ? "frame the view you want, then M. move and M again for the next stop."
             : "click: look   double click: play from it   drag: reorder\n" +
-              "playing: space or arrows to step, esc to stop";
+              "playing: arrows to step, esc to stop";
         _play.IsEnabled = _rename.IsEnabled = _delete.IsEnabled = stops.Count > 0;
         foreach (var b in new[] { _play, _rename, _delete })
             b.Foreground = b.IsEnabled ? Ui.Fore : Ui.Dim;

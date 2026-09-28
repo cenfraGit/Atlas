@@ -94,8 +94,9 @@ public class ShellTests
 
         var workspace = window.GetVisualDescendants().OfType<BoardOverlay>().Single();
         workspace.Transitions = null;
+        Assert.True(Reveal.Showing(workspace));          // a folder opens at home, workspace open
         window.KeyPress(Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
-        Assert.True(Reveal.Showing(workspace));
+        Assert.False(Reveal.Showing(workspace));
     }
 
     [AvaloniaFact]

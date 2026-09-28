@@ -191,15 +191,52 @@ public sealed class BoardOverlay : Border
     /// <summary>the rows as they are shown, top to bottom. For the tests.</summary>
     public IReadOnlyList<BoardRow> Rows => _rows;
 
-    /// <summary>groups folded away by clicking their heading. Only for this
-    /// session: groups.json is shared through git, and what one person
-    /// has folded is nobody else's business.</summary>
+    /// <summary>groups folded away by clicking their heading. Kept in
+    /// data/, not beside groups.json: that is shared through git, and what
+    /// one person has folded is nobody else's business.</summary>
     public HashSet<string> Folded { get; } = [];
+
+    string? _foldFile;
+    string _foldRepo = "";
+
+    /// <summary>read and keep the folds in a file holding every repo's,
+    /// keyed by the repo's folder. Without it they last the session.</summary>
+    public void RememberFolds(string file, string repo)
+    {
+        (_foldFile, _foldRepo) = (file, repo);
+        if (AllFolds().TryGetValue(repo, out var groups)) Folded.UnionWith(groups);
+        Rebuild();
+    }
+
+    Dictionary<string, List<string>> AllFolds()
+    {
+        try
+        {
+            if (_foldFile is not null && File.Exists(_foldFile) &&
+                System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(_foldFile)) is { } all)
+                return new(all, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception) { }
+        return new(StringComparer.OrdinalIgnoreCase);
+    }
 
     /// <summary>fold a group away, or open it again.</summary>
     public void ToggleFold(string group)
     {
         if (!Folded.Remove(group)) Folded.Add(group);
+        if (_foldFile is not null)
+        {
+            var all = AllFolds();
+            if (Folded.Count == 0) all.Remove(_foldRepo);
+            else all[_foldRepo] = [.. Folded.Order(StringComparer.Ordinal)];
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_foldFile)!);
+                File.WriteAllText(_foldFile, System.Text.Json.JsonSerializer.Serialize(all,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception) { }
+        }
         // the click on the heading cleared the selection; folding should not
         // pick a board in its place, which is what a rebuild does when empty
         bool none = Selected.Count == 0 && !HomePicked;
@@ -468,7 +505,7 @@ public sealed class BoardOverlay : Border
             case Key.Escape: Close(); return true;
             case Key.Enter: Commit(); return true;
             // Home, from wherever: the way back to the map
-            case Key.H: Close(); HomeRequested?.Invoke(); return true;
+            case Key.H: HomeRequested?.Invoke(); return true;
             case Key.C: CreateRequested?.Invoke(); return true;
             case Key.F2: if (One is { } r) RenameRequested?.Invoke(r); return true;
             case Key.F3: if (One is { } g) GroupRequested?.Invoke(g); return true;
@@ -498,7 +535,8 @@ public sealed class BoardOverlay : Border
 
     void Commit()
     {
-        if (HomePicked) { Close(); HomeRequested?.Invoke(); return; }
+        // home keeps the workspace open: it is where the next board is picked
+        if (HomePicked) { HomeRequested?.Invoke(); return; }
         if (One is not { } b) return;
         Close();
         Open?.Invoke(b);

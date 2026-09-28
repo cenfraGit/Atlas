@@ -216,6 +216,7 @@ public sealed class Shell
         var boardStore = BoardStore.Load(scene.Data.Root);
         var boards = new BoardOverlay(boardStore);
         boards.OpenFolderRequested += PickFolder;
+        boards.RememberFolds(Path.Combine(Path.GetDirectoryName(_recentPath)!, "folded.json"), scan.Root);
         view.AttachBoards(boardStore, boards);
         view.WatchBoards();
         view.WatchRepo();
@@ -277,5 +278,7 @@ public sealed class Shell
         _window.Title = $"Atlas - {Path.GetFileName(scan.Root)}";
         Current = view;
         view.Focus();
+        // a folder opens at home, and home has the workspace open
+        boards.Show();
     }
 }

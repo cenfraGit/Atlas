@@ -70,9 +70,10 @@ and annotations. Every path in it is repo-relative, so it works wherever the rep
 is cloned. **Commit this folder** - that is how the rest of your team gets
 what you wrote. Nothing needs adding to that repo's `.gitignore`.
 
-**In Atlas's own folder: `data/recent.json`.** The folders you opened lately,
-for the empty workspace to list - the one machine-specific thing Atlas
-writes, and this repo's `.gitignore` already excludes it. Opening a folder
+**In Atlas's own folder: `data/`.** `recent.json` is the folders you opened
+lately, for the empty workspace to list, and `folded.json` the workspace
+groups you folded, per repo. They are the machine-specific things Atlas
+writes, and this repo's `.gitignore` already excludes them. Opening a folder
 never writes anything into it: an `.atlas` appears only once you make a
 board or a note.
 
@@ -99,9 +100,10 @@ method. This is the unit everything else works on.
 **Put it on a board.** The map is laid out for you and never rearranged by
 hand; a board is where you arrange things yourself. Secondary click your
 selection and pick *Add file to board*, or press `A` to send whatever you are
-looking at to the board you last had open. `Tab` opens the **workspace** from
-anywhere: Home - the map - at the top, then your boards by group. Select one
-and click *open*; long names wrap, clicking a group heading folds that group away, and the `<` at its top right closes the panel. Every side panel - the workspace, the
+looking at to the board you last had open. The **workspace** is open
+whenever you arrive home - opening a folder, leaving a board, leaving a
+review - and `Tab` opens and closes it from anywhere: Home - the map - at the top, then your boards by group. Select one
+and click *open*; long names wrap, clicking a group heading folds that group away (remembered per repo), and the `<` at its top right closes the panel. Every side panel - the workspace, the
 tour, the commits - drags wider from its inner edge, and the bars, toggles
 and dialogs move over to stay clear of whatever is open.
 

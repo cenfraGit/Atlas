@@ -53,7 +53,49 @@ public class WorkspaceTests
         r.Panel.HandleKey(Key.Enter);
 
         Assert.Null(r.Scene.ActiveBoard);
+        Assert.True(Reveal.Showing(r.Panel));      // home keeps the workspace open
+    }
+
+    /// <summary>arriving home by any route opens the workspace: it is where
+    /// the next board is picked.</summary>
+    [AvaloniaFact]
+    public void GoingHomeOpensTheWorkspace()
+    {
+        using var r = Open("one");
+        r.List.SelectedIndex = r.Panel.Rows.ToList().FindIndex(x => x.Board is not null);
+        r.Panel.Show();
+        Settle(r.Window);
+        r.Panel.HandleKey(Key.Enter);
+        Assert.NotNull(r.Scene.ActiveBoard);
         Assert.False(Reveal.Showing(r.Panel));
+
+        r.View.GoHome();
+
+        Assert.Null(r.Scene.ActiveBoard);
+        Assert.True(Reveal.Showing(r.Panel));
+    }
+
+    /// <summary>folded groups are remembered per repo, in a file outside it.</summary>
+    [AvaloniaFact]
+    public void FoldedGroupsAreRemembered()
+    {
+        using var r = Open("one");
+        r.Store.Boards.Single().Group = "design";
+        using var data = new TempDir("data");
+        var file = Path.Combine(data.Path, "folded.json");
+
+        r.Panel.RememberFolds(file, r.Repo.Path);
+        r.Panel.ToggleFold("design");
+
+        var again = new BoardOverlay(r.Store);
+        again.RememberFolds(file, r.Repo.Path);
+        Assert.Contains("design", again.Folded);
+        Assert.DoesNotContain(again.Rows, x => x.Board is not null);
+
+        var other = new BoardOverlay(r.Store);
+        other.RememberFolds(file, Path.Combine(data.Path, "another repo"));
+        Assert.Empty(other.Folded);
+        Assert.False(Directory.Exists(Path.Combine(r.Repo.Path, "data")));
     }
 
     /// <summary>H in the workspace goes Home, whatever is selected - with the
@@ -69,7 +111,7 @@ public class WorkspaceTests
         r.View.HandleKey(Key.H);
 
         Assert.Null(r.Scene.ActiveBoard);
-        Assert.False(Reveal.Showing(r.Panel));
+        Assert.True(Reveal.Showing(r.Panel));
     }
 
     /// <summary>the "map" button is back: shown on a board, and it goes

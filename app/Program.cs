@@ -1906,6 +1906,7 @@ public sealed class SceneView : Control
         {
             items.Add(("workspace", "tab", ToggleWorkspace));
             items.Add(("fit", "F", FitAll));
+            items.Add(("find", "ctrl+F", OpenGrep));
             items.Add(("search", "/", () => OpenSearch?.Invoke()));
             items.Add(("pull requests", "P", () => OpenReviewPanel(branches: false)));
             items.Add(("branches", "G", () => OpenReviewPanel(branches: true)));
@@ -2189,6 +2190,7 @@ public sealed class SceneView : Control
         _prCommits = [];
         _commitAt = -1;
         _caption = "";
+        _boards?.Show();
         InvalidateVisual();
     }
 
@@ -2887,7 +2889,8 @@ public sealed class SceneView : Control
         if (_mapCam is { } c) { _scene.CamX = c.X; _scene.CamY = c.Y; _scene.CamS = c.S; }
         _mapCam = null;
         _caption = "";
-        _boards?.Rebuild();
+        // home is where you pick the next board, so the workspace is open there
+        _boards?.Show();
         InvalidateVisual();
     }
 

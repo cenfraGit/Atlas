@@ -257,7 +257,8 @@ public class TourTests
 
         Assert.Null(r.Scene.ActiveBoard);
         Assert.False(Reveal.Showing(r.Panel));
-        Assert.False(r.View.Escape());                    // nothing left open
+        Assert.True(r.View.Escape());                     // home opens the workspace
+        Assert.False(r.View.Escape());                    // and nothing else is left open
     }
 
     /// <summary>Delete with the panel open still deletes what is picked on

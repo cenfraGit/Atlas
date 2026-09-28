@@ -578,6 +578,7 @@ syntax-highlighted source. It is a desktop app, not a library.
 app/                 the whole application, one flat folder, no sub-projects
 tests/Atlas.Tests/   xunit suite (hermetic - builds its own fixtures)
 data/recent.json     folders opened lately, machine specific, gitignored
+data/folded.json     workspace groups folded, per repo, likewise
 .atlas/              boards (and their tours), annotations, for the repo being read
 ```
 

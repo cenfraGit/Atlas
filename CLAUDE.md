@@ -850,8 +850,12 @@ panel and `_lastBoard` all hold the object. Covered by `BoardReloadTests`.
 **Looking at a board does not write it.** Opening one fills in what an
 older or hand-made board lacks - file keys, anchors, pins - and used to
 save for that alone, which turned a board someone had only opened into a
-diff of every line. `SceneView.FollowCode` saves only when something moved;
-what was filled in rides along with the next real edit. And a save writes
+diff of every line. It then saved whenever a window had moved onto its
+code, which sounds right until you check out an older branch: the code
+under the board is older too, so opening it wrote a diff there as well.
+`SceneView.FollowCode` never saves - neither on opening nor after a
+rescan - and what moved or was filled in rides along with the next real
+edit. And a save writes
 only what differs from a fresh object (`BoardStore.OmitFresh`, compared
 against a new instance, so a real zero where the default is not zero is
 kept), with `+` and `'` unescaped. Covered by `BoardFormatTests`.

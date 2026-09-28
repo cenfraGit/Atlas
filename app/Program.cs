@@ -2632,13 +2632,11 @@ public sealed class SceneView : Control
         InvalidateVisual();
     }
 
-    /// <summary>put a board back on its code, and save it only if that moved
-    /// something. Whether anything moved is judged by where things are, not
-    /// by whether the anchoring filled anything in: a board without
-    /// fingerprints or anchors - made by hand, or by an older Atlas - gets
-    /// them now, and saving for that alone rewrote the whole file of a board
-    /// someone had only opened. What was filled in stays in memory and goes
-    /// out with the next edit that saves.</summary>
+    /// <summary>put a board back on its code, in memory only, and say whether
+    /// anything moved. It never saves: the code under a board changes with
+    /// every checkout, so saving here turned opening a board on an older
+    /// branch into a diff of every window whose method had shifted. What
+    /// moved or was filled in goes out with the next edit that saves.</summary>
     bool FollowCode(Board b)
     {
         static string Where(Board b) => string.Join(";", b.Items.Select(i =>
@@ -2646,9 +2644,7 @@ public sealed class SceneView : Control
         var before = Where(b);
         _scene.EnsureKeys(b);
         _scene.AnchorBoard(b);
-        if (Where(b) == before) return false;
-        _boardStore?.Save(b);
-        return true;
+        return Where(b) != before;
     }
 
     /// <summary>let go of what outlives the window: the watchers on the

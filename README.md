@@ -608,6 +608,10 @@ A board changed on disk - by the command line, a pull, a teammate - is read
 again while it is open, and the canvas shows it. If Atlas was about to save
 over such a change, it does not: the disk wins.
 
+Opening a board never writes it. If the code under a window has moved - an
+edit, or a checkout of another branch - the window moves onto it on screen,
+and the new position is saved with your next real change to the board.
+
 Opening a board keeps the map camera, so leaving with `Esc` puts you back
 exactly where you were. A board draws on an indigo background instead of the
 map's blue-black, so it is obvious which one you are looking at.

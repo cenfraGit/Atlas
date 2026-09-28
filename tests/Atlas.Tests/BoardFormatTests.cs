@@ -90,4 +90,44 @@ public class BoardFormatTests
         Assert.Equal(before, File.ReadAllText(path));        // and not written
         scene.ActiveBoard = null;
     }
+
+    /// <summary>a window whose method has moved - as it does after checking
+    /// out an older branch than the board was drawn on - moves onto it on
+    /// screen, and the file is still not written.</summary>
+    [AvaloniaFact]
+    public void OpeningABoardWhoseCodeMovedWritesNothing()
+    {
+        using var repo = SampleRepo.Build();
+        string Source(int filler) => "namespace Demo;\n\npublic class Moved\n{\n" +
+            string.Concat(Enumerable.Repeat("    // filler\n", filler)) +
+            "    public int Target()\n    {\n        return 42;\n    }\n}\n";
+        repo.File("app/Moved.cs", Source(5));
+
+        // drawn on the code with the method lower down, and saved
+        var store = BoardStore.Load(repo.Path);
+        var drawn = store.Create("moved", "m");
+        var first = new Scene(Scanner.Build(repo.Path));
+        var w = new BoardItem { Id = "w", Kind = "file", File = "app/Moved.cs", Key = first.KeyFor("app/Moved.cs"), W = 620, Line = 9, EndLine = 12 };
+        drawn.Items.Add(w);
+        first.Reanchor(w);
+        store.Save(drawn);
+        var before = File.ReadAllText(drawn.Path);
+
+        // then the method moves up three lines, and the board is opened
+        repo.File("app/Moved.cs", Source(2));
+        var scene = new Scene(Scanner.Build(repo.Path));
+        store = BoardStore.Load(repo.Path);
+        var panel = new BoardOverlay(store) { Transitions = null };
+        var view = new SceneView(scene);
+        view.AttachBoards(store, panel);
+        view.BuildLayers();
+        new Window { Width = 800, Height = 600, Content = new Grid { Children = { view, panel } } }.Show();
+        panel.Show();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        panel.HandleKey(Avalonia.Input.Key.Enter);
+
+        Assert.Equal(6, scene.ActiveBoard!.Items[0].Line);   // on its code in memory
+        Assert.Equal(before, File.ReadAllText(drawn.Path)); // and not written
+        scene.ActiveBoard = null;
+    }
 }

@@ -118,6 +118,66 @@ public class WorkspaceTests
 
         Assert.False(Reveal.Showing(r.Panel));
         Assert.True(r.View.IsFocused);
+        Assert.True(at.X > r.Panel.Bounds.Width / 2, "the button is not on the right");
+    }
+
+    /// <summary>a click on a group heading folds its boards away, and a
+    /// second click brings them back; the heading itself stays.</summary>
+    [AvaloniaFact]
+    public void ClickingAHeadingFoldsItsGroup()
+    {
+        using var r = Open("one", "two", "three");
+        foreach (var b in r.Store.Boards.Where(b => b.Name != "three")) b.Group = "design";
+        r.Panel.Show();
+        r.Panel.Rebuild();
+        Settle(r.Window);
+        Point Centre(int row)
+        {
+            var c = r.List.ContainerFromIndex(row)!;
+            return c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), r.Window)!.Value;
+        }
+        void Click(int row)
+        {
+            var at = Centre(row);
+            r.Window.MouseDown(at, MouseButton.Left);
+            r.Window.MouseUp(at, MouseButton.Left);
+            Settle(r.Window);
+        }
+        int Heading() => r.Panel.Rows.ToList().FindIndex(x => x.IsHeader && x.Group == "design");
+        var names = () => r.Panel.Rows.Where(x => x.Board is not null).Select(x => x.Board!.Name).ToList();
+
+        Click(Heading());
+        Assert.Equal(["three"], names());
+        Assert.True(Heading() >= 0, "the heading went too");
+
+        Click(Heading());
+        Assert.Equal(3, names().Count);
+    }
+
+    /// <summary>dragging a heading still reorders groups, and does not fold.</summary>
+    [AvaloniaFact]
+    public void DraggingAHeadingDoesNotFoldIt()
+    {
+        using var r = Open("one", "two");
+        r.Store.Boards.Single(b => b.Name == "one").Group = "a";
+        r.Store.Boards.Single(b => b.Name == "two").Group = "b";
+        r.Panel.Show();
+        r.Panel.Rebuild();
+        Settle(r.Window);
+        Point Centre(int row)
+        {
+            var c = r.List.ContainerFromIndex(row)!;
+            return c.TranslatePoint(new Point(c.Bounds.Width / 2, c.Bounds.Height / 2), r.Window)!.Value;
+        }
+        int a = r.Panel.Rows.ToList().FindIndex(x => x.IsHeader && x.Group == "a");
+        int b = r.Panel.Rows.ToList().FindIndex(x => x.IsHeader && x.Group == "b");
+
+        r.Window.MouseDown(Centre(a), MouseButton.Left);
+        r.Window.MouseMove(Centre(b), RawInputModifiers.LeftMouseButton);
+        r.Window.MouseUp(Centre(b), MouseButton.Left);
+
+        Assert.Empty(r.Panel.Folded);
+        Assert.Equal(["b", "a"], r.Store.GroupOrder.Where(g => g is "a" or "b"));
     }
 
     /// <summary>Home cannot be dragged, and nothing can be dropped above it.</summary>

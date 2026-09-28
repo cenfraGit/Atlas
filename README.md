@@ -101,7 +101,7 @@ hand; a board is where you arrange things yourself. Secondary click your
 selection and pick *Add file to board*, or press `A` to send whatever you are
 looking at to the board you last had open. `Tab` opens the **workspace** from
 anywhere: Home - the map - at the top, then your boards by group. Select one
-and click *open*; long names wrap, and the `<` at its top left closes it. Every side panel - the workspace, the
+and click *open*; long names wrap, clicking a group heading folds that group away, and the `<` at its top right closes the panel. Every side panel - the workspace, the
 tour, the commits - drags wider from its inner edge, and the bars, toggles
 and dialogs move over to stay clear of whatever is open.
 
@@ -242,7 +242,7 @@ your team gets everything you wrote.
 | `shift+M` | the board's tour: its stops, to preview, reorder, rename, delete |
 | `P` | play the board's tour (on a board) |
 | arrows | next / previous stop while a tour is playing |
-| in the workspace | `C` new, `F2` rename, `F3` group, Delete removes; drag a board between groups, or a group heading to reorder groups; `Esc` cancels a drag |
+| in the workspace | `C` new, `F2` rename, `F3` group, Delete removes; drag a board between groups, or a group heading to reorder groups; click a heading to fold its group; `Esc` cancels a drag |
 | `A` | add the current file to the last opened board |
 | `N` | add a board note (while on a board) |
 | `F` | fit the whole map, or the whole board |

@@ -115,7 +115,8 @@ public sealed class BoardOverlay : Border
         folder.Foreground = Ui.Fore;
         var collapse = Make("<", () => { Close(); CloseRequested?.Invoke(); });
         collapse.Padding = new Thickness(6, 0);
-        collapse.Margin = new Thickness(0, 0, 8, 0);
+        collapse.Margin = new Thickness(0);
+        DockPanel.SetDock(collapse, Dock.Right);
         ToolTip.SetTip(collapse, "close (tab)");
 
         var buttons = new WrapPanel
@@ -129,9 +130,8 @@ public sealed class BoardOverlay : Border
         {
             Children =
             {
-                new StackPanel
+                new DockPanel
                 {
-                    Orientation = Orientation.Horizontal,
                     Margin = new Thickness(0, 0, 0, 8),
                     Children =
                     {
@@ -147,7 +147,7 @@ public sealed class BoardOverlay : Border
                 _list,
                 new TextBlock
                 {
-                    Text = "tab opens and closes this from anywhere. drag a board between groups, or a group heading to reorder groups. esc cancels a drag. drag the right edge to widen.",
+                    Text = "tab opens and closes this from anywhere. click a group heading to fold it, drag it to reorder groups, drag a board between groups. esc cancels a drag. drag the right edge to widen.",
                     FontFamily = Ui.Mono, FontSize = 11, Foreground = Ui.Dim,
                     TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0),
                 },
@@ -191,6 +191,22 @@ public sealed class BoardOverlay : Border
     /// <summary>the rows as they are shown, top to bottom. For the tests.</summary>
     public IReadOnlyList<BoardRow> Rows => _rows;
 
+    /// <summary>groups folded away by clicking their heading. Only for this
+    /// session: groups.json is shared through git, and what one person
+    /// has folded is nobody else's business.</summary>
+    public HashSet<string> Folded { get; } = [];
+
+    /// <summary>fold a group away, or open it again.</summary>
+    public void ToggleFold(string group)
+    {
+        if (!Folded.Remove(group)) Folded.Add(group);
+        // the click on the heading cleared the selection; folding should not
+        // pick a board in its place, which is what a rebuild does when empty
+        bool none = Selected.Count == 0 && !HomePicked;
+        Rebuild();
+        if (none) { _list.SelectedItems?.Clear(); Reflect(); }
+    }
+
     public void Rebuild()
     {
         var keep = Selected;
@@ -201,6 +217,7 @@ public sealed class BoardOverlay : Border
         foreach (var group in _store.Groups())
         {
             _rows.Add(new BoardRow { Group = group });
+            if (Folded.Contains(group)) continue;
             foreach (var b in _store.Boards.Where(x => x.Group == group)
                          .OrderBy(x => x.Order).ThenBy(x => x.Name, StringComparer.Ordinal))
                 _rows.Add(new BoardRow { Group = group, Board = b });
@@ -246,6 +263,11 @@ public sealed class BoardOverlay : Border
                 Orientation = Orientation.Horizontal,
                 Children =
                 {
+                    new TextBlock
+                    {
+                        Text = Folded.Contains(r.Group) ? "▸ " : "▾ ", Foreground = Ui.Accent,
+                        FontSize = 11, FontWeight = FontWeight.Bold,
+                    },
                     new TextBlock
                     {
                         Text = r.ToString().ToUpperInvariant(), Foreground = Ui.Accent,
@@ -388,7 +410,14 @@ public sealed class BoardOverlay : Border
         bool moved = _moved;
         var before = _before;
         var beforeGroups = _beforeGroups;
+        var pressedGroup = _dragGroup;
         EndDrag();
+        // a heading clicked rather than dragged folds its group
+        if (!moved && pressedGroup is not null && RowAt(e.GetPosition(_list)) is { IsHeader: true } row && row.Group == pressedGroup)
+        {
+            ToggleFold(pressedGroup);
+            return;
+        }
         if (!moved || before is null) return;
 
         foreach (var (b, group, order) in before)

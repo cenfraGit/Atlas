@@ -277,10 +277,17 @@ public sealed class BoardOverlay : Border
     }
 
     /// <summary>the map, as the first thing in the list.</summary>
-    static Control HomeLine() => new TextBlock
+    static Control HomeLine()
     {
-        Text = "home", FontWeight = FontWeight.Bold, Margin = new Thickness(0, 2, 0, 4),
-    };
+        // the key that goes home from anywhere in the panel, where a board row has its count
+        var key = new TextBlock { Text = "h", Foreground = Ui.Dim };
+        DockPanel.SetDock(key, Dock.Right);
+        return new DockPanel
+        {
+            Margin = new Thickness(0, 2, 0, 4),
+            Children = { key, new TextBlock { Text = "home", FontWeight = FontWeight.Bold } },
+        };
+    }
 
     /// <summary>a group heading. It used to be a board row shifted left, and
     /// read as one: now it is set apart by case, colour, a count and a rule

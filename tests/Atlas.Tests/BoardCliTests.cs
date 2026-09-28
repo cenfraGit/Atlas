@@ -308,6 +308,22 @@ public class BoardCliTests
         Assert.Contains("window second: the code it was opened on is gone", output);
     }
 
+    /// <summary>any change saves the board's windows where their code is
+    /// now, not where it was when they were placed.</summary>
+    [Fact]
+    public void AnEditSavesWindowsOnTheirCodeAsItIsNow()
+    {
+        using var repo = Repo();
+        Assert.Equal(0, Run(repo, "doc", "new\nwindow first Loop.cs First\n").Code);
+        File.WriteAllText(Path.Combine(repo.Path, "app", "Loop.cs"),
+            Source().Replace("    public void First()", "    // one\n    // two\n    public void First()"));
+
+        Assert.Equal(0, Run(repo, "doc", "note n \"hi\"\n").Code);
+
+        var w = Stored(repo, "doc").Items.Single(i => i.Id == "first");
+        Assert.Equal((6, 14), (w.Line, w.EndLine));
+    }
+
     [Fact]
     public void CheckNoticesEdgesThatNearlyLineUp()
     {

@@ -300,6 +300,10 @@ public static class BoardCli
         public void Commit()
         {
             if (_board is null || !_changed) return;
+            // a save writes every window, so put them on their code first -
+            // opening in the app no longer does, and this is how a board
+            // drawn on older code gets its corrected lines stored
+            Settle();
             foreach (var stop in _board.Stops) Reframe(stop);
             // refused when the board changed on disk while this ran - the
             // app saving it, most likely - rather than saved over

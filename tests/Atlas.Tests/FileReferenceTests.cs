@@ -45,6 +45,24 @@ public class FileReferenceTests
         Assert.Equal(after.IndexOfPath(Renamed), after.ResolveFile(Original, key));
     }
 
+    /// <summary>a file that is really gone is hunted for once, not on every
+    /// frame - the hunt reads every file with its extension, and asking it
+    /// each frame made a board with one missing window crawl. A rescan may
+    /// bring the file back, so it forgets.</summary>
+    [Fact]
+    public void AMissingFileIsHuntedForOnceUntilTheFilesChange()
+    {
+        using var repo = SampleRepo.Build();
+        using var scene = new Scene(Scanner.Build(repo.Path));
+
+        for (int i = 0; i < 5; i++) Assert.Equal(-1, scene.ResolveFile("app/Gone.cs", "0123456789AB"));
+        Assert.Equal(1, scene.KeySearches);
+
+        scene.ShowScan(Scanner.Build(repo.Path));
+        scene.ResolveFile("app/Gone.cs", "0123456789AB");
+        Assert.Equal(2, scene.KeySearches);
+    }
+
     /// <summary>a board written before windows kept fingerprints has none, so
     /// opening it fills them in - otherwise the rename that happens next week
     /// orphans a board made today.</summary>

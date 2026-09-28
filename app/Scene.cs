@@ -247,8 +247,12 @@ public sealed class Scene : IDisposable
 
         if (string.IsNullOrEmpty(key)) return sameName.Count > 0 ? sameName[0] : -1;
 
-        // a rename: look for the same content. only files that could plausibly
-        // be it are opened, so a miss costs a handful of reads, not 1600
+        // a rename: look for the same content. that reads every file with the
+        // same extension, and the draw loop asks every frame, so a window
+        // onto a file that is really gone made a board crawl - a miss is
+        // remembered until the files change
+        if (_misses.ContainsKey((path, key))) return -1;
+        Interlocked.Increment(ref KeySearches);
         var ext = System.IO.Path.GetExtension(name);
         foreach (var i in sameName.Concat(Candidates(ext, path)))
         {
@@ -265,8 +269,13 @@ public sealed class Scene : IDisposable
             }
             if (FileKeys.Of(lines) == key) return i;
         }
+        _misses[(path, key)] = 0;
         return -1;
     }
+
+    readonly ConcurrentDictionary<(string, string), byte> _misses = new();
+    /// <summary>how many times a file was hunted for by its content. For the tests.</summary>
+    public int KeySearches;
 
     IEnumerable<int> Candidates(string ext, string path)
     {
@@ -281,6 +290,7 @@ public sealed class Scene : IDisposable
 
     void MapFilesToFolders()
     {
+        _misses.Clear();
         _pathIndex.Clear();
         for (int i = 0; i < Data.Files.Count; i++) _pathIndex[Data.Files[i].P] = i;
 
